@@ -110,3 +110,74 @@ pub fn make_router(
 
     Ok(app)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify the generated device description XML contains all expected elements.
+    #[test]
+    fn test_device_description_xml() {
+        let xml = render_root_description_xml(&RootDescriptionInputs {
+            friendly_name: "Test Server",
+            manufacturer: "Test Corp",
+            model_name: "v2.0",
+            unique_id: "uuid:test-1234",
+            http_prefix: "/upnp",
+        });
+
+        // Should be valid XML with proper structure
+        assert!(xml.contains("<?xml version=\"1.0\"?>"));
+        assert!(xml.contains("<friendlyName>Test Server</friendlyName>"));
+        assert!(xml.contains("<manufacturer>Test Corp</manufacturer>"));
+        assert!(xml.contains("<modelName>v2.0</modelName>"));
+        assert!(xml.contains("<UDN>uuid:test-1234</UDN>"));
+
+        // Should reference ContentDirectory and ConnectionManager services
+        assert!(xml.contains("ContentDirectory"));
+        assert!(xml.contains("ConnectionManager"));
+
+        // Service URLs should use the http_prefix
+        assert!(xml.contains("/upnp/scpd/ContentDirectory.xml"));
+        assert!(xml.contains("/upnp/control/ContentDirectory"));
+        assert!(xml.contains("/upnp/subscribe/ContentDirectory"));
+        assert!(xml.contains("/upnp/scpd/ConnectionManager.xml"));
+        assert!(xml.contains("/upnp/control/ConnectionManager"));
+        assert!(xml.contains("/upnp/subscribe/ConnectionManager"));
+    }
+
+    /// Verify device description with empty http_prefix works.
+    #[test]
+    fn test_device_description_xml_empty_prefix() {
+        let xml = render_root_description_xml(&RootDescriptionInputs {
+            friendly_name: "My Media",
+            manufacturer: "rqbit",
+            model_name: "1.0",
+            unique_id: "uuid:abc",
+            http_prefix: "",
+        });
+
+        assert!(xml.contains("<friendlyName>My Media</friendlyName>"));
+        // With empty prefix, URLs should start with /
+        assert!(xml.contains("/scpd/ContentDirectory.xml"));
+        assert!(xml.contains("/control/ContentDirectory"));
+    }
+
+    /// Verify that the root description XML can be parsed by quick-xml (round-trip check).
+    #[test]
+    fn test_device_description_xml_valid_parseable() {
+        let xml = render_root_description_xml(&RootDescriptionInputs {
+            friendly_name: "Parseable Server",
+            manufacturer: "Test",
+            model_name: "1.0",
+            unique_id: "uuid:parseable-test",
+            http_prefix: "/test",
+        });
+
+        // Parse as a UPnP RootDesc using the upnp crate's parser
+        let parsed: librqbit_upnp::RootDesc = quick_xml::de::from_str(&xml).unwrap();
+        assert_eq!(parsed.devices.len(), 1);
+        assert_eq!(parsed.devices[0].friendly_name, "Parseable Server");
+        assert_eq!(parsed.devices[0].service_list.services.len(), 2);
+    }
+}

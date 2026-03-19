@@ -214,3 +214,166 @@ impl<'de> serde::de::Deserialize<'de> for ByteBufOwned {
         deserializer.deserialize_byte_buf(Visitor {})
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_byte_buf_owned_from_vec() {
+        let v = vec![1u8, 2, 3, 4, 5];
+        let buf = ByteBufOwned::from(v.clone());
+        assert_eq!(buf.as_ref(), &v[..]);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_as_ref() {
+        let data = vec![10u8, 20, 30];
+        let buf = ByteBufOwned::from(data.clone());
+        let slice: &[u8] = buf.as_ref();
+        assert_eq!(slice, &[10, 20, 30]);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_clone() {
+        let buf = ByteBufOwned::from(vec![0xDE, 0xAD, 0xBE, 0xEF]);
+        let cloned = buf.clone();
+        assert_eq!(buf.as_ref(), cloned.as_ref());
+    }
+
+    #[test]
+    fn test_byte_buf_owned_empty() {
+        let buf = ByteBufOwned::default();
+        assert_eq!(buf.as_ref(), &[] as &[u8]);
+        assert!(buf.as_ref().is_empty());
+    }
+
+    #[test]
+    fn test_byte_buf_owned_from_slice() {
+        let data: &[u8] = &[42, 43, 44];
+        let buf = ByteBufOwned::from(data);
+        assert_eq!(buf.as_ref(), data);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_from_bytes() {
+        let b = Bytes::from_static(&[1, 2, 3]);
+        let buf = ByteBufOwned::from(b.clone());
+        assert_eq!(buf.as_ref(), b.as_ref());
+    }
+
+    #[test]
+    fn test_byte_buf_owned_partial_eq() {
+        let a = ByteBufOwned::from(vec![1, 2, 3]);
+        let b = ByteBufOwned::from(vec![1, 2, 3]);
+        let c = ByteBufOwned::from(vec![4, 5, 6]);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_borrow() {
+        let buf = ByteBufOwned::from(vec![7, 8, 9]);
+        let borrowed: &[u8] = std::borrow::Borrow::borrow(&buf);
+        assert_eq!(borrowed, &[7, 8, 9]);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_debug_utf8() {
+        // When bytes are valid UTF-8, debug should show the string
+        let buf = ByteBufOwned::from(b"hello".to_vec());
+        let debug = format!("{:?}", buf);
+        assert!(debug.contains("hello"), "got: {}", debug);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_debug_hex() {
+        // When bytes are not valid UTF-8 and <= 20 bytes, debug should show hex
+        let buf = ByteBufOwned::from(vec![0xFF, 0xFE, 0xFD]);
+        let debug = format!("{:?}", buf);
+        assert!(debug.contains("bytes"), "got: {}", debug);
+        assert!(debug.contains("fffefd"), "got: {}", debug);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_debug_all_zeroes() {
+        let buf = ByteBufOwned::from(vec![0u8; 10]);
+        let debug = format!("{:?}", buf);
+        assert!(
+            debug.contains("all zeroes"),
+            "expected 'all zeroes' in debug output, got: {}",
+            debug
+        );
+    }
+
+    #[test]
+    fn test_byte_buf_owned_display_utf8() {
+        // Display should show the string without quotes
+        let buf = ByteBufOwned::from(b"world".to_vec());
+        let display = format!("{}", buf);
+        assert_eq!(display, "world");
+    }
+
+    #[test]
+    fn test_byte_buf_borrowed_from_slice() {
+        let data: &[u8] = &[1, 2, 3];
+        let buf = ByteBuf::from(data);
+        assert_eq!(buf.as_ref(), data);
+    }
+
+    #[test]
+    fn test_byte_buf_borrowed_default() {
+        let buf = ByteBuf::default();
+        assert!(buf.as_ref().is_empty());
+    }
+
+    #[test]
+    fn test_byte_buf_borrowed_partial_eq() {
+        let a = ByteBuf(&[1, 2]);
+        let b = ByteBuf(&[1, 2]);
+        let c = ByteBuf(&[3, 4]);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_byte_buf_borrowed_borrow() {
+        let buf = ByteBuf(&[10, 20]);
+        let borrowed: &[u8] = std::borrow::Borrow::borrow(&buf);
+        assert_eq!(borrowed, &[10, 20]);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_ord() {
+        let a = ByteBufOwned::from(vec![1, 2, 3]);
+        let b = ByteBufOwned::from(vec![1, 2, 4]);
+        let c = ByteBufOwned::from(vec![1, 2, 3]);
+        assert!(a < b);
+        assert_eq!(a.cmp(&c), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_byte_buf_owned_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(ByteBufOwned::from(vec![1, 2, 3]));
+        set.insert(ByteBufOwned::from(vec![1, 2, 3])); // duplicate
+        set.insert(ByteBufOwned::from(vec![4, 5, 6]));
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_clone_to_owned_byte_buf_without_parent() {
+        let data: &[u8] = &[100, 200];
+        let buf = ByteBuf(data);
+        let owned = buf.clone_to_owned(None);
+        assert_eq!(owned.as_ref(), data);
+    }
+
+    #[test]
+    fn test_clone_to_owned_byte_buf_owned() {
+        let buf = ByteBufOwned::from(vec![5, 6, 7]);
+        let cloned = buf.clone_to_owned(None);
+        assert_eq!(cloned.as_ref(), buf.as_ref());
+    }
+}

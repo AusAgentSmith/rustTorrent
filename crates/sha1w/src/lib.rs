@@ -154,7 +154,7 @@ pub type Sha256 = ring_impl::Sha256Ring;
 
 #[cfg(test)]
 mod tests {
-    use super::{ISha256, Sha256};
+    use super::{ISha1, ISha256, Sha1, Sha256};
 
     fn assert_sha256_impl<T: ISha256>() {}
 
@@ -170,5 +170,95 @@ mod tests {
             0x78, 0x52, 0xb8, 0x55,
         ];
         assert_eq!(got, expected);
+    }
+
+    /// SHA-1 of empty string = da39a3ee5e6b4b0d3255bfef95601890afd80709
+    #[test]
+    fn test_sha1_known_vector_empty() {
+        let mut h = Sha1::new();
+        h.update(b"");
+        let got = h.finish();
+        let expected: [u8; 20] = [
+            0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60,
+            0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09,
+        ];
+        assert_eq!(got, expected);
+    }
+
+    /// SHA-1 of "abc" = a9993e364706816aba3e25717850c26c9cd0d89d
+    #[test]
+    fn test_sha1_known_vector_abc() {
+        let mut h = Sha1::new();
+        h.update(b"abc");
+        let got = h.finish();
+        let expected: [u8; 20] = [
+            0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50,
+            0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d,
+        ];
+        assert_eq!(got, expected);
+    }
+
+    /// SHA-1 of "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+    /// = 84983e441c3bd26ebaae4aa1f95129e5e54670f1
+    #[test]
+    fn test_sha1_known_vector_long() {
+        let mut h = Sha1::new();
+        h.update(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+        let got = h.finish();
+        let expected: [u8; 20] = [
+            0x84, 0x98, 0x3e, 0x44, 0x1c, 0x3b, 0xd2, 0x6e, 0xba, 0xae, 0x4a, 0xa1, 0xf9, 0x51,
+            0x29, 0xe5, 0xe5, 0x46, 0x70, 0xf1,
+        ];
+        assert_eq!(got, expected);
+    }
+
+    /// SHA-256 of "abc" = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    #[test]
+    fn test_sha256_known_vector_abc() {
+        let mut h = Sha256::new();
+        h.update(b"abc");
+        let got = h.finish();
+        let expected: [u8; 32] = [
+            0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
+            0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
+            0xf2, 0x00, 0x15, 0xad,
+        ];
+        assert_eq!(got, expected);
+    }
+
+    /// SHA-256 of "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+    #[test]
+    fn test_sha256_known_vector_long() {
+        let mut h = Sha256::new();
+        h.update(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+        let got = h.finish();
+        let expected: [u8; 32] = [
+            0x24, 0x8d, 0x6a, 0x61, 0xd2, 0x06, 0x38, 0xb8, 0xe5, 0xc0, 0x26, 0x93, 0x0c, 0x3e,
+            0x60, 0x39, 0xa3, 0x3c, 0xe4, 0x59, 0x64, 0xff, 0x21, 0x67, 0xf6, 0xec, 0xed, 0xd4,
+            0x19, 0xdb, 0x06, 0xc1,
+        ];
+        assert_eq!(got, expected);
+    }
+
+    /// Updating hash in multiple chunks should produce the same result as single call.
+    #[test]
+    fn test_sha1_incremental() {
+        // Single call
+        let mut h1 = Sha1::new();
+        h1.update(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+        let single = h1.finish();
+
+        // Incremental (split into chunks)
+        let mut h2 = Sha1::new();
+        h2.update(b"abcdbcde");
+        h2.update(b"cdefdefg");
+        h2.update(b"efghfghi");
+        h2.update(b"ghijhijk");
+        h2.update(b"ijkljklm");
+        h2.update(b"klmnlmno");
+        h2.update(b"mnopnopq");
+        let incremental = h2.finish();
+
+        assert_eq!(single, incremental);
     }
 }
