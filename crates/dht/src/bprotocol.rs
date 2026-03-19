@@ -767,4 +767,414 @@ mod tests {
         bencode_serialize_to_writer(Want::None, &mut w).unwrap();
         assert_eq!(&w, b"le")
     }
+
+    // -----------------------------------------------------------------------
+    // test_serialize_find_node_request
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_serialize_find_node_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0xAA; 20]);
+        let target = Id20::new([0xBB; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"tx"),
+            None,
+            None,
+            bprotocol::MessageKind::FindNodeRequest(bprotocol::FindNodeRequest {
+                id,
+                target,
+                want: None,
+            }),
+        )
+        .unwrap();
+
+        // Deserialize and verify.
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::FindNodeRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.target, target);
+                assert!(req.want.is_none());
+            }
+            _ => panic!("expected FindNodeRequest"),
+        }
+        assert_eq!(msg.transaction_id.0, b"tx");
+    }
+
+    // -----------------------------------------------------------------------
+    // test_serialize_get_peers_request
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_serialize_get_peers_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x11; 20]);
+        let info_hash = Id20::new([0x22; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"ab"),
+            None,
+            None,
+            bprotocol::MessageKind::GetPeersRequest(bprotocol::GetPeersRequest {
+                id,
+                info_hash,
+                want: Some(Want::V4),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::GetPeersRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.info_hash, info_hash);
+                assert_eq!(req.want, Some(Want::V4));
+            }
+            _ => panic!("expected GetPeersRequest"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // test_serialize_announce_peer_request
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_serialize_announce_peer_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new(*b"abcdefghij0123456789");
+        let info_hash = Id20::new(*b"mnopqrstuvwxyz123456");
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"xy"),
+            None,
+            None,
+            bprotocol::MessageKind::AnnouncePeer(bprotocol::AnnouncePeer {
+                id,
+                implied_port: 1,
+                info_hash,
+                port: 6881,
+                token: ByteBuf(b"tok1"),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::AnnouncePeer(ann) => {
+                assert_eq!(ann.id, id);
+                assert_eq!(ann.info_hash, info_hash);
+                assert_eq!(ann.implied_port, 1);
+                assert_eq!(ann.port, 6881);
+                assert_eq!(ann.token.0, b"tok1");
+            }
+            _ => panic!("expected AnnouncePeer"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // test_deserialize_error_response
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_deserialize_error_response() {
+        // Serialize an error, then deserialize it.
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"er"),
+            None,
+            None,
+            bprotocol::MessageKind::Error(bprotocol::ErrorDescription {
+                code: 202,
+                description: ByteBuf(b"Server Error"),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Error(e) => {
+                assert_eq!(e.code, 202);
+                assert_eq!(e.description.0, b"Server Error");
+            }
+            _ => panic!("expected Error"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // test_deserialize_malformed_message
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_deserialize_malformed_message() {
+        // Completely invalid bencode.
+        let result = bprotocol::deserialize_message::<ByteBuf>(b"not valid bencode");
+        assert!(result.is_err());
+
+        // Valid bencode but not a valid DHT message (missing required fields).
+        let result = bprotocol::deserialize_message::<ByteBuf>(b"d1:yi1ee");
+        assert!(result.is_err());
+
+        // Empty input.
+        let result = bprotocol::deserialize_message::<ByteBuf>(b"");
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // test_serialize_deserialize_roundtrip_all_message_types
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_serialize_deserialize_roundtrip_all_message_types() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x33; 20]);
+        let target = Id20::new([0x44; 20]);
+
+        // 1. Ping request
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"p1"),
+                None,
+                None,
+                bprotocol::MessageKind::PingRequest(bprotocol::PingRequest { id }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(msg.kind, bprotocol::MessageKind::PingRequest(_)));
+
+            // Re-serialize and check byte equality.
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "ping roundtrip mismatch");
+        }
+
+        // 2. FindNode request
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"f1"),
+                None,
+                None,
+                bprotocol::MessageKind::FindNodeRequest(bprotocol::FindNodeRequest {
+                    id,
+                    target,
+                    want: Some(Want::Both),
+                }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(
+                msg.kind,
+                bprotocol::MessageKind::FindNodeRequest(_)
+            ));
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "find_node roundtrip mismatch");
+        }
+
+        // 3. GetPeers request
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"g1"),
+                None,
+                None,
+                bprotocol::MessageKind::GetPeersRequest(bprotocol::GetPeersRequest {
+                    id,
+                    info_hash: target,
+                    want: Some(Want::V6),
+                }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(
+                msg.kind,
+                bprotocol::MessageKind::GetPeersRequest(_)
+            ));
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "get_peers roundtrip mismatch");
+        }
+
+        // 4. Error
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"e1"),
+                None,
+                None,
+                bprotocol::MessageKind::Error(bprotocol::ErrorDescription {
+                    code: 201,
+                    description: ByteBuf(b"A Generic Error Occurred"),
+                }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(msg.kind, bprotocol::MessageKind::Error(_)));
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "error roundtrip mismatch");
+        }
+
+        // 5. Response (with only id, no nodes/values)
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"r1"),
+                None,
+                None,
+                bprotocol::MessageKind::Response(bprotocol::Response {
+                    id,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(msg.kind, bprotocol::MessageKind::Response(_)));
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "response roundtrip mismatch");
+        }
+
+        // 6. AnnouncePeer request
+        {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"a1"),
+                None,
+                None,
+                bprotocol::MessageKind::AnnouncePeer(bprotocol::AnnouncePeer {
+                    id,
+                    implied_port: 0,
+                    info_hash: target,
+                    port: 8080,
+                    token: ByteBuf(b"mytoken"),
+                }),
+            )
+            .unwrap();
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            assert!(matches!(msg.kind, bprotocol::MessageKind::AnnouncePeer(_)));
+            let mut buf2 = Vec::new();
+            bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+                .unwrap();
+            assert_eq!(buf, buf2, "announce_peer roundtrip mismatch");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // test_serialize_ping_request
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_serialize_ping_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x55; 20]);
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"pi"),
+            None,
+            None,
+            bprotocol::MessageKind::PingRequest(bprotocol::PingRequest { id }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::PingRequest(req) => {
+                assert_eq!(req.id, id);
+            }
+            _ => panic!("expected PingRequest"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // test_deserialize_unsupported_method
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_deserialize_unsupported_method() {
+        // Manually craft a bencode request with an unknown method name.
+        // d1:ad2:id20:aaaaaaaaaaaaaaaaaaaae1:q7:unknown1:t2:xx1:y1:qe
+        let raw = b"d1:ad2:id20:aaaaaaaaaaaaaaaaaaaae1:q7:unknown1:t2:xx1:y1:qe";
+        let result = bprotocol::deserialize_message::<ByteBuf>(raw);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // test_message_with_version_field
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_message_with_version_field() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x77; 20]);
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"v1"),
+            Some(ByteBuf(b"rq01")),
+            None,
+            bprotocol::MessageKind::PingRequest(bprotocol::PingRequest { id }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        assert!(msg.version.is_some());
+        assert_eq!(msg.version.unwrap().0, b"rq01");
+    }
+
+    // -----------------------------------------------------------------------
+    // test_error_description_various_codes
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_error_description_various_codes() {
+        // BEP 5 defines error codes:
+        // 201 = Generic Error, 202 = Server Error, 203 = Protocol Error, 204 = Method Unknown
+        for (code, desc) in [
+            (201, "Generic Error"),
+            (202, "Server Error"),
+            (203, "Protocol Error"),
+            (204, "Method Unknown"),
+        ] {
+            let mut buf = Vec::new();
+            bprotocol::serialize_message(
+                &mut buf,
+                ByteBuf(b"ee"),
+                None,
+                None,
+                bprotocol::MessageKind::Error(bprotocol::ErrorDescription {
+                    code,
+                    description: ByteBuf(desc.as_bytes()),
+                }),
+            )
+            .unwrap();
+
+            let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+            match &msg.kind {
+                bprotocol::MessageKind::Error(e) => {
+                    assert_eq!(e.code, code);
+                    assert_eq!(e.description.0, desc.as_bytes());
+                }
+                _ => panic!("expected Error for code {code}"),
+            }
+        }
+    }
 }

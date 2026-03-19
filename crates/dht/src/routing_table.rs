@@ -704,4 +704,328 @@ mod tests {
             assert!(id >= start && id <= end, "{:?}", id);
         }
     }
+
+    // -----------------------------------------------------------------------
+    // test_add_node_to_routing_table — basic node addition
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_add_node_to_routing_table() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+        assert_eq!(rt.len(), 0);
+
+        let other_id = Id20::from_str("0000000000000000000000000000000000000001").unwrap();
+        let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6881).into();
+        let result = rt.add_node(other_id, addr);
+        assert!(matches!(result, super::InsertResult::Added));
+        assert_eq!(rt.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // test_add_duplicate_node — adding the same node twice is WasExisting
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_add_duplicate_node() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        let other_id = Id20::from_str("0000000000000000000000000000000000000001").unwrap();
+        let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6881).into();
+
+        rt.add_node(other_id, addr);
+        let result = rt.add_node(other_id, addr);
+        assert!(matches!(result, super::InsertResult::WasExisting));
+        // Size should not change on duplicate.
+        assert_eq!(rt.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // test_routing_table_respects_bucket_size — k=8 bucket limit
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_routing_table_respects_bucket_size() {
+        // Place our own ID far from all added nodes so the bucket won't split.
+        let my_id = Id20::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        // Add 8 nodes in the 0x00.. range — fills one bucket.
+        for i in 0u8..8 {
+            let mut data = [0u8; 20];
+            data[19] = i + 1; // 0x01..0x08
+            let id = Id20::new(data);
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, i + 1), 6881).into();
+            let result = rt.add_node(id, addr);
+            assert!(
+                matches!(result, super::InsertResult::Added),
+                "node {i} should be added"
+            );
+        }
+        assert_eq!(rt.len(), 8);
+
+        // The 9th node in the same range should be Ignored (bucket full, our id is not in range).
+        let mut data = [0u8; 20];
+        data[19] = 9;
+        let id = Id20::new(data);
+        let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 9), 6881).into();
+        let result = rt.add_node(id, addr);
+        assert!(
+            matches!(result, super::InsertResult::Ignored),
+            "9th node should be ignored"
+        );
+        assert_eq!(rt.len(), 8);
+    }
+
+    // -----------------------------------------------------------------------
+    // test_routing_table_splitting — buckets split when own ID is in range
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_routing_table_splitting() {
+        // Our ID is in the 0x00.. range, so the bucket containing us can split.
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        // Add 9 nodes across the whole range — the bucket should split to accommodate the 9th.
+        for i in 1u8..=9 {
+            let mut data = [0u8; 20];
+            data[0] = i * 16; // spread across the ID space
+            let id = Id20::new(data);
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, i), 6881).into();
+            rt.add_node(id, addr);
+        }
+        // All 9 should be added because the bucket containing our id will split.
+        assert!(
+            rt.len() >= 9,
+            "expected at least 9 nodes, got {}",
+            rt.len()
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // test_routing_table_no_split_when_full_and_far
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_routing_table_no_split_when_full_and_far() {
+        // Our ID is in 0xFF.., so the 0x00.. bucket is far and should not split.
+        let my_id = Id20::from_str("ff00000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        // Add 8 nodes in the 0x00.. range.
+        for i in 1u8..=8 {
+            let mut data = [0u8; 20];
+            data[19] = i;
+            let id = Id20::new(data);
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, i), 6881).into();
+            rt.add_node(id, addr);
+        }
+        assert_eq!(rt.len(), 8);
+
+        // 9th node in the same far range should be ignored.
+        let mut data = [0u8; 20];
+        data[19] = 9;
+        let result = rt.add_node(
+            Id20::new(data),
+            SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 9), 6881).into(),
+        );
+        assert!(matches!(result, super::InsertResult::Ignored));
+    }
+
+    // -----------------------------------------------------------------------
+    // test_closest_nodes — returns nodes sorted by distance
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_closest_nodes() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        let ids: Vec<Id20> = (1u8..=5)
+            .map(|i| {
+                let mut data = [0u8; 20];
+                data[0] = i;
+                Id20::new(data)
+            })
+            .collect();
+
+        for (i, id) in ids.iter().enumerate() {
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, i as u8 + 1), 6881).into();
+            rt.add_node(*id, addr);
+        }
+
+        let target = Id20::from_str("0200000000000000000000000000000000000000").unwrap();
+        let sorted = rt.sorted_by_distance_from(target, Instant::now());
+        assert_eq!(sorted.len(), 5);
+
+        // The closest to 0x02 should be 0x02 (distance=0), then 0x03 (distance=1),
+        // then 0x01 (distance=3), etc. All nodes are Unknown status so only distance matters.
+        assert_eq!(sorted[0].id(), ids[1]); // 0x02
+    }
+
+    // -----------------------------------------------------------------------
+    // test_mark_node_responded — state transition to Good
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_mark_node_responded() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        let node_id = Id20::from_str("0000000000000000000000000000000000000001").unwrap();
+        let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6881).into();
+
+        rt.add_node(node_id, addr);
+
+        // Initially the node is Unknown (no request/response recorded).
+        let now = Instant::now();
+        let node = rt.buckets.get_mut(&node_id, None).unwrap();
+        assert!(matches!(node.status(now), super::NodeStatus::Unknown));
+
+        // Mark outgoing request, then response.
+        rt.mark_outgoing_request(&node_id, now);
+        rt.mark_response(&node_id, now);
+
+        let node = rt.buckets.get_mut(&node_id, None).unwrap();
+        assert!(
+            matches!(node.status(Instant::now()), super::NodeStatus::Good),
+            "node should be Good after response"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // test_mark_node_errored — error counting and Bad detection
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_mark_node_errored() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        let node_id = Id20::from_str("0000000000000000000000000000000000000001").unwrap();
+        let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6881).into();
+
+        rt.add_node(node_id, addr);
+
+        let now = Instant::now();
+        // Simulate: we sent a request, then get errors.
+        rt.mark_outgoing_request(&node_id, now);
+        rt.mark_error(&node_id);
+        rt.mark_error(&node_id);
+
+        let node = rt.buckets.get_mut(&node_id, None).unwrap();
+        assert!(
+            matches!(node.status(Instant::now()), super::NodeStatus::Bad),
+            "node should be Bad after 2 errors with a pending request"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // test_mark_error_on_unknown_node
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_mark_error_on_unknown_node() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        let nonexistent = Id20::from_str("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
+        // Should return false for a node not in the table.
+        assert!(!rt.mark_error(&nonexistent));
+        assert!(!rt.mark_response(&nonexistent, Instant::now()));
+        assert!(!rt.mark_outgoing_request(&nonexistent, Instant::now()));
+    }
+
+    // -----------------------------------------------------------------------
+    // test_routing_table_serialization_roundtrip
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_routing_table_serialization_roundtrip() {
+        let table = generate_table(Some(100));
+        let original_size = table.len();
+
+        let serialized = serde_json::to_vec(&table).unwrap();
+        let deserialized: RoutingTable = serde_json::from_slice(&serialized).unwrap();
+
+        assert_eq!(deserialized.id(), table.id());
+        // The deserialized table should have the same number of nodes.
+        let mut count = 0;
+        for _ in deserialized.iter() {
+            count += 1;
+        }
+        assert_eq!(count, original_size);
+    }
+
+    // -----------------------------------------------------------------------
+    // test_routing_table_max_size_limit
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_routing_table_max_size_limit() {
+        let my_id = Id20::from_str("0000000000000000000000000000000000000000").unwrap();
+        let max_size = 16;
+        let mut rt = RoutingTable::new(my_id, Some(max_size));
+
+        // Try to add many more nodes than max_size.
+        for i in 0u32..1000 {
+            let mut data = [0u8; 20];
+            data[0..4].copy_from_slice(&i.to_be_bytes());
+            let id = Id20::new(data);
+            let port = (i % 65535) as u16 + 1;
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, (i >> 8) as u8, i as u8), port).into();
+            rt.add_node(id, addr);
+        }
+
+        assert!(
+            rt.len() <= max_size,
+            "routing table should not exceed max_size={max_size}, got {}",
+            rt.len()
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // test_replace_bad_node
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_replace_bad_node() {
+        // Our ID is far so the bucket won't split.
+        let my_id = Id20::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap();
+        let mut rt = RoutingTable::new(my_id, None);
+
+        // Fill a bucket with 8 nodes.
+        let mut node_ids = Vec::new();
+        for i in 1u8..=8 {
+            let mut data = [0u8; 20];
+            data[19] = i;
+            let id = Id20::new(data);
+            node_ids.push(id);
+            let addr: SocketAddr =
+                SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, i), 6881).into();
+            rt.add_node(id, addr);
+        }
+        assert_eq!(rt.len(), 8);
+
+        // Make the first node "bad": send it a request, then give it 2 errors.
+        let bad_id = node_ids[0];
+        let now = Instant::now();
+        rt.mark_outgoing_request(&bad_id, now);
+        rt.mark_error(&bad_id);
+        rt.mark_error(&bad_id);
+
+        // Verify it's bad.
+        {
+            let node = rt.buckets.get_mut(&bad_id, None).unwrap();
+            assert!(matches!(node.status(Instant::now()), super::NodeStatus::Bad));
+        }
+
+        // Now add a 9th node — it should replace the bad one.
+        let mut data = [0u8; 20];
+        data[19] = 9;
+        let new_id = Id20::new(data);
+        let result = rt.add_node(
+            new_id,
+            SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 9), 6881).into(),
+        );
+        assert!(
+            matches!(result, super::InsertResult::ReplacedBad(_)),
+            "should replace the bad node"
+        );
+    }
 }
