@@ -513,6 +513,275 @@ mod tests {
     }
 
     #[test]
+    fn test_chunk_status_all_complete() {
+        // All pieces downloaded.
+        let piece_length = CHUNK_SIZE * 2;
+        let l = Lengths::new(piece_length as u64 * 3, piece_length).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let mut have = BF::from_boxed_slice(vec![0xFFu8; bf_len].into_boxed_slice());
+        // Ensure only valid bits are set (trim extra bits).
+        for i in l.total_pieces() as usize..have.len() {
+            have.set(i, false);
+        }
+
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        for i in 0..l.total_pieces() as usize {
+            selected.set(i, true);
+        }
+
+        let file_infos = vec![FileInfo {
+            relative_filename: "test.dat".into(),
+            offset_in_torrent: 0,
+            piece_range: 0..l.total_pieces(),
+            len: piece_length as u64 * 3,
+            attrs: Default::default(),
+        }];
+
+        let ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        assert!(ct.is_finished());
+        assert_eq!(ct.get_remaining_bytes(), 0);
+        assert_eq!(ct.get_hns().have_bytes, piece_length as u64 * 3);
+    }
+
+    #[test]
+    fn test_chunk_status_partial() {
+        // Only first piece downloaded out of 3.
+        let piece_length = CHUNK_SIZE * 2;
+        let l = Lengths::new(piece_length as u64 * 3, piece_length).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let mut have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        have.set(0, true); // Only piece 0 downloaded.
+
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        for i in 0..3usize {
+            selected.set(i, true);
+        }
+
+        let file_infos = vec![FileInfo {
+            relative_filename: "test.dat".into(),
+            offset_in_torrent: 0,
+            piece_range: 0..3,
+            len: piece_length as u64 * 3,
+            attrs: Default::default(),
+        }];
+
+        let ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        assert!(!ct.is_finished());
+        assert_eq!(ct.get_hns().have_bytes, piece_length as u64);
+        assert_eq!(ct.get_hns().needed_bytes, piece_length as u64 * 2);
+        assert_eq!(ct.get_hns().selected_bytes, piece_length as u64 * 3);
+    }
+
+    #[test]
+    fn test_update_only_files_expand() {
+        // Start with only file 0 selected, then expand to include file 1.
+        let piece_len = CHUNK_SIZE * 2;
+        let total_len = piece_len as u64 * 4;
+        let l = Lengths::new(total_len, piece_len).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+
+        // Initially select only pieces 0..2 (file 0).
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        selected.set(0, true);
+        selected.set(1, true);
+
+        let all_files = vec![
+            FileInfo {
+                relative_filename: "file0.dat".into(),
+                offset_in_torrent: 0,
+                piece_range: 0..2,
+                len: piece_len as u64 * 2,
+                attrs: Default::default(),
+            },
+            FileInfo {
+                relative_filename: "file1.dat".into(),
+                offset_in_torrent: piece_len as u64 * 2,
+                piece_range: 2..4,
+                len: piece_len as u64 * 2,
+                attrs: Default::default(),
+            },
+        ];
+
+        let mut ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
+
+        // Initially: only file 0 selected.
+        assert_eq!(ct.get_hns().selected_bytes, piece_len as u64 * 2);
+        assert_eq!(ct.get_hns().needed_bytes, piece_len as u64 * 2);
+
+        // Expand to include both files.
+        let hns = ct
+            .update_only_files(&all_files, &std::collections::HashSet::from_iter([0, 1]))
+            .unwrap();
+        assert_eq!(hns.selected_bytes, total_len);
+        assert_eq!(hns.needed_bytes, total_len);
+    }
+
+    #[test]
+    fn test_update_only_files_shrink() {
+        // Start with both files selected, then shrink to only file 0.
+        let piece_len = CHUNK_SIZE * 2;
+        let total_len = piece_len as u64 * 4;
+        let l = Lengths::new(total_len, piece_len).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        for i in 0..4usize {
+            selected.set(i, true);
+        }
+
+        let all_files = vec![
+            FileInfo {
+                relative_filename: "file0.dat".into(),
+                offset_in_torrent: 0,
+                piece_range: 0..2,
+                len: piece_len as u64 * 2,
+                attrs: Default::default(),
+            },
+            FileInfo {
+                relative_filename: "file1.dat".into(),
+                offset_in_torrent: piece_len as u64 * 2,
+                piece_range: 2..4,
+                len: piece_len as u64 * 2,
+                attrs: Default::default(),
+            },
+        ];
+
+        let mut ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
+
+        // Initially: both files selected.
+        assert_eq!(ct.get_hns().selected_bytes, total_len);
+
+        // Shrink to only file 0.
+        let hns = ct
+            .update_only_files(&all_files, &std::collections::HashSet::from_iter([0]))
+            .unwrap();
+        assert_eq!(hns.selected_bytes, piece_len as u64 * 2);
+        assert_eq!(hns.needed_bytes, piece_len as u64 * 2);
+
+        // Pieces 2 and 3 should not be in queue.
+        assert!(!ct.queue_pieces[2]);
+        assert!(!ct.queue_pieces[3]);
+        // Pieces 0 and 1 should be in queue (needed, not have).
+        assert!(ct.queue_pieces[0]);
+        assert!(ct.queue_pieces[1]);
+    }
+
+    #[test]
+    fn test_mark_piece_downloaded_updates_hns() {
+        let piece_length = CHUNK_SIZE * 2;
+        let l = Lengths::new(piece_length as u64 * 3, piece_length).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        for i in 0..3usize {
+            selected.set(i, true);
+        }
+
+        let file_infos = vec![FileInfo {
+            relative_filename: "test.dat".into(),
+            offset_in_torrent: 0,
+            piece_range: 0..3,
+            len: piece_length as u64 * 3,
+            attrs: Default::default(),
+        }];
+
+        let mut ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        assert_eq!(ct.get_hns().have_bytes, 0);
+
+        let piece0 = l.validate_piece_index(0).unwrap();
+        ct.mark_piece_downloaded(piece0);
+
+        assert_eq!(ct.get_hns().have_bytes, piece_length as u64);
+        assert_eq!(ct.get_hns().needed_bytes, piece_length as u64 * 2);
+        assert!(ct.is_piece_have(piece0));
+    }
+
+    #[test]
+    fn test_mark_piece_broken_requeues() {
+        let piece_length = CHUNK_SIZE * 2;
+        let l = Lengths::new(piece_length as u64 * 3, piece_length).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        let mut selected = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        for i in 0..3usize {
+            selected.set(i, true);
+        }
+
+        let file_infos = vec![FileInfo {
+            relative_filename: "test.dat".into(),
+            offset_in_torrent: 0,
+            piece_range: 0..3,
+            len: piece_length as u64 * 3,
+            attrs: Default::default(),
+        }];
+
+        let mut ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+
+        let piece0 = l.validate_piece_index(0).unwrap();
+
+        // Reserve piece (remove from queue).
+        ct.reserve_needed_piece(piece0);
+        assert!(!ct.queue_pieces[0]);
+
+        // Mark broken should re-add to queue.
+        ct.mark_piece_broken_if_not_have(piece0);
+        assert!(ct.queue_pieces[0]);
+    }
+
+    #[test]
+    fn test_is_chunk_ready_to_upload() {
+        let piece_length = CHUNK_SIZE * 2;
+        let l = Lengths::new(piece_length as u64 * 2, piece_length).unwrap();
+
+        let bf_len = l.piece_bitfield_bytes();
+        let mut have = BF::from_boxed_slice(vec![0u8; bf_len].into_boxed_slice());
+        have.set(0, true); // Have piece 0.
+
+        let selected = BF::from_boxed_slice(vec![0xFFu8; bf_len].into_boxed_slice());
+
+        let file_infos = vec![FileInfo {
+            relative_filename: "test.dat".into(),
+            offset_in_torrent: 0,
+            piece_range: 0..2,
+            len: piece_length as u64 * 2,
+            attrs: Default::default(),
+        }];
+
+        let ct =
+            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+
+        let chunk0 = librqbit_core::lengths::ChunkInfo {
+            piece_index: l.validate_piece_index(0).unwrap(),
+            chunk_index: 0,
+            absolute_index: 0,
+            offset: 0,
+            size: CHUNK_SIZE,
+        };
+        let chunk1 = librqbit_core::lengths::ChunkInfo {
+            piece_index: l.validate_piece_index(1).unwrap(),
+            chunk_index: 0,
+            absolute_index: l.default_chunks_per_piece(),
+            offset: 0,
+            size: CHUNK_SIZE,
+        };
+
+        assert!(ct.is_chunk_ready_to_upload(&chunk0));
+        assert!(!ct.is_chunk_ready_to_upload(&chunk1));
+    }
+
+    #[test]
     fn test_update_only_files() {
         let piece_len = CHUNK_SIZE * 2 + 1;
         let total_len = piece_len as u64 * 2 + 1;
