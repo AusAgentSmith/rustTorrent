@@ -179,7 +179,10 @@ fn compute_only_files_regex<ByteBuf: AsRef<[u8]>>(
     let mut only_files = Vec::new();
     for (idx, fd) in torrent.iter_file_details().enumerate() {
         let full_path = fd.filename.to_pathbuf();
-        if filename_re.is_match(full_path.to_str().unwrap()) {
+        let Some(path_str) = full_path.to_str() else {
+            continue;
+        };
+        if filename_re.is_match(path_str) {
             only_files.push(idx);
         }
     }
@@ -1365,7 +1368,7 @@ impl Session {
             debug!("error pausing torrent before deletion: {e:#}")
         }
 
-        let metadata = removed.metadata.load_full().expect("TODO");
+        let metadata = removed.metadata.load_full().context("torrent metadata was not loaded")?;
 
         let storage = removed
             .with_state_mut(|s| match s.take() {

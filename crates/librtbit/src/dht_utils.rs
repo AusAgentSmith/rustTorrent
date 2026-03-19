@@ -146,7 +146,9 @@ mod tests {
         .await
         {
             ReadMetainfoResult::Found { info, .. } => dbg!(info),
-            ReadMetainfoResult::ChannelClosed { .. } => todo!("should not have happened"),
+            ReadMetainfoResult::ChannelClosed { .. } => {
+                panic!("channel closed unexpectedly before metainfo was received")
+            }
         };
     }
 }
