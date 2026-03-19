@@ -17,7 +17,7 @@ export function customSetInterval(
     scheduleNext();
   };
 
-  let scheduleNext = () => {
+  const scheduleNext = () => {
     timeoutId = setTimeout(executeCallback, currentInterval);
   };
 

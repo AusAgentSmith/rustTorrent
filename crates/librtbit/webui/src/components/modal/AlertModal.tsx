@@ -5,9 +5,9 @@ import { Modal } from "./Modal";
 import { ModalBody } from "./ModalBody";
 import { ModalFooter } from "./ModalFooter";
 
-export const AlertModal: React.FC<{}> = () => {
-  let alert = useErrorStore((store) => store.alert);
-  let removeAlert = useErrorStore((store) => store.removeAlert);
+export const AlertModal: React.FC = () => {
+  const alert = useErrorStore((store) => store.alert);
+  const removeAlert = useErrorStore((store) => store.removeAlert);
 
   if (alert) {
     return (

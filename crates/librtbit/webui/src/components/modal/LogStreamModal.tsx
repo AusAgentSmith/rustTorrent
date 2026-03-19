@@ -14,7 +14,7 @@ interface Props {
 
 export const LogStreamModal: React.FC<Props> = ({ show, onClose }) => {
   const api = useContext(APIContext);
-  let logsUrl = api.getStreamLogsUrl();
+  const logsUrl = api.getStreamLogsUrl();
 
   return (
     <Modal

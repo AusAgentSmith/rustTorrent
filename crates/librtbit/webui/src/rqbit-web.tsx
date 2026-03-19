@@ -27,7 +27,7 @@ export const RqbitWebUI = (props: {
   version: string;
   menuButtons?: JSX.Element[];
 }) => {
-  let [logsOpened, setLogsOpened] = useState<boolean>(false);
+  const [logsOpened, setLogsOpened] = useState<boolean>(false);
   const setOtherError = useErrorStore((state) => state.setOtherError);
 
   const API = useContext(APIContext);

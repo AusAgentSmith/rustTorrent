@@ -14,8 +14,8 @@ export const TorrentActions: React.FC<{
   const { id, name, stats } = torrent;
   const state = stats.state;
 
-  let [disabled, setDisabled] = useState<boolean>(false);
-  let [deleting, setDeleting] = useState<boolean>(false);
+  const [disabled, setDisabled] = useState<boolean>(false);
+  const [deleting, setDeleting] = useState<boolean>(false);
 
   const refreshTorrents = useTorrentStore((state) => state.refreshTorrents);
   const openDetailsModal = useUIStore((state) => state.openDetailsModal);

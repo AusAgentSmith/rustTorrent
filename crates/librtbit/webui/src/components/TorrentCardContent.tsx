@@ -24,7 +24,7 @@ export const TorrentCardContent: React.FC<{
       : (progressBytes / totalBytes) * 100;
 
   const formatPeersString = () => {
-    let peer_stats = statsResponse?.live?.snapshot.peer_stats;
+    const peer_stats = statsResponse?.live?.snapshot.peer_stats;
     if (!peer_stats) {
       return "";
     }

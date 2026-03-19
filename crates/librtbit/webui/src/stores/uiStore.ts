@@ -84,7 +84,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
     }
 
     if (selectedTorrentIds.has(id)) {
-      let next = new Set(selectedTorrentIds);
+      const next = new Set(selectedTorrentIds);
       next.delete(id);
       set({ selectedTorrentIds: next });
       return;

@@ -34,8 +34,8 @@ const newFileTree = (
     depth: number,
   ): FileTree => {
     let directFiles: TorrentFileForCheckbox[] = [];
-    let groups: FileTree[] = [];
-    let groupsByName: { [key: string]: TorrentFileForCheckbox[] } = {};
+    const groups: FileTree[] = [];
+    const groupsByName: { [key: string]: TorrentFileForCheckbox[] } = {};
 
     const getGroup = (prefix: string): TorrentFileForCheckbox[] => {
       groupsByName[prefix] = groupsByName[prefix] || [];
@@ -52,7 +52,7 @@ const newFileTree = (
 
     directFiles = sortBy(directFiles, (f) => f.filename);
 
-    let sortedGroupsByName = sortBy(
+    const sortedGroupsByName = sortBy(
       Object.entries(groupsByName),
       ([k, _]) => k,
     );
@@ -115,10 +115,10 @@ const FileTreeComponent: React.FC<{
   allowStream,
 }) => {
   const API = useContext(APIContext);
-  let [expanded, setExpanded] = useState(initialExpanded);
-  let children = useMemo(() => {
-    let getAllChildren = (tree: FileTree): number[] => {
-      let children = tree.dirs.flatMap(getAllChildren);
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const children = useMemo(() => {
+    const getAllChildren = (tree: FileTree): number[] => {
+      const children = tree.dirs.flatMap(getAllChildren);
       children.push(...tree.files.map((file) => file.id));
       return children;
     };
@@ -127,11 +127,11 @@ const FileTreeComponent: React.FC<{
 
   const handleToggleTree: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     if (e.target.checked) {
-      let copy = new Set(selectedFiles);
+      const copy = new Set(selectedFiles);
       children.forEach((c) => copy.add(c));
       setSelectedFiles(copy);
     } else {
-      let copy = new Set(selectedFiles);
+      const copy = new Set(selectedFiles);
       children.forEach((c) => copy.delete(c));
       setSelectedFiles(copy);
     }
@@ -139,11 +139,11 @@ const FileTreeComponent: React.FC<{
 
   const handleToggleFile = (toggledId: number) => {
     if (selectedFiles.has(toggledId)) {
-      let copy = new Set(selectedFiles);
+      const copy = new Set(selectedFiles);
       copy.delete(toggledId);
       setSelectedFiles(copy);
     } else {
-      let copy = new Set(selectedFiles);
+      const copy = new Set(selectedFiles);
       copy.add(toggledId);
       setSelectedFiles(copy);
     }
@@ -251,7 +251,7 @@ export const FileListInput: React.FC<{
   disabled,
   allowStream,
 }) => {
-  let fileTree = useMemo(
+  const fileTree = useMemo(
     () => newFileTree(torrentDetails, torrentStats),
     [torrentDetails, torrentStats],
   );

@@ -1,7 +1,7 @@
 import { FileInput } from "./buttons/FileInput";
 import { MagnetInput } from "./buttons/MagnetInput";
 
-// @ts-ignore
+// @ts-expect-error - SVG import handled by vite-plugin-svgr
 import Logo from "../../assets/logo.svg?react";
 
 export const Header = ({

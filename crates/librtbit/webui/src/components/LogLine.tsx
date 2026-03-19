@@ -2,7 +2,7 @@ import React from "react";
 import { JSONLogLine, Span } from "../api-types";
 
 const SpanFields: React.FC<{ span: Span }> = ({ span }) => {
-  let fields = Object.entries(span).filter(([name, value]) => name != "name");
+  const fields = Object.entries(span).filter(([name, value]) => name != "name");
   if (fields.length == 0) {
     return null;
   }

@@ -6,8 +6,8 @@ const FooterPiece: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <div className="p-1">{children}</div>;
 };
 
-export const Footer: React.FC<{}> = () => {
-  let stats = useStatsStore((stats) => stats.stats);
+export const Footer: React.FC = () => {
+  const stats = useStatsStore((stats) => stats.stats);
   return (
     <div className="sticky bottom-0 bg-surface-raised/80 backdrop-blur text-nowrap text-sm font-medium text-secondary flex gap-x-1 lg:gap-x-5 justify-evenly flex-wrap">
       <FooterPiece>

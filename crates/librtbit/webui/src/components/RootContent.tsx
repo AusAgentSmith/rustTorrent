@@ -6,12 +6,12 @@ import { useUIStore } from "../stores/uiStore";
 import { useIsLargeScreen } from "../hooks/useIsLargeScreen";
 import { CompactLayout } from "./compact/CompactLayout";
 
-export const RootContent = (props: {}) => {
-  let closeableError = useErrorStore((state) => state.closeableError);
-  let setCloseableError = useErrorStore((state) => state.setCloseableError);
-  let otherError = useErrorStore((state) => state.otherError);
-  let torrents = useTorrentStore((state) => state.torrents);
-  let torrentsInitiallyLoading = useTorrentStore(
+export const RootContent = () => {
+  const closeableError = useErrorStore((state) => state.closeableError);
+  const setCloseableError = useErrorStore((state) => state.setCloseableError);
+  const otherError = useErrorStore((state) => state.otherError);
+  const torrents = useTorrentStore((state) => state.torrents);
+  const torrentsInitiallyLoading = useTorrentStore(
     (state) => state.torrentsInitiallyLoading,
   );
 
