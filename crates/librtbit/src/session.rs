@@ -737,7 +737,7 @@ impl Session {
                 ipv4_only: opts.ipv4_only,
                 trackers: opts.trackers,
                 disable_trackers: opts.disable_trackers,
-                peer_limit: opts.peer_limit,
+                peer_limit: opts.peer_limit.or(Some(200)),
 
                 #[cfg(feature = "disable-upload")]
                 _disable_upload: opts.disable_upload,

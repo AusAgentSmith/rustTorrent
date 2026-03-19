@@ -279,7 +279,7 @@ impl TorrentStateLive {
             },
             lengths,
             peer_semaphore: Arc::new(Semaphore::new(
-                paused.shared.options.peer_limit.unwrap_or(128),
+                paused.shared.options.peer_limit.unwrap_or(200),
             )),
             new_pieces_notify: Notify::new(),
             peer_queue_tx,
