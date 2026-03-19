@@ -28,7 +28,7 @@ export const UploadButton: React.FC<{
       return;
     }
 
-    let t = setTimeout(async () => {
+    const t = setTimeout(async () => {
       setLoading(true);
       try {
         const response = await API.uploadTorrent(data, { list_only: true });

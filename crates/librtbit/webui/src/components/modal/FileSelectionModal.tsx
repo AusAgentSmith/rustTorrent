@@ -21,7 +21,7 @@ export const FileSelectionModal = (props: {
   listTorrentLoading: boolean;
   data: string | File;
 }) => {
-  let {
+  const {
     onHide,
     listTorrentResponse,
     listTorrentError,
@@ -64,7 +64,7 @@ export const FileSelectionModal = (props: {
       return;
     }
     setUploading(true);
-    let initialPeers = listTorrentResponse.seen_peers
+    const initialPeers = listTorrentResponse.seen_peers
       ? listTorrentResponse.seen_peers.slice(0, 32)
       : null;
 
@@ -80,7 +80,7 @@ export const FileSelectionModal = (props: {
       selectedFiles.size === allNonPaddingFiles.size &&
       [...selectedFiles].every((f) => allNonPaddingFiles.has(f));
 
-    let opts: AddTorrentOptions = {
+    const opts: AddTorrentOptions = {
       overwrite: true,
       only_files: allSelected ? undefined : Array.from(selectedFiles),
       initial_peers: initialPeers,

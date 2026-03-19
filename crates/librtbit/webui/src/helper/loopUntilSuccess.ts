@@ -5,7 +5,7 @@ export function loopUntilSuccess<T>(
   let timeoutId: any;
 
   const executeCallback = async () => {
-    let retry = await callback().then(
+    const retry = await callback().then(
       () => false,
       () => true,
     );
@@ -14,7 +14,7 @@ export function loopUntilSuccess<T>(
     }
   };
 
-  let scheduleNext = (overrideInterval?: number) => {
+  const scheduleNext = (overrideInterval?: number) => {
     timeoutId = setTimeout(
       executeCallback,
       overrideInterval !== undefined ? overrideInterval : interval,

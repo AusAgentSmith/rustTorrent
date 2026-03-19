@@ -53,10 +53,10 @@ const streamLogs = (
   };
 
   const runOnce = async () => {
-    let response = await fetch(url, { signal });
+    const response = await fetch(url, { signal });
 
     if (!response.ok) {
-      let text = await response.text();
+      const text = await response.text();
       setError({
         text: "error fetching logs",
         details: {
@@ -92,15 +92,15 @@ const streamLogs = (
       buffer = mergeBuffers(buffer, value);
 
       for (let newLineIdx: number; (newLineIdx = buffer.indexOf(10)) !== -1; ) {
-        let lineBytes = buffer.slice(0, newLineIdx);
-        let line = new TextDecoder().decode(lineBytes);
+        const lineBytes = buffer.slice(0, newLineIdx);
+        const line = new TextDecoder().decode(lineBytes);
         addLine(line);
         buffer = buffer.slice(newLineIdx + 1);
       }
     }
   };
 
-  let cancelLoop = loopUntilSuccess(
+  const cancelLoop = loopUntilSuccess(
     () =>
       runOnce().then(
         () => {},
@@ -143,7 +143,7 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
       setLogLines((logLines: Line[]) => {
         const nextLineId = logLines.length == 0 ? 0 : logLines[0].id + 1;
 
-        let newLogLines = [
+        const newLogLines = [
           {
             id: nextLineId,
             content: text,
@@ -172,8 +172,8 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
     }
     filterRegex.current = regex;
     setLogLines((logLines) => {
-      let tmp = [...logLines];
-      for (let line of tmp) {
+      const tmp = [...logLines];
+      for (const line of tmp) {
         line.show = !!line.content.match(regex as RegExp);
       }
       return tmp;

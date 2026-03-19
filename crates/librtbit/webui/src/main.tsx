@@ -7,7 +7,7 @@ import { API } from "./http-api";
 import "./globals.css";
 
 const RootWithVersion = () => {
-  let [version, setVersion] = useState<string>("");
+  const [version, setVersion] = useState<string>("");
   useEffect(() => {
     const refreshVersion = () =>
       API.getVersion().then(

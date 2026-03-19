@@ -7,7 +7,9 @@
   ],
   "scripts": {
     "format": "prettier --write 'desktop/src/**/*.{ts,tsx}' 'crates/librqbit/webui/src/**/*.{ts,tsx}'",
-    "format:check": "prettier --check 'desktop/src/**/*.{ts,tsx}' 'crates/librqbit/webui/src/**/*.{ts,tsx}'"
+    "format:check": "prettier --check 'desktop/src/**/*.{ts,tsx}' 'crates/librqbit/webui/src/**/*.{ts,tsx}'",
+    "lint": "npm run lint --workspace=crates/librqbit/webui",
+    "lint:fix": "npm run lint:fix --workspace=crates/librqbit/webui"
   },
   "devDependencies": {
     "prettier": "^3.7"

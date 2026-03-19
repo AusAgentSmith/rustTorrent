@@ -28,7 +28,7 @@ export const ErrorComponent = (props: {
   error: ErrorWithLabel | null;
   remove?: () => void;
 }) => {
-  let { error, remove } = props;
+  const { error, remove } = props;
 
   if (error == null) {
     return null;

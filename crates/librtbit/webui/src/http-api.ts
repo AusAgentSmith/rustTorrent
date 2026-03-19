@@ -52,7 +52,7 @@ const makeRequest = async (
 ): Promise<any> => {
   console.log(method, path);
   const url = apiUrl + path;
-  let options: RequestInit = {
+  const options: RequestInit = {
     method,
     headers: {
       Accept: "application/json",
@@ -68,7 +68,7 @@ const makeRequest = async (
     options.body = data;
   }
 
-  let error: ErrorDetails = {
+  const error: ErrorDetails = {
     method: method,
     path: path,
     text: "",
@@ -151,7 +151,7 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
   },
 
   updateOnlyFiles: (index: number, files: number[]): Promise<void> => {
-    let url = `/torrents/${index}/update_only_files`;
+    const url = `/torrents/${index}/update_only_files`;
     return makeRequest(
       "POST",
       url,
@@ -187,7 +187,7 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
     filename?: string | null,
   ) => {
     let url = apiUrl + `/torrents/${index}/stream/${file_id}`;
-    if (!!filename) {
+    if (filename) {
       url += `/${filename}`;
     }
     return url;
