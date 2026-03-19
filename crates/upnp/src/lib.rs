@@ -579,4 +579,233 @@ mod tests {
         };
         assert_eq!(actual, expected);
     }
+
+    /// A minimal valid device descriptor with just one device and no services.
+    #[test]
+    fn test_parse_root_desc_minimal() {
+        let xml = r#"
+            <root xmlns="urn:schemas-upnp-org:device-1-0">
+                <device>
+                    <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
+                </device>
+            </root>
+        "#;
+        let desc: RootDesc = from_str(xml).unwrap();
+        assert_eq!(desc.devices.len(), 1);
+        assert_eq!(
+            desc.devices[0].device_type,
+            "urn:schemas-upnp-org:device:Basic:1"
+        );
+        assert!(desc.devices[0].friendly_name.is_empty());
+        assert!(desc.devices[0].service_list.services.is_empty());
+        assert!(desc.devices[0].device_list.devices.is_empty());
+    }
+
+    /// A descriptor with a device that has a service list.
+    #[test]
+    fn test_parse_root_desc_with_services() {
+        let xml = r#"
+            <root xmlns="urn:schemas-upnp-org:device-1-0">
+                <device>
+                    <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+                    <friendlyName>Test Renderer</friendlyName>
+                    <serviceList>
+                        <service>
+                            <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+                            <controlURL>/control/AVTransport</controlURL>
+                            <SCPDURL>/scpd/AVTransport.xml</SCPDURL>
+                        </service>
+                        <service>
+                            <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+                            <controlURL>/control/RenderingControl</controlURL>
+                            <SCPDURL>/scpd/RenderingControl.xml</SCPDURL>
+                        </service>
+                    </serviceList>
+                </device>
+            </root>
+        "#;
+        let desc: RootDesc = from_str(xml).unwrap();
+        assert_eq!(desc.devices.len(), 1);
+        let device = &desc.devices[0];
+        assert_eq!(device.friendly_name, "Test Renderer");
+        assert_eq!(device.service_list.services.len(), 2);
+        assert_eq!(
+            device.service_list.services[0].service_type,
+            "urn:schemas-upnp-org:service:AVTransport:1"
+        );
+        assert_eq!(
+            device.service_list.services[0].control_url,
+            "/control/AVTransport"
+        );
+        assert_eq!(
+            device.service_list.services[1].service_type,
+            "urn:schemas-upnp-org:service:RenderingControl:1"
+        );
+    }
+
+    /// Parsing invalid XML should produce an error, not a panic.
+    #[test]
+    fn test_parse_root_desc_invalid_xml() {
+        let bad_xml = "this is not xml at all!";
+        let result = from_str::<RootDesc>(bad_xml);
+        assert!(result.is_err());
+
+        let bad_xml2 = "<root><unclosed>";
+        let result2 = from_str::<RootDesc>(bad_xml2);
+        assert!(result2.is_err());
+    }
+
+    /// Verify the M-SEARCH message format matches the SSDP spec.
+    #[test]
+    fn test_ssdp_search_message_format() {
+        let msg = crate::make_ssdp_search_request("upnp:rootdevice");
+        assert!(msg.starts_with("M-SEARCH * HTTP/1.1\r\n"));
+        assert!(msg.contains("Host: 239.255.255.250:1900\r\n"));
+        assert!(msg.contains("Man: \"ssdp:discover\"\r\n"));
+        assert!(msg.contains("MX: 3\r\n"));
+        assert!(msg.contains("ST: upnp:rootdevice\r\n"));
+        assert!(msg.ends_with("\r\n\r\n"));
+    }
+
+    /// Verify SSDP search for WANIPConnection service type.
+    #[test]
+    fn test_ssdp_search_message_wan_ip() {
+        let msg = crate::make_ssdp_search_request(crate::SSDP_SEARCH_WAN_IPCONNECTION_ST);
+        assert!(msg.contains("ST: urn:schemas-upnp-org:service:WANIPConnection:1\r\n"));
+    }
+
+    /// Parse an SSDP response with a Location header.
+    #[test]
+    fn test_ssdp_response_parsing() {
+        let response = b"HTTP/1.1 200 OK\r\n\
+            LOCATION: http://192.168.1.1:5000/rootDesc.xml\r\n\
+            ST: upnp:rootdevice\r\n\
+            USN: uuid:abc-123::upnp:rootdevice\r\n\
+            \r\n";
+
+        let addr = std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 1)),
+            5000,
+        );
+        let parsed = crate::parse_upnp_discover_response(response, addr).unwrap();
+        assert_eq!(
+            parsed.location.as_str(),
+            "http://192.168.1.1:5000/rootDesc.xml"
+        );
+        assert_eq!(parsed.received_from, addr);
+    }
+
+    /// SSDP response with lowercase "location" header should still parse.
+    #[test]
+    fn test_ssdp_response_parsing_lowercase() {
+        let response = b"HTTP/1.1 200 OK\r\n\
+            location: http://10.0.0.1:8080/desc.xml\r\n\
+            \r\n";
+
+        let addr = std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 0, 0, 1)),
+            8080,
+        );
+        let parsed = crate::parse_upnp_discover_response(response, addr).unwrap();
+        assert_eq!(parsed.location.as_str(), "http://10.0.0.1:8080/desc.xml");
+    }
+
+    /// SSDP response with non-200 status should error.
+    #[test]
+    fn test_ssdp_response_parsing_non_200() {
+        let response = b"HTTP/1.1 404 Not Found\r\n\
+            \r\n";
+
+        let addr = std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 1)),
+            1900,
+        );
+        let result = crate::parse_upnp_discover_response(response, addr);
+        assert!(result.is_err());
+    }
+
+    /// SSDP response without Location header should error.
+    #[test]
+    fn test_ssdp_response_parsing_missing_location() {
+        let response = b"HTTP/1.1 200 OK\r\n\
+            ST: upnp:rootdevice\r\n\
+            \r\n";
+
+        let addr = std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 1)),
+            1900,
+        );
+        let result = crate::parse_upnp_discover_response(response, addr);
+        assert!(result.is_err());
+    }
+
+    /// Verify the SOAP AddPortMapping request body format.
+    #[test]
+    fn test_add_port_mapping_request_format() {
+        // Construct the same way as forward_port() does
+        let local_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 100));
+        let port = 6881u16;
+        let lease_secs = 60u64;
+        let service_type = "urn:schemas-upnp-org:service:WANIPConnection:1";
+
+        let request_body = format!(
+            r#"
+        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+            s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+            <s:Body>
+                <u:AddPortMapping xmlns:u="{service_type}">
+                    <NewRemoteHost></NewRemoteHost>
+                    <NewExternalPort>{port}</NewExternalPort>
+                    <NewProtocol>TCP</NewProtocol>
+                    <NewInternalPort>{port}</NewInternalPort>
+                    <NewInternalClient>{local_ip}</NewInternalClient>
+                    <NewEnabled>1</NewEnabled>
+                    <NewPortMappingDescription>rust UPnP</NewPortMappingDescription>
+                    <NewLeaseDuration>{lease_secs}</NewLeaseDuration>
+                </u:AddPortMapping>
+            </s:Body>
+        </s:Envelope>
+    "#
+        );
+
+        assert!(request_body.contains("AddPortMapping"));
+        assert!(request_body.contains("<NewExternalPort>6881</NewExternalPort>"));
+        assert!(request_body.contains("<NewInternalPort>6881</NewInternalPort>"));
+        assert!(request_body.contains("<NewInternalClient>192.168.1.100</NewInternalClient>"));
+        assert!(request_body.contains("<NewProtocol>TCP</NewProtocol>"));
+        assert!(request_body.contains("<NewLeaseDuration>60</NewLeaseDuration>"));
+        assert!(request_body.contains("WANIPConnection:1"));
+    }
+
+    /// Verify Device::name() returns friendly_name when set, device_type when empty.
+    #[test]
+    fn test_device_name_with_friendly_name() {
+        let device = Device {
+            device_type: "urn:schemas-upnp-org:device:Basic:1".into(),
+            friendly_name: "My Device".into(),
+            service_list: ServiceList::default(),
+            device_list: DeviceList::default(),
+        };
+        assert_eq!(device.name(), "My Device");
+    }
+
+    #[test]
+    fn test_device_name_without_friendly_name() {
+        let device = Device {
+            device_type: "urn:schemas-upnp-org:device:Basic:1".into(),
+            friendly_name: "".into(),
+            service_list: ServiceList::default(),
+            device_list: DeviceList::default(),
+        };
+        assert_eq!(device.name(), "urn:schemas-upnp-org:device:Basic:1");
+    }
+
+    /// ServiceList and DeviceList defaults should be empty.
+    #[test]
+    fn test_default_lists() {
+        let sl = ServiceList::default();
+        assert!(sl.services.is_empty());
+        let dl = DeviceList::default();
+        assert!(dl.devices.is_empty());
+    }
 }

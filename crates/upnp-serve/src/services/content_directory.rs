@@ -343,13 +343,162 @@ pub trait ContentDirectoryBrowseProvider: Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use super::browse::request::{BrowseFlag, ContentDirectoryControlRequest};
+    use super::browse::response::{Container, Item, ItemOrContainer};
+
     #[test]
     fn test_parse_content_directory_request() {
-        use super::browse::request::{BrowseFlag, ContentDirectoryControlRequest};
-
         let s = include_str!("../resources/test/ContentDirectoryControlExampleRequest.xml");
         let req = ContentDirectoryControlRequest::parse(s).unwrap();
         assert_eq!(req.object_id, 5);
         assert_eq!(req.browse_flag, BrowseFlag::BrowseDirectChildren)
+    }
+
+    /// Parsing a BrowseMetadata request.
+    #[test]
+    fn test_parse_browse_metadata_request() {
+        let xml = r#"
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+                        s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                <s:Body>
+                    <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+                        <ObjectID>0</ObjectID>
+                        <BrowseFlag>BrowseMetadata</BrowseFlag>
+                        <Filter>*</Filter>
+                        <StartingIndex>0</StartingIndex>
+                        <RequestedCount>1</RequestedCount>
+                        <SortCriteria></SortCriteria>
+                    </u:Browse>
+                </s:Body>
+            </s:Envelope>
+        "#;
+        let req = ContentDirectoryControlRequest::parse(xml).unwrap();
+        assert_eq!(req.object_id, 0);
+        assert_eq!(req.browse_flag, BrowseFlag::BrowseMetadata);
+        assert_eq!(req.starting_index, 0);
+        assert_eq!(req.requested_count, 1);
+    }
+
+    /// Parsing invalid SOAP XML should produce an error.
+    #[test]
+    fn test_parse_content_directory_request_invalid() {
+        let result = ContentDirectoryControlRequest::parse("not xml");
+        assert!(result.is_err());
+    }
+
+    /// Render a root container and verify DIDL-Lite output.
+    #[test]
+    fn test_content_directory_browse_root() {
+        let items = vec![ItemOrContainer::Container(Container {
+            id: 0,
+            parent_id: None,
+            children_count: Some(3),
+            title: "Root".to_string(),
+        })];
+        let output = super::browse::response::render(items);
+
+        // Should be a valid SOAP envelope with BrowseResponse
+        assert!(output.contains("BrowseResponse"));
+        assert!(output.contains("NumberReturned"));
+        assert!(output.contains("<NumberReturned>1</NumberReturned>"));
+        assert!(output.contains("<TotalMatches>1</TotalMatches>"));
+        // The container should appear in the escaped DIDL-Lite content
+        assert!(output.contains("Root"));
+        assert!(output.contains("storageFolder"));
+    }
+
+    /// Render a subfolder container.
+    #[test]
+    fn test_content_directory_browse_subfolder() {
+        let items = vec![
+            ItemOrContainer::Container(Container {
+                id: 10,
+                parent_id: Some(0),
+                children_count: Some(2),
+                title: "Movies".to_string(),
+            }),
+            ItemOrContainer::Container(Container {
+                id: 11,
+                parent_id: Some(0),
+                children_count: None,
+                title: "Music".to_string(),
+            }),
+        ];
+        let output = super::browse::response::render(items);
+
+        assert!(output.contains("<NumberReturned>2</NumberReturned>"));
+        assert!(output.contains("<TotalMatches>2</TotalMatches>"));
+        assert!(output.contains("Movies"));
+        assert!(output.contains("Music"));
+    }
+
+    /// Rendering an empty result set should produce valid XML with zero items.
+    #[test]
+    fn test_content_directory_browse_empty() {
+        let items: Vec<ItemOrContainer> = vec![];
+        let output = super::browse::response::render(items);
+
+        assert!(output.contains("<NumberReturned>0</NumberReturned>"));
+        assert!(output.contains("<TotalMatches>0</TotalMatches>"));
+    }
+
+    /// Render a video item and verify DIDL-Lite output.
+    #[test]
+    fn test_didl_lite_output_format_video_item() {
+        let items = vec![ItemOrContainer::Item(Item {
+            id: 42,
+            parent_id: 10,
+            title: "test_movie.mkv".to_string(),
+            mime_type: Some("video/x-matroska".parse().unwrap()),
+            url: "http://localhost:3030/stream/42".to_string(),
+            size: 1_000_000,
+        })];
+        let output = super::browse::response::render(items);
+
+        assert!(output.contains("<NumberReturned>1</NumberReturned>"));
+        assert!(output.contains("test_movie.mkv"));
+        assert!(output.contains("videoItem"));
+        assert!(output.contains("http://localhost:3030/stream/42"));
+    }
+
+    /// Non-video items (e.g. audio) are filtered out by the render function.
+    #[test]
+    fn test_didl_lite_non_video_item_filtered() {
+        let items = vec![ItemOrContainer::Item(Item {
+            id: 99,
+            parent_id: 10,
+            title: "song.mp3".to_string(),
+            mime_type: Some("audio/mpeg".parse().unwrap()),
+            url: "http://localhost:3030/stream/99".to_string(),
+            size: 5_000,
+        })];
+        let output = super::browse::response::render(items);
+
+        // Non-video items return None from the item() function, so count is 0
+        assert!(output.contains("<NumberReturned>0</NumberReturned>"));
+    }
+
+    /// Verify the SOAP action constants match expected values.
+    #[test]
+    fn test_soap_action_constants() {
+        use crate::constants::{
+            SOAP_ACTION_CONTENT_DIRECTORY_BROWSE, SOAP_ACTION_GET_SYSTEM_UPDATE_ID,
+        };
+        assert_eq!(
+            SOAP_ACTION_CONTENT_DIRECTORY_BROWSE,
+            b"\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""
+        );
+        assert_eq!(
+            SOAP_ACTION_GET_SYSTEM_UPDATE_ID,
+            b"\"urn:schemas-upnp-org:service:ContentDirectory:1#GetSystemUpdateID\""
+        );
+    }
+
+    /// Verify GetSystemUpdateID response format.
+    #[test]
+    fn test_get_system_update_id_response() {
+        let response = super::get_system_update_id::render_response(12345);
+        assert!(response.contains("GetSystemUpdateIDResponse"));
+        assert!(response.contains("<Id>12345</Id>"));
     }
 }

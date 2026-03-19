@@ -303,3 +303,143 @@ fn addr_no_scope(addr: &SocketAddr) -> SocketAddr {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse an M-SEARCH request for a MediaServer.
+    #[test]
+    fn test_parse_ssdp_msearch() {
+        let msg = b"M-SEARCH * HTTP/1.1\r\n\
+            HOST: 239.255.255.250:1900\r\n\
+            MAN: \"ssdp:discover\"\r\n\
+            ST: urn:schemas-upnp-org:device:MediaServer:1\r\n\
+            MX: 2\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_ssdp(msg, &mut headers).unwrap();
+
+        match parsed {
+            SsdpMessage::MSearch(req) => {
+                assert_eq!(req.man, "\"ssdp:discover\"");
+                assert_eq!(req.st, "urn:schemas-upnp-org:device:MediaServer:1");
+                assert!(req.matches_media_server());
+            }
+            other => panic!("expected MSearch, got {:?}", other),
+        }
+    }
+
+    /// Parse an M-SEARCH request for upnp:rootdevice (also matches media server).
+    #[test]
+    fn test_parse_ssdp_msearch_root_device() {
+        let msg = b"M-SEARCH * HTTP/1.1\r\n\
+            HOST: 239.255.255.250:1900\r\n\
+            MAN: \"ssdp:discover\"\r\n\
+            ST: upnp:rootdevice\r\n\
+            MX: 3\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_ssdp(msg, &mut headers).unwrap();
+
+        match parsed {
+            SsdpMessage::MSearch(req) => {
+                assert!(req.matches_media_server());
+            }
+            other => panic!("expected MSearch, got {:?}", other),
+        }
+    }
+
+    /// An M-SEARCH for a non-media-server type should not match.
+    #[test]
+    fn test_parse_ssdp_msearch_no_match() {
+        let msg = b"M-SEARCH * HTTP/1.1\r\n\
+            HOST: 239.255.255.250:1900\r\n\
+            MAN: \"ssdp:discover\"\r\n\
+            ST: urn:schemas-upnp-org:service:WANIPConnection:1\r\n\
+            MX: 3\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_ssdp(msg, &mut headers).unwrap();
+
+        match parsed {
+            SsdpMessage::MSearch(req) => {
+                assert!(!req.matches_media_server());
+            }
+            other => panic!("expected MSearch, got {:?}", other),
+        }
+    }
+
+    /// Parsing an HTTP response should return SsdpMessage::Response.
+    #[test]
+    fn test_parse_ssdp_response() {
+        let msg = b"HTTP/1.1 200 OK\r\n\
+            Location: http://192.168.1.1:8080/desc.xml\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_ssdp(msg, &mut headers).unwrap();
+
+        match parsed {
+            SsdpMessage::Response(_) => {}
+            other => panic!("expected Response, got {:?}", other),
+        }
+    }
+
+    /// Parsing a non-M-SEARCH request should return OtherRequest.
+    #[test]
+    fn test_parse_ssdp_notify() {
+        let msg = b"NOTIFY * HTTP/1.1\r\n\
+            Host: 239.255.255.250:1900\r\n\
+            NT: upnp:rootdevice\r\n\
+            NTS: ssdp:alive\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_ssdp(msg, &mut headers).unwrap();
+
+        match parsed {
+            SsdpMessage::OtherRequest(_) => {}
+            other => panic!("expected OtherRequest, got {:?}", other),
+        }
+    }
+
+    /// Missing required headers in M-SEARCH should return an error.
+    #[test]
+    fn test_parse_ssdp_msearch_missing_headers() {
+        let msg = b"M-SEARCH * HTTP/1.1\r\n\
+            HOST: 239.255.255.250:1900\r\n\
+            \r\n";
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_ssdp(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    /// addr_no_scope should strip scope_id from IPv6 addresses.
+    #[test]
+    fn test_addr_no_scope_v6() {
+        let addr = SocketAddr::V6(SocketAddrV6::new(
+            Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1),
+            1900,
+            0,
+            42, // non-zero scope_id
+        ));
+        let stripped = addr_no_scope(&addr);
+        match stripped {
+            SocketAddr::V6(v6) => assert_eq!(v6.scope_id(), 0),
+            _ => panic!("expected V6"),
+        }
+    }
+
+    /// addr_no_scope should leave IPv4 addresses unchanged.
+    #[test]
+    fn test_addr_no_scope_v4() {
+        let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 1, 1), 1900));
+        let stripped = addr_no_scope(&addr);
+        assert_eq!(addr, stripped);
+    }
+}
