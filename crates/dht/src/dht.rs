@@ -1236,6 +1236,21 @@ impl DhtWorker {
             .bucket_refresher(false)
             .instrument(debug_span!("bucket_refresher_v6"));
 
+        let peer_store_gc = {
+            let dht = self.dht.clone();
+            async move {
+                // Run GC every 5 minutes to clean up stale peers and tokens.
+                let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
+                // Skip the first immediate tick so we don't GC right at startup.
+                interval.tick().await;
+                loop {
+                    interval.tick().await;
+                    dht.peer_store.garbage_collect_peers();
+                }
+            }
+        }
+        .instrument(debug_span!("peer_store_gc"));
+
         tokio::pin!(framer);
         tokio::pin!(bootstrap);
         tokio::pin!(response_reader);
@@ -1243,6 +1258,7 @@ impl DhtWorker {
         tokio::pin!(bucket_refresher_v4);
         tokio::pin!(pinger_v6);
         tokio::pin!(bucket_refresher_v6);
+        tokio::pin!(peer_store_gc);
 
         loop {
             tokio::select! {
@@ -1267,6 +1283,9 @@ impl DhtWorker {
                 },
                 err = &mut response_reader => {
                     return Error::task_finished(&"response_reader", err);
+                },
+                _ = &mut peer_store_gc => {
+                    // GC loop runs forever; if it somehow exits, just continue.
                 }
             }
         }
