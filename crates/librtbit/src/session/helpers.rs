@@ -131,3 +131,139 @@ pub(crate) fn remove_files_and_dirs(infos: &FileInfos, files: &dyn TorrentStorag
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::create_torrent_file::create_torrent;
+    use crate::spawn_utils::BlockingSpawner;
+    use crate::tests::test_util;
+    use futures::StreamExt;
+
+    /// Helper to create a multi-file torrent and return the parsed validated info.
+    async fn make_multi_file_torrent_info(
+    ) -> ValidatedTorrentMetaV1Info<ByteBufOwned> {
+        let dir = tempfile::tempdir().unwrap();
+        test_util::create_new_file_with_random_content(&dir.path().join("movie.mp4"), 5000);
+        test_util::create_new_file_with_random_content(&dir.path().join("subtitle.srt"), 500);
+        test_util::create_new_file_with_random_content(&dir.path().join("readme.txt"), 200);
+
+        let result = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let bytes = result.as_bytes().unwrap();
+        let parsed = torrent_from_bytes(bytes).unwrap();
+        parsed.meta.info.data.validate().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_regex() {
+        let info = make_multi_file_torrent_info().await;
+        // Match only .mp4 files
+        let result = compute_only_files_regex(&info, r"\.mp4$").unwrap();
+        assert_eq!(result.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_regex_no_match() {
+        let info = make_multi_file_torrent_info().await;
+        let result = compute_only_files_regex(&info, r"\.nonexistent$");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_by_index() {
+        let info = make_multi_file_torrent_info().await;
+        let result = compute_only_files(&info, Some(vec![0, 1]), None, false).unwrap();
+        assert_eq!(result, Some(vec![0, 1]));
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_invalid_index() {
+        let info = make_multi_file_torrent_info().await;
+        let result = compute_only_files(&info, Some(vec![999]), None, false);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_mutually_exclusive() {
+        let info = make_multi_file_torrent_info().await;
+        let result = compute_only_files(
+            &info,
+            Some(vec![0]),
+            Some(r"\.mp4$".to_string()),
+            false,
+        );
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("mutually exclusive"));
+    }
+
+    #[tokio::test]
+    async fn test_compute_only_files_none() {
+        let info = make_multi_file_torrent_info().await;
+        let result = compute_only_files(&info, None, None, false).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_merge_two_optional_streams_both_none() {
+        let none1: Option<futures::stream::Iter<std::vec::IntoIter<i32>>> = None;
+        let none2: Option<futures::stream::Iter<std::vec::IntoIter<i32>>> = None;
+        let result = merge_two_optional_streams(none1, none2);
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_merge_two_optional_streams_first_only() {
+        let s1 = futures::stream::iter(vec![1, 2, 3]);
+        let none2: Option<futures::stream::Iter<std::vec::IntoIter<i32>>> = None;
+        let result = merge_two_optional_streams(Some(s1), none2);
+        assert!(result.is_some());
+        let items: Vec<_> = result.unwrap().collect().await;
+        assert_eq!(items, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_merge_two_optional_streams_second_only() {
+        let none1: Option<futures::stream::Iter<std::vec::IntoIter<i32>>> = None;
+        let s2 = futures::stream::iter(vec![4, 5, 6]);
+        let result = merge_two_optional_streams(none1, Some(s2));
+        assert!(result.is_some());
+        let items: Vec<_> = result.unwrap().collect().await;
+        assert_eq!(items, vec![4, 5, 6]);
+    }
+
+    #[tokio::test]
+    async fn test_merge_two_optional_streams_both() {
+        let s1 = futures::stream::iter(vec![1, 2]);
+        let s2 = futures::stream::iter(vec![3, 4]);
+        let result = merge_two_optional_streams(Some(s1), Some(s2));
+        assert!(result.is_some());
+        let mut items: Vec<_> = result.unwrap().collect().await;
+        items.sort();
+        assert_eq!(items, vec![1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_torrent_from_bytes_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        test_util::create_new_file_with_random_content(&dir.path().join("test.bin"), 1000);
+
+        let result = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let bytes = result.as_bytes().unwrap();
+        let parsed = torrent_from_bytes(bytes);
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn test_torrent_from_bytes_invalid() {
+        let invalid = bytes::Bytes::from_static(b"this is not a valid torrent file");
+        let result = torrent_from_bytes(invalid);
+        assert!(result.is_err());
+    }
+}

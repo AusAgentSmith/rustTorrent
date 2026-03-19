@@ -265,4 +265,166 @@ mod tests {
         let deserialized = torrent_from_bytes(&bytes).unwrap();
         assert_eq!(torrent.info_hash(), deserialized.info_hash);
     }
+
+    #[tokio::test]
+    async fn test_create_torrent_single_file() {
+        use crate::tests::test_util;
+        use super::CreateTorrentOptions;
+
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("single.bin");
+        test_util::create_new_file_with_random_content(&file_path, 50_000);
+
+        let torrent = create_torrent(
+            &file_path,
+            CreateTorrentOptions {
+                name: Some("test_single"),
+                ..Default::default()
+            },
+            &BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
+
+        let info = &torrent.meta.info.data;
+        // Single file mode: length is set, files is None.
+        assert!(info.length.is_some());
+        assert!(info.files.is_none());
+        assert_eq!(info.length.unwrap(), 50_000);
+        assert_eq!(
+            info.name.as_ref().map(|n| n.as_ref()),
+            Some(b"test_single" as &[u8])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_torrent_multi_file() {
+        use crate::tests::test_util;
+
+        let dir = tempfile::tempdir().unwrap();
+        test_util::create_new_file_with_random_content(&dir.path().join("a.bin"), 30_000);
+        test_util::create_new_file_with_random_content(&dir.path().join("b.bin"), 40_000);
+        test_util::create_new_file_with_random_content(&dir.path().join("c.bin"), 50_000);
+
+        let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let info = &torrent.meta.info.data;
+        // Multi-file mode: length is None, files is Some.
+        assert!(info.length.is_none());
+        let files = info.files.as_ref().unwrap();
+        assert_eq!(files.len(), 3);
+
+        // Verify total file sizes sum correctly.
+        let total_size: u64 = files.iter().map(|f| f.length).sum();
+        assert_eq!(total_size, 120_000);
+    }
+
+    #[tokio::test]
+    async fn test_create_torrent_roundtrip() {
+        use crate::tests::test_util;
+
+        let dir = test_util::create_default_random_dir_with_torrents(
+            2,
+            100_000,
+            Some("rqbit_test_roundtrip"),
+        );
+
+        let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let bytes = torrent.as_bytes().unwrap();
+        let deserialized = torrent_from_bytes(&bytes).unwrap();
+
+        // Info hash must match.
+        assert_eq!(torrent.info_hash(), deserialized.info_hash);
+
+        // Piece length must match.
+        assert_eq!(
+            torrent.meta.info.data.piece_length,
+            deserialized.info.data.piece_length
+        );
+
+        // Piece hashes must match in length.
+        assert_eq!(
+            torrent.meta.info.data.pieces.as_ref().len(),
+            deserialized.info.data.pieces.as_ref().len()
+        );
+
+        // Name must roundtrip.
+        assert_eq!(
+            torrent.meta.info.data.name.as_ref().map(|n| n.as_ref()),
+            deserialized.info.data.name.as_ref().map(|n| n.as_ref()),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_torrent_piece_hashes() {
+        use crate::tests::test_util;
+
+        let dir = tempfile::tempdir().unwrap();
+        // Small file, smaller than one piece (default 2MiB)
+        test_util::create_new_file_with_random_content(&dir.path().join("tiny.bin"), 1024);
+
+        let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let info = &torrent.meta.info.data;
+        // Piece hashes should be a multiple of 20 bytes (SHA1 hash size).
+        assert_eq!(info.pieces.as_ref().len() % 20, 0);
+
+        let num_pieces = info.pieces.as_ref().len() / 20;
+        // For a 1024 byte file with 2MiB pieces, there should be exactly 1 piece.
+        assert_eq!(num_pieces, 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_torrent_with_trackers() {
+        use crate::tests::test_util;
+        use super::CreateTorrentOptions;
+
+        let dir = tempfile::tempdir().unwrap();
+        test_util::create_new_file_with_random_content(&dir.path().join("tracked.bin"), 5000);
+
+        let torrent = create_torrent(
+            dir.path(),
+            CreateTorrentOptions {
+                trackers: vec!["http://tracker.example.com:8080/announce".to_string()],
+                ..Default::default()
+            },
+            &BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
+
+        // Verify the tracker URL is present in announce_list.
+        let tracker_urls: Vec<_> = torrent.meta.iter_announce().collect();
+        assert!(!tracker_urls.is_empty());
+        assert_eq!(
+            std::str::from_utf8(tracker_urls[0].as_ref()).unwrap(),
+            "http://tracker.example.com:8080/announce"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_torrent_magnet() {
+        use crate::tests::test_util;
+
+        let dir = tempfile::tempdir().unwrap();
+        test_util::create_new_file_with_random_content(&dir.path().join("magnet_test.bin"), 5000);
+
+        let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
+            .await
+            .unwrap();
+
+        let magnet = torrent.as_magnet();
+        let magnet_str = magnet.to_string();
+        // Magnet link should start with magnet:?
+        assert!(magnet_str.starts_with("magnet:?"));
+        // Should contain the info hash
+        assert!(magnet_str.contains(&torrent.info_hash().as_string()));
+    }
 }

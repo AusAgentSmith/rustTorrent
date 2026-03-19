@@ -726,6 +726,167 @@ mod tests {
     }
 
     #[test]
+    fn test_steal_piece_from_slowest_peer() {
+        // Verify that steal picks the piece with the longest elapsed time.
+        let chunks = make_test_chunk_tracker(5);
+        let mut tracker = PieceTracker::new(chunks);
+
+        let file_infos = make_test_file_infos(5);
+        let file_priorities = make_default_file_priorities(&file_infos);
+
+        let peer_a = peer(1);
+        let peer_b = peer(2);
+
+        // Peer A reserves piece 0
+        let _piece_a1 = match tracker.acquire_piece(AcquireRequest {
+            peer: peer_a,
+            peer_avg_time: None,
+            priority_pieces: std::iter::empty(),
+            file_priorities: &file_priorities,
+            file_infos: &file_infos,
+            peer_has_piece: |_| true,
+            can_steal: |_| true,
+        }) {
+            AcquireResult::Reserved(p) => p,
+            _ => panic!("Expected Reserved"),
+        };
+
+        // Wait a bit so piece_a1 has more elapsed time
+        std::thread::sleep(Duration::from_millis(10));
+
+        // Peer A reserves piece 4 (second in iteration order)
+        let _piece_a2 = match tracker.acquire_piece(AcquireRequest {
+            peer: peer_a,
+            peer_avg_time: None,
+            priority_pieces: std::iter::empty(),
+            file_priorities: &file_priorities,
+            file_infos: &file_infos,
+            peer_has_piece: |_| true,
+            can_steal: |_| true,
+        }) {
+            AcquireResult::Reserved(p) => p,
+            _ => panic!("Expected Reserved"),
+        };
+
+        // Wait again so both are stealable
+        std::thread::sleep(Duration::from_millis(5));
+
+        // Peer B tries to steal. piece_a1 (piece 0) has been in-flight longer.
+        // With a very short avg_time, the threshold is easily exceeded.
+        let result = tracker.acquire_piece(AcquireRequest {
+            peer: peer_b,
+            peer_avg_time: Some(Duration::from_millis(1)),
+            priority_pieces: std::iter::empty(),
+            file_priorities: &file_priorities,
+            file_infos: &file_infos,
+            peer_has_piece: |_| true,
+            can_steal: |_| true,
+        });
+
+        match result {
+            AcquireResult::Stolen { piece, from_peer } => {
+                // Should steal the piece with the longest elapsed time (piece 0).
+                assert_eq!(piece.get(), 0, "Should steal slowest piece (piece 0)");
+                assert_eq!(from_peer, peer_a);
+            }
+            _ => panic!("Expected Stolen, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_multiple_peers_competing() {
+        // Multiple peers each acquire pieces; verify they get different pieces.
+        let chunks = make_test_chunk_tracker(5);
+        let mut tracker = PieceTracker::new(chunks);
+
+        let file_infos = make_test_file_infos(5);
+        let file_priorities = make_default_file_priorities(&file_infos);
+
+        let mut acquired_pieces = HashSet::new();
+
+        for i in 1..=5 {
+            let result = tracker.acquire_piece(AcquireRequest {
+                peer: peer(i),
+                peer_avg_time: None,
+                priority_pieces: std::iter::empty(),
+                file_priorities: &file_priorities,
+                file_infos: &file_infos,
+                peer_has_piece: |_| true,
+                can_steal: |_| true,
+            });
+
+            match result {
+                AcquireResult::Reserved(p) => {
+                    assert!(
+                        acquired_pieces.insert(p.get()),
+                        "Peer {i} got duplicate piece {}",
+                        p.get()
+                    );
+                }
+                _ => panic!("Expected Reserved for peer {i}, got {:?}", result),
+            }
+        }
+
+        assert_eq!(acquired_pieces.len(), 5);
+        assert_eq!(tracker.inflight_count(), 5);
+    }
+
+    #[test]
+    fn test_all_pieces_completed() {
+        // Complete all pieces and verify the tracker reflects full completion.
+        let chunks = make_test_chunk_tracker(3);
+        let mut tracker = PieceTracker::new(chunks);
+
+        let file_infos = make_test_file_infos(3);
+        let file_priorities = make_default_file_priorities(&file_infos);
+
+        let mut pieces = Vec::new();
+        for i in 1..=3 {
+            let result = tracker.acquire_piece(AcquireRequest {
+                peer: peer(i),
+                peer_avg_time: None,
+                priority_pieces: std::iter::empty(),
+                file_priorities: &file_priorities,
+                file_infos: &file_infos,
+                peer_has_piece: |_| true,
+                can_steal: |_| true,
+            });
+            match result {
+                AcquireResult::Reserved(p) => pieces.push(p),
+                _ => panic!("Expected Reserved"),
+            }
+        }
+
+        // Complete all pieces.
+        for piece in &pieces {
+            tracker.take_inflight(*piece);
+            tracker.mark_piece_hash_ok(*piece);
+        }
+
+        assert_eq!(tracker.inflight_count(), 0);
+
+        // All pieces should be marked as have.
+        for piece in &pieces {
+            assert!(tracker.chunks().is_piece_have(*piece));
+        }
+
+        // Trying to acquire more should yield NoneAvailable.
+        let result = tracker.acquire_piece(AcquireRequest {
+            peer: peer(10),
+            peer_avg_time: None,
+            priority_pieces: std::iter::empty(),
+            file_priorities: &file_priorities,
+            file_infos: &file_infos,
+            peer_has_piece: |_| true,
+            can_steal: |_| true,
+        });
+        match result {
+            AcquireResult::NoneAvailable => {}
+            _ => panic!("Expected NoneAvailable after all pieces completed"),
+        }
+    }
+
+    #[test]
     fn test_steal_only_pieces_peer_has() {
         // This test verifies the fix for a bug where try_steal didn't check
         // if the stealing peer actually has the piece in their bitfield.

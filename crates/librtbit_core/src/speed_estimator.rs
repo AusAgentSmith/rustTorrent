@@ -93,3 +93,148 @@ impl SpeedEstimator {
         self.bytes_per_second.store(bps as u64, Ordering::Relaxed);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn test_speed_estimator_initial_zero() {
+        let estimator = SpeedEstimator::default();
+        assert_eq!(estimator.bps(), 0);
+        assert_eq!(estimator.mbps(), 0.0);
+        assert!(estimator.time_remaining().is_none());
+    }
+
+    #[test]
+    fn test_speed_estimator_single_snapshot_no_speed() {
+        let estimator = SpeedEstimator::default();
+        let now = Instant::now();
+        // First snapshot just initializes; speed remains zero.
+        estimator.add_snapshot(1000, None, now);
+        assert_eq!(estimator.bps(), 0);
+    }
+
+    #[test]
+    fn test_speed_estimator_calculates_speed() {
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        // First snapshot: 0 bytes downloaded
+        estimator.add_snapshot(0, None, start);
+
+        // Second snapshot: 10_000 bytes downloaded, 1 second later
+        estimator.add_snapshot(10_000, None, start + Duration::from_secs(1));
+
+        // Speed should be approximately 10_000 bytes/sec
+        let bps = estimator.bps();
+        assert!(
+            (9_000..=11_000).contains(&bps),
+            "expected ~10000 bps, got {bps}"
+        );
+    }
+
+    #[test]
+    fn test_speed_estimator_time_remaining() {
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        estimator.add_snapshot(0, Some(20_000), start);
+        estimator.add_snapshot(10_000, Some(10_000), start + Duration::from_secs(1));
+
+        // We downloaded 10_000 bytes in 1 second => 10_000 bps
+        // Remaining = 10_000 bytes => ~1 second remaining
+        let remaining = estimator.time_remaining();
+        assert!(remaining.is_some());
+        let remaining_ms = remaining.unwrap().as_millis();
+        assert!(
+            (800..=1200).contains(&remaining_ms),
+            "expected ~1000ms remaining, got {remaining_ms}ms"
+        );
+    }
+
+    #[test]
+    fn test_speed_estimator_no_progress_zero_remaining() {
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        estimator.add_snapshot(0, Some(10_000), start);
+        // Same bytes, no progress
+        estimator.add_snapshot(0, Some(10_000), start + Duration::from_secs(1));
+
+        // No progress => time_remaining should be None (stored as 0)
+        assert!(estimator.time_remaining().is_none());
+        assert_eq!(estimator.bps(), 0);
+    }
+
+    #[test]
+    fn test_speed_estimator_multiple_updates() {
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        // Feed 5 snapshots (window=3, so oldest get evicted)
+        estimator.add_snapshot(0, None, start);
+        estimator.add_snapshot(1_000, None, start + Duration::from_secs(1));
+        estimator.add_snapshot(3_000, None, start + Duration::from_secs(2));
+        estimator.add_snapshot(6_000, None, start + Duration::from_secs(3));
+        estimator.add_snapshot(10_000, None, start + Duration::from_secs(4));
+
+        // Window size is 3, so when we have 5 snapshots, the estimator
+        // compares the newest (10_000 at t=4) with the popped first.
+        // At snapshot 5: popped (1000, t=1), speed = (10000-1000)/(4-1) = 3000 bps
+        let bps = estimator.bps();
+        assert!(
+            (2500..=3500).contains(&bps),
+            "expected ~3000 bps, got {bps}"
+        );
+    }
+
+    #[test]
+    fn test_speed_estimator_mbps() {
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        estimator.add_snapshot(0, None, start);
+        // 1 MiB in 1 second
+        let one_mib = 1024 * 1024;
+        estimator.add_snapshot(one_mib, None, start + Duration::from_secs(1));
+
+        let mbps = estimator.mbps();
+        assert!(
+            (0.9..1.1).contains(&mbps),
+            "expected ~1.0 MBps, got {mbps}"
+        );
+    }
+
+    #[test]
+    fn test_speed_estimator_window_eviction() {
+        // Window of 3: can hold 3 snapshots.
+        // Adding a 4th evicts the first.
+        let estimator = SpeedEstimator::new(3);
+        let start = Instant::now();
+
+        // Fill the window
+        estimator.add_snapshot(0, None, start);
+        estimator.add_snapshot(100, None, start + Duration::from_secs(1));
+        estimator.add_snapshot(200, None, start + Duration::from_secs(2));
+
+        // At this point, first=(0,t=0), speed = (200-0)/2 = 100 bps
+        let bps = estimator.bps();
+        assert!(
+            (90..=110).contains(&bps),
+            "expected ~100 bps, got {bps}"
+        );
+
+        // Add a 4th: evicts snapshot(0, t=0).
+        // The popped `first` is (0, t=0).
+        // Speed = (1200-0)/(3-0) = 400 bps
+        // Now window has: (100,t=1), (200,t=2), (1200,t=3)
+        estimator.add_snapshot(1200, None, start + Duration::from_secs(3));
+        let bps = estimator.bps();
+        assert!(
+            (380..=420).contains(&bps),
+            "expected ~400 bps, got {bps}"
+        );
+    }
+}

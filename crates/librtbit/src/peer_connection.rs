@@ -510,3 +510,130 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use librqbit_core::hash_id::Id20;
+    use peer_binary_protocol::{Handshake, Message, MessageDeserializeError, MAX_MSG_LEN};
+
+    #[test]
+    fn test_peer_connection_handshake_encoding() {
+        let info_hash = Id20::new([0xAA; 20]);
+        let peer_id = Id20::new([0xBB; 20]);
+        let handshake = Handshake::new(info_hash, peer_id);
+
+        let mut buf = [0u8; MAX_MSG_LEN];
+        let len = handshake.serialize_unchecked_len(&mut buf);
+
+        // BitTorrent handshake is 68 bytes:
+        // 1 (pstr_len) + 19 (pstr) + 8 (reserved) + 20 (info_hash) + 20 (peer_id)
+        assert_eq!(len, 68);
+
+        // First byte should be 19 (pstr length).
+        assert_eq!(buf[0], 19);
+
+        // Bytes 1..20 should be "BitTorrent protocol".
+        assert_eq!(&buf[1..20], b"BitTorrent protocol");
+
+        // Info hash at bytes 28..48.
+        assert_eq!(&buf[28..48], &[0xAA; 20]);
+
+        // Peer ID at bytes 48..68.
+        assert_eq!(&buf[48..68], &[0xBB; 20]);
+    }
+
+    #[test]
+    fn test_peer_connection_handshake_roundtrip() {
+        let info_hash = Id20::new([0x11; 20]);
+        let peer_id = Id20::new([0x22; 20]);
+        let original = Handshake::new(info_hash, peer_id);
+
+        let mut buf = [0u8; MAX_MSG_LEN];
+        let len = original.serialize_unchecked_len(&mut buf);
+
+        let (deserialized, consumed) = Handshake::deserialize(&buf[..len]).unwrap();
+        assert_eq!(consumed, 68);
+        assert_eq!(deserialized.info_hash, info_hash);
+        assert_eq!(deserialized.peer_id, peer_id);
+        assert!(deserialized.supports_extended());
+    }
+
+    #[test]
+    fn test_peer_connection_handshake_supports_extended() {
+        let info_hash = Id20::new([0; 20]);
+        let peer_id = Id20::new([0; 20]);
+        let handshake = Handshake::new(info_hash, peer_id);
+
+        // Handshake::new sets the extended messaging bit.
+        assert!(handshake.supports_extended());
+    }
+
+    #[test]
+    fn test_peer_connection_handshake_deserialize_too_short() {
+        let short_buf = [0u8; 10]; // Way too short for a handshake.
+        let result = Handshake::deserialize(&short_buf);
+        assert!(result.is_err());
+        match result {
+            Err(MessageDeserializeError::NotEnoughData(_, _)) => {}
+            Err(e) => panic!("Expected NotEnoughData error, got {e:?}"),
+            Ok(_) => panic!("Expected error"),
+        }
+    }
+
+    #[test]
+    fn test_peer_connection_message_framing() {
+        // Test that a KeepAlive message serializes to 4 zero bytes (length=0).
+        let msg = Message::KeepAlive;
+        let mut buf = [0u8; MAX_MSG_LEN];
+        let len = msg.serialize(&mut buf, &Default::default).unwrap();
+        // KeepAlive: 4-byte length prefix of 0.
+        assert_eq!(len, 4);
+        assert_eq!(&buf[..4], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_peer_connection_unchoke_message() {
+        let msg = Message::Unchoke;
+        let mut buf = [0u8; MAX_MSG_LEN];
+        let len = msg.serialize(&mut buf, &Default::default).unwrap();
+        // Unchoke: 4-byte length (=1) + 1-byte msg_id (=1) = 5 bytes total.
+        assert_eq!(len, 5);
+        // Length prefix = 1
+        assert_eq!(&buf[..4], &[0, 0, 0, 1]);
+        // Message ID for Unchoke = 1
+        assert_eq!(buf[4], 1);
+    }
+
+    #[test]
+    fn test_peer_connection_interested_message() {
+        let msg = Message::Interested;
+        let mut buf = [0u8; MAX_MSG_LEN];
+        let len = msg.serialize(&mut buf, &Default::default).unwrap();
+        // Interested: 4-byte length (=1) + 1-byte msg_id (=2) = 5 bytes total.
+        assert_eq!(len, 5);
+        assert_eq!(&buf[..4], &[0, 0, 0, 1]);
+        assert_eq!(buf[4], 2);
+    }
+
+    #[test]
+    fn test_peer_connection_options_default() {
+        let opts = PeerConnectionOptions::default();
+        assert!(opts.connect_timeout.is_none());
+        assert!(opts.read_write_timeout.is_none());
+        assert!(opts.keep_alive_interval.is_none());
+    }
+
+    #[test]
+    fn test_peer_connection_options_serialization() {
+        let opts = PeerConnectionOptions {
+            connect_timeout: Some(Duration::from_secs(5)),
+            read_write_timeout: Some(Duration::from_secs(10)),
+            keep_alive_interval: Some(Duration::from_secs(120)),
+        };
+
+        let json = serde_json::to_string(&opts).unwrap();
+        let deserialized: PeerConnectionOptions = serde_json::from_str(&json).unwrap();
+        assert_eq!(opts, deserialized);
+    }
+}
