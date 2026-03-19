@@ -401,7 +401,7 @@ impl ManagedTorrent {
                     Ok(())
                 }
                 ManagedTorrentState::Error(_) => {
-                    let metadata = t.metadata.load_full().expect("TODO");
+                    let metadata = t.metadata.load_full().context("torrent metadata was not loaded")?;
                     let initializing = Arc::new(TorrentStateInitializing::new(
                         t.shared.clone(),
                         metadata.clone(),

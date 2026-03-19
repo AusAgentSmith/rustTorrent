@@ -201,8 +201,9 @@ impl PeerStore {
         Vec::new()
     }
 
-    #[allow(dead_code)]
     pub fn garbage_collect_peers(&self) {
-        todo!()
+        // TODO: Implement peer garbage collection. This should remove peers that
+        // haven't been seen recently (based on StoredPeer::time) and update
+        // peers_len accordingly.
     }
 }
