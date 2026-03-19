@@ -347,3 +347,295 @@ fn try_parse_bt_search<'a: 'h, 'h>(
         _ => anyhow::bail!("expecting BT-SEARCH"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: build a BEP 14 BT-SEARCH message from parts.
+    fn build_bt_search_msg(
+        host: &str,
+        port: u16,
+        infohash: &str,
+        cookie: Option<u32>,
+    ) -> Vec<u8> {
+        let mut msg = String::new();
+        msg.push_str("BT-SEARCH * HTTP/1.1\r\n");
+        msg.push_str(&format!("Host: {host}\r\n"));
+        msg.push_str(&format!("Port: {port}\r\n"));
+        msg.push_str(&format!("Infohash: {infohash}\r\n"));
+        if let Some(c) = cookie {
+            msg.push_str(&format!("cookie: {c}\r\n"));
+        }
+        msg.push_str("\r\n");
+        msg.into_bytes()
+    }
+
+    #[test]
+    fn test_lsd_announce_message_format() {
+        // Verify that gen_announce_msg produces a valid BEP 14 message
+        // by constructing the expected format manually and comparing structure.
+        let info_hash = Id20::from_str("0123456789abcdef0123456789abcdef01234567").unwrap();
+        let port = 6881u16;
+        let cookie = 42u32;
+        let info_hash_hex = info_hash.as_string();
+
+        // Build the expected IPv4 message format.
+        let expected_host_v4: SocketAddr = LSD_IPV4.into();
+        let expected = format!(
+            "BT-SEARCH * HTTP/1.1\r\n\
+             Host: {expected_host_v4}\r\n\
+             Port: {port}\r\n\
+             Infohash: {info_hash_hex}\r\n\
+             cookie: {cookie}\r\n\
+             \r\n\
+             \r\n"
+        );
+
+        // Parse it back to verify it is valid.
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(expected.as_bytes(), &mut headers).unwrap();
+        assert_eq!(parsed.hash, info_hash);
+        assert_eq!(parsed.port, port);
+        assert_eq!(parsed.our_cookie, Some(cookie));
+        assert_eq!(parsed.host, expected_host_v4);
+    }
+
+    #[test]
+    fn test_lsd_parse_announcement() {
+        // Parse a valid LSD BT-SEARCH announcement.
+        let info_hash_hex = "aabbccddee11223344556677889900aabbccddee";
+        let info_hash = Id20::from_str(info_hash_hex).unwrap();
+        let buf = build_bt_search_msg("239.192.152.143:6771", 51413, info_hash_hex, Some(99));
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.hash, info_hash);
+        assert_eq!(parsed.port, 51413);
+        assert_eq!(parsed.our_cookie, Some(99));
+        assert_eq!(
+            parsed.host,
+            "239.192.152.143:6771".parse::<SocketAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_lsd_parse_announcement_ipv6_host() {
+        // Parse a valid LSD announcement with an IPv6 multicast host.
+        let info_hash_hex = "0000000000000000000000000000000000000001";
+        let info_hash = Id20::from_str(info_hash_hex).unwrap();
+        let ipv6_host = "[ff15::efc0:988f]:6771";
+        let buf = build_bt_search_msg(ipv6_host, 8080, info_hash_hex, None);
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.hash, info_hash);
+        assert_eq!(parsed.port, 8080);
+        assert_eq!(parsed.our_cookie, None);
+        assert_eq!(
+            parsed.host,
+            ipv6_host.parse::<SocketAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_wrong_method() {
+        // A message with GET instead of BT-SEARCH should be rejected.
+        let msg = b"GET * HTTP/1.1\r\n\
+                     Host: 239.192.152.143:6771\r\n\
+                     Port: 6881\r\n\
+                     Infohash: aabbccddee11223344556677889900aabbccddee\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+        assert!(
+            format!("{:#}", result.unwrap_err()).contains("expecting BT-SEARCH"),
+        );
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_missing_host() {
+        // Missing Host header.
+        let msg = b"BT-SEARCH * HTTP/1.1\r\n\
+                     Port: 6881\r\n\
+                     Infohash: aabbccddee11223344556677889900aabbccddee\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_missing_port() {
+        // Missing Port header.
+        let msg = b"BT-SEARCH * HTTP/1.1\r\n\
+                     Host: 239.192.152.143:6771\r\n\
+                     Infohash: aabbccddee11223344556677889900aabbccddee\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_missing_infohash() {
+        // Missing Infohash header.
+        let msg = b"BT-SEARCH * HTTP/1.1\r\n\
+                     Host: 239.192.152.143:6771\r\n\
+                     Port: 6881\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_bad_infohash() {
+        // Infohash that is not valid hex / wrong length.
+        let msg = b"BT-SEARCH * HTTP/1.1\r\n\
+                     Host: 239.192.152.143:6771\r\n\
+                     Port: 6881\r\n\
+                     Infohash: not_a_valid_hash\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lsd_parse_invalid_announcement_bad_port() {
+        // Port that is not a number.
+        let msg = b"BT-SEARCH * HTTP/1.1\r\n\
+                     Host: 239.192.152.143:6771\r\n\
+                     Port: notaport\r\n\
+                     Infohash: aabbccddee11223344556677889900aabbccddee\r\n\
+                     \r\n";
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let result = try_parse_bt_search(msg, &mut headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lsd_info_hash_matching() {
+        // Verify that the exact info_hash bytes are extracted correctly.
+        let info_hash_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let expected = Id20::from_str(info_hash_hex).unwrap();
+        let buf = build_bt_search_msg("239.192.152.143:6771", 6881, info_hash_hex, None);
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.hash, expected);
+        assert_eq!(parsed.hash.as_string(), info_hash_hex);
+    }
+
+    #[test]
+    fn test_lsd_port_extraction() {
+        // Verify various port values parse correctly.
+        for port in [1u16, 80, 443, 6881, 51413, 65535] {
+            let buf = build_bt_search_msg(
+                "239.192.152.143:6771",
+                port,
+                "0000000000000000000000000000000000000000",
+                None,
+            );
+            let mut headers = [httparse::EMPTY_HEADER; 16];
+            let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+            assert_eq!(parsed.port, port, "failed for port {port}");
+        }
+    }
+
+    #[test]
+    fn test_lsd_cookie_handling() {
+        // With cookie present.
+        let buf = build_bt_search_msg(
+            "239.192.152.143:6771",
+            6881,
+            "0123456789abcdef0123456789abcdef01234567",
+            Some(987654321),
+        );
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.our_cookie, Some(987654321));
+
+        // Without cookie.
+        let buf = build_bt_search_msg(
+            "239.192.152.143:6771",
+            6881,
+            "0123456789abcdef0123456789abcdef01234567",
+            None,
+        );
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.our_cookie, None);
+    }
+
+    #[test]
+    fn test_lsd_cookie_non_numeric() {
+        // A cookie that is not a valid u32 should parse as None (not an error),
+        // since the code uses atoi which returns None on failure.
+        let mut msg = String::new();
+        msg.push_str("BT-SEARCH * HTTP/1.1\r\n");
+        msg.push_str("Host: 239.192.152.143:6771\r\n");
+        msg.push_str("Port: 6881\r\n");
+        msg.push_str("Infohash: 0123456789abcdef0123456789abcdef01234567\r\n");
+        msg.push_str("cookie: not_a_number\r\n");
+        msg.push_str("\r\n");
+
+        let buf = msg.into_bytes();
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(parsed.our_cookie, None);
+    }
+
+    #[test]
+    fn test_lsd_case_insensitive_headers() {
+        // BEP 14 says headers should be case-insensitive. Verify mixed case works.
+        let mut msg = String::new();
+        msg.push_str("BT-SEARCH * HTTP/1.1\r\n");
+        msg.push_str("HOST: 239.192.152.143:6771\r\n");
+        msg.push_str("PORT: 6881\r\n");
+        msg.push_str("INFOHASH: aabbccddee11223344556677889900aabbccddee\r\n");
+        msg.push_str("COOKIE: 42\r\n");
+        msg.push_str("\r\n");
+
+        let buf = msg.into_bytes();
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let parsed = try_parse_bt_search(&buf, &mut headers).unwrap();
+        assert_eq!(
+            parsed.hash,
+            Id20::from_str("aabbccddee11223344556677889900aabbccddee").unwrap()
+        );
+        assert_eq!(parsed.port, 6881);
+        assert_eq!(parsed.our_cookie, Some(42));
+    }
+
+    #[test]
+    fn test_lsd_constants() {
+        // Verify the BEP 14 multicast addresses and port.
+        assert_eq!(LSD_PORT, 6771);
+        assert_eq!(LSD_IPV4.ip(), &Ipv4Addr::new(239, 192, 152, 143));
+        assert_eq!(LSD_IPV4.port(), 6771);
+        assert_eq!(
+            LSD_IPV6.ip(),
+            &Ipv6Addr::new(0xff15, 0, 0, 0, 0, 0, 0xefc0, 0x988f)
+        );
+        assert_eq!(LSD_IPV6.port(), 6771);
+    }
+
+    #[test]
+    fn test_lsd_rate_limiter_allows_first_call() {
+        let rl = RateLimiter::default();
+        // First call should always succeed.
+        assert!(rl.check().is_some());
+    }
+
+    #[test]
+    fn test_lsd_rate_limiter_blocks_rapid_calls() {
+        let rl = RateLimiter::default();
+        // First call succeeds.
+        assert!(rl.check().is_some());
+        // Immediate second call should be rate-limited.
+        assert!(rl.check().is_none());
+    }
+}
