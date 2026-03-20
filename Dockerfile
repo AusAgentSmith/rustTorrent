@@ -5,6 +5,7 @@ FROM rust:alpine AS builder
 
 RUN apk update && apk add clang lld npm pkgconf musl-dev openssl-dev openssl-libs-static curl
 
+ARG CACHEBUST=1
 COPY . /src/
 WORKDIR /src/
 
