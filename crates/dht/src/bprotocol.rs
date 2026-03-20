@@ -8,7 +8,7 @@ use bencode::{ByteBuf, ByteBufOwned};
 use buffers::ByteBufT;
 use bytes::Bytes;
 use clone_to_owned::CloneToOwned;
-use librqbit_core::{
+use librtbit_core::{
     compact_ip::{
         Compact, CompactListInBuffer, CompactSerialize, CompactSerializeFixedLen, CompactSocketAddr,
     },
@@ -870,7 +870,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_serialize_find_node_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0xAA; 20]);
         let target = Id20::new([0xBB; 20]);
@@ -907,7 +907,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_serialize_get_peers_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x11; 20]);
         let info_hash = Id20::new([0x22; 20]);
@@ -942,7 +942,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_serialize_announce_peer_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new(*b"abcdefghij0123456789");
         let info_hash = Id20::new(*b"mnopqrstuvwxyz123456");
@@ -1028,7 +1028,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_serialize_deserialize_roundtrip_all_message_types() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x33; 20]);
         let target = Id20::new([0x44; 20]);
@@ -1181,7 +1181,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_serialize_ping_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x55; 20]);
         let mut buf = Vec::new();
@@ -1220,7 +1220,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_message_with_version_field() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x77; 20]);
         let mut buf = Vec::new();
@@ -1281,7 +1281,7 @@ mod tests {
 
     #[test]
     fn test_serialize_bep44_get_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x11; 20]);
         let target = Id20::new([0x22; 20]);
@@ -1313,7 +1313,7 @@ mod tests {
 
     #[test]
     fn test_serialize_bep44_get_request_with_seq() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x11; 20]);
         let target = Id20::new([0x22; 20]);
@@ -1345,7 +1345,7 @@ mod tests {
 
     #[test]
     fn test_serialize_bep44_put_request() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x33; 20]);
 
@@ -1386,7 +1386,7 @@ mod tests {
 
     #[test]
     fn test_serialize_bep44_put_request_with_salt_and_cas() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x44; 20]);
 
@@ -1423,7 +1423,7 @@ mod tests {
 
     #[test]
     fn test_bep44_get_roundtrip() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x55; 20]);
         let target = Id20::new([0x66; 20]);
@@ -1451,7 +1451,7 @@ mod tests {
 
     #[test]
     fn test_bep44_put_roundtrip() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x77; 20]);
 
@@ -1483,7 +1483,7 @@ mod tests {
 
     #[test]
     fn test_response_with_bep44_fields() {
-        use librqbit_core::hash_id::Id20;
+        use librtbit_core::hash_id::Id20;
 
         let id = Id20::new([0x88; 20]);
 

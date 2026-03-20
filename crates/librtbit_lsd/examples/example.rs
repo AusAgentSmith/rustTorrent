@@ -2,8 +2,8 @@ use std::{str::FromStr, time::Duration};
 
 use atoi::atoi;
 use futures::StreamExt;
-use librqbit_core::Id20;
-use librqbit_lsd::LocalServiceDiscovery;
+use librtbit_core::Id20;
+use librtbit_lsd::LocalServiceDiscovery;
 use tracing::info;
 
 #[tokio::main]

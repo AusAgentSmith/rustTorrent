@@ -4,7 +4,7 @@ import { ModalBody } from "./ModalBody";
 import { ModalFooter } from "./ModalFooter";
 import { Button } from "../buttons/Button";
 import { ErrorComponent } from "../ErrorComponent";
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { TabButton, TabList } from "../Tabs";
 
 export interface ConfigTab {

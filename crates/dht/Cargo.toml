@@ -1,11 +1,11 @@
 [package]
-name = "librqbit-dht"
+name = "librtbit-dht"
 version = "5.3.0"
 edition = "2024"
-description = "DHT implementation, used in rqbit torrent client."
+description = "DHT implementation, used in rtbit torrent client."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-dht"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-dht"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 [features]
@@ -31,7 +31,7 @@ rand.workspace = true
 indexmap.workspace = true
 dashmap = { workspace = true, features = ["serde"] }
 clone_to_owned.workspace = true
-librqbit-core.workspace = true
+librtbit-core.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 tokio-util.workspace = true
 bytes.workspace = true

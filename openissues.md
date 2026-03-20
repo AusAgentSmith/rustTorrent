@@ -1,6 +1,6 @@
-## Issue Review: ikatson/rqbit (62 open)
+## Issue Review: ikatson/rtbit (62 open)
 
-Reviewed: 2026-03-20 (verified against codebase and git history)
+Reviewed: 2026-03-20 (verified against codebase and git history, updated after commit `abb0af59`)
 
 ### Fixed in This Fork
 
@@ -14,7 +14,7 @@ Reviewed: 2026-03-20 (verified against codebase and git history)
 | **#363** | Download fully stops on temporary internet disruption | Peer health monitor (30s interval), dead peer re-queueing, `rediscovery_notify` triggers fresh DHT/tracker, frozen peer retry (600s) | `fbea4aa6` |
 | **#477** | Out of range integral type conversion | Safe `TryFrom`/`TryInto` conversions throughout (file offsets, ETA calcs, timestamps, piece indices) | `02a00598` |
 | **#267** | Support tags / *arr app compatibility | Full qBittorrent WebUI API v2 at `/api/v2` (auth, torrents, categories, transfer), WebUI category support | `166b8a16`, `123b65a7`, `baa0df7c` |
-| **#482** | HTTP API authentication | Basic auth with constant-time comparison + Bearer token auth (access/refresh tokens, 15min/30day TTL). Persistent credential store (JSON file), first-boot setup flow, login/logout UI, password change in settings | `e7a0fe82`, `fa67ed99`, pending |
+| **#482** | HTTP API authentication | Basic auth with constant-time comparison + Bearer token auth (access/refresh tokens, 15min/30day TTL). Persistent credential store (JSON file, 0o600 perms), first-boot setup flow, login/logout UI, password change in settings, token auto-refresh on 401 | `e7a0fe82`, `fa67ed99`, `abb0af59` |
 | **#439** | Disable HTTP API by default (security) | `--disable-http-api` CLI flag and `http_api.disable` desktop config option | existing |
 | **#484** | Don't create files for unselected torrent files | `update_only_files` API for dynamic file selection/deselection | existing |
 | **#160 / #539** | Missing Stopped/Completed announce events | HTTP tracker now sends correct Started/Completed/Stopped events, mirroring UDP logic. Full event lifecycle in `tracker_comms.rs:245-284` | `fa67ed99` |
@@ -35,10 +35,10 @@ Reviewed: 2026-03-20 (verified against codebase and git history)
 | # | Title | Current State |
 |---|-------|---------------|
 | **#575** | Upgrade reqwest to 0.13 | Still on reqwest 0.12 (`Cargo.toml:129`). |
-| **#514** | Release new librqbit version | Not addressed. |
-| **#350** | Limit memory usage | Partially improved — peer limits bounded (200 default, `RQBIT_PEER_LIMIT`), concurrent init limit (`RQBIT_CONCURRENT_INIT_LIMIT`). No explicit process-level memory ceiling. |
-| **#310** | Excessive DHT cache disk I/O | **Improved** — new `--dht-dump-interval` / `RQBIT_DHT_DUMP_INTERVAL` env var to control write frequency (default 60s, set higher e.g. `5m` to reduce I/O). |
-| **#553** | Settings change triggers full restart + recheck | Not addressed. `configure()` in desktop app still stops entire session and recreates. Requires Session architecture refactor (interior mutability for dynamic options). Web server only supports runtime rate limit changes. |
+| **#514** | Release new librtbit version | Not addressed. |
+| **#350** | Limit memory usage | **Improved** — peer_limit and concurrent_init_limit now runtime-configurable via `POST /torrents/limits` API and GUI Settings > Speed tab. Env vars: `RTBIT_PEER_LIMIT`, `RTBIT_CONCURRENT_INIT_LIMIT`. Stored as AtomicUsize on Session for lock-free reads. No explicit process-level memory ceiling. |
+| **#310** | Excessive DHT cache disk I/O | **Improved** — new `--dht-dump-interval` / `RTBIT_DHT_DUMP_INTERVAL` env var to control write frequency (default 60s, set higher e.g. `5m` to reduce I/O). |
+| **#553** | Settings change triggers full restart + recheck | **Partially improved** — rate limits, peer_limit, and concurrent_init_limit are now runtime-configurable without restart (via API + GUI). Desktop app `configure()` still stops entire session for other settings. Full fix requires Session architecture refactor (interior mutability for DHT, listener, tracker options). |
 | **#412** | Preallocation support | Not addressed. No `fallocate` or preallocation calls in storage code. |
 | **#308** | Move files to different directory | Not addressed. |
 | **#136** | Support read-only downloaded files | Not addressed. |
@@ -56,7 +56,7 @@ Reviewed: 2026-03-20 (verified against codebase and git history)
 | **#313** | Localization | Not implemented. No i18n framework or language files. |
 | **#440 / #318** | System tray minimize (Windows/Linux) | Not implemented. Tauri provides tray API but not integrated. |
 | **#550** | QoS / niceness / priorities | Not implemented. No file priority support (only `only_files` selective download). |
-| **#551** | Import from other clients | Partial — magnet links, .torrent files, and HTTP URLs supported. No migration from qBittorrent/Transmission configs, but qBit API v2 compat allows *arr apps to use rqbit as drop-in replacement. |
+| **#551** | Import from other clients | Partial — magnet links, .torrent files, and HTTP URLs supported. No migration from qBittorrent/Transmission configs, but qBit API v2 compat allows *arr apps to use rtbit as drop-in replacement. |
 | **#425** | UPnP/DLNA controller | Implemented — full UPnP server in `crates/upnp*/`, SSDP discovery, Content Directory, Connection Manager. Desktop config: `upnp.enable_server`. |
 
 ### Can Probably Close
@@ -83,23 +83,28 @@ Reviewed: 2026-03-20 (verified against codebase and git history)
 5. ~~**#349** — Fast resume skip on fresh adds.~~ Done.
 
 **Remaining priorities:**
-1. **#70/#546** — BEP 52 Phase 2-5: v2 info hash, file tree parsing, merkle verification, v2-only download.
-2. **#553** — Settings hot-reload. Avoid full session restart on config change. Architectural change.
-3. **#369** — Windows file locking. Platform-specific investigation needed.
-4. **#575** — reqwest 0.12 -> 0.13 upgrade.
-5. **#412** — File preallocation. Would improve performance on HDDs.
-6. **#350** — Process-level memory ceiling. Peer limits help but an explicit cap would be more robust.
-7. **#500** — Webseed (BEP 17/19). No existing scaffolding, needs url-list parsing, HTTP range requests, source weighting.
-8. **#463** — BEP-55 Holepunch. Complex protocol, low user impact (most users have UPnP).
+1. **#70/#546** — BEP 52 Phase 2-5: v2 info hash (SHA-256), file tree parsing, merkle verification, v2-only download.
+2. **#500** — Webseed Phase 2: HTTP range download task, piece verification, integration with PieceTracker. url-list parsing already done.
+3. **#385** — BEP-46 Phase 2: iterative get_mutable/put_mutable DHT lookup, session subscription/polling, API endpoints. Foundation (BEP 44 protocol + crypto + store) already done.
+4. **#553** — Settings hot-reload for remaining options (DHT, listener, trackers). Architectural change needed.
+5. **#369** — Windows file locking. Platform-specific investigation needed.
+6. **#575** — reqwest 0.12 -> 0.13 upgrade.
+7. **#412** — File preallocation. Would improve performance on HDDs.
+8. **#350** — Process-level memory ceiling. Runtime peer/init limits now work but no hard memory cap.
 
 **Fork-specific enhancements not in upstream issues:**
 - Benchmark suite (benchv2) for performance regression testing
 - Full qBittorrent WebUI API v2 compatibility
 - Bearer token authentication with persistent credential store
-- First-boot setup flow (username/password creation)
-- Login/logout UI with token auto-refresh
-- Password change in settings dialog
+- First-boot setup flow (username/password creation required)
+- Login/logout UI with token auto-refresh on 401
+- Password change in settings dialog (Security tab)
+- Runtime-configurable peer_limit and concurrent_init_limit (API + GUI)
 - WebUI: drag-and-drop, multi-torrent upload, resizable columns, context menus, categories, compact view
+- BEP 55 holepunch extension (ut_holepunch relay/connect)
+- BEP 44 DHT mutable items foundation (Ed25519, MutableItemStore)
+- BEP 19 webseed url-list parsing
+- BEP 52 v2 hybrid torrent support (Phase 1)
 - UPnP/DLNA server
 - Prometheus metrics
-- Configurable DHT dump interval
+- Configurable DHT dump interval (`RTBIT_DHT_DUMP_INTERVAL`)

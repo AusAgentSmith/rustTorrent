@@ -1,4 +1,4 @@
-# Dockerfile for cross compiling rqbit binaries from scratch inside docker.
+# Dockerfile for cross compiling rtbit binaries from scratch inside docker.
 FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
 
 FROM --platform=$BUILDPLATFORM rust:alpine AS builder
@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/src/target <<EOF
 set -e
 export TT="$(xx-cargo --print-target-triple)"
-export BIN="./target/${TT}/${TT}/${PROFILE_FOLDER}/rqbit"
+export BIN="./target/${TT}/${TT}/${PROFILE_FOLDER}/rtbit"
 export OPENSSL_STATIC=1
 
 find /src/target \
@@ -34,9 +34,9 @@ xx-cargo build \
     --profile "${PROFILE_NAME}"
 find /src/target -maxdepth 4 -type d
 xx-verify --static "${BIN}"
-mv "${BIN}" /bin/rqbit
+mv "${BIN}" /bin/rtbit
 EOF
 
 FROM scratch
 
-COPY --from=builder /bin/rqbit /rqbit
+COPY --from=builder /bin/rtbit /rtbit

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use buffers::ByteBuf;
-use librqbit_core::lengths::{ChunkInfo, Lengths, ValidPieceIndex};
+use librtbit_core::lengths::{ChunkInfo, Lengths, ValidPieceIndex};
 use peer_binary_protocol::Piece;
 use tracing::{debug, trace};
 
@@ -406,7 +406,7 @@ impl ChunkTracker {
 
 #[cfg(test)]
 mod tests {
-    use librqbit_core::{constants::CHUNK_SIZE, lengths::Lengths};
+    use librtbit_core::{constants::CHUNK_SIZE, lengths::Lengths};
     use std::collections::HashSet;
 
     use crate::{
@@ -757,14 +757,14 @@ mod tests {
 
         let ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
 
-        let chunk0 = librqbit_core::lengths::ChunkInfo {
+        let chunk0 = librtbit_core::lengths::ChunkInfo {
             piece_index: l.validate_piece_index(0).unwrap(),
             chunk_index: 0,
             absolute_index: 0,
             offset: 0,
             size: CHUNK_SIZE,
         };
-        let chunk1 = librqbit_core::lengths::ChunkInfo {
+        let chunk1 = librtbit_core::lengths::ChunkInfo {
             piece_index: l.validate_piece_index(1).unwrap(),
             chunk_index: 0,
             absolute_index: l.default_chunks_per_piece(),

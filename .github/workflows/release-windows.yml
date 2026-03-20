@@ -24,8 +24,8 @@ jobs:
         working-directory: desktop
         run: npm install
 
-      - name: npm install (librqbit/webui)
-        working-directory: crates/librqbit/webui
+      - name: npm install (librtbit/webui)
+        working-directory: crates/librtbit/webui
         run: npm install
 
       - name: cargo tauri build
@@ -36,7 +36,7 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            target/release/bundle/msi/rqbit-desktop_*_x64_en-US.msi
+            target/release/bundle/msi/rtbit-desktop_*_x64_en-US.msi
 
       - name: Build release
         run: cargo build --profile release-github
@@ -45,4 +45,4 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            target/release-github/rqbit.exe
+            target/release-github/rtbit.exe

@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ErrorWithLabel } from "../rqbit-web";
+import { ErrorWithLabel } from "../rtbit-web";
 import { ErrorComponent } from "./ErrorComponent";
 import { loopUntilSuccess } from "../helper/loopUntilSuccess";
 import debounce from "lodash.debounce";
@@ -246,7 +246,7 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    a.download = `rqbit-logs-${new Date().toISOString().slice(0, 19)}.log`;
+    a.download = `rtbit-logs-${new Date().toISOString().slice(0, 19)}.log`;
     a.click();
     URL.revokeObjectURL(blobUrl);
   }, [filteredLines]);

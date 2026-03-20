@@ -1,12 +1,12 @@
 [package]
-name = "librqbit"
+name = "librtbit"
 version = "0.0.1"
 authors = ["Igor Katson <igor.katson@gmail.com>"]
 edition = "2024"
-description = "The main library used by rqbit torrent client. The binary is just a small wrapper on top of it."
+description = "The main library used by rtbit torrent client. The binary is just a small wrapper on top of it."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -23,12 +23,12 @@ timed_existence = []
 default-tls = [
     "reqwest/default-tls",
     "sha1w/sha1-crypto-hash",
-    "librqbit-core/sha1-crypto-hash",
+    "librtbit-core/sha1-crypto-hash",
     "dht/sha1-crypto-hash",
 ]
 miri = []
 prometheus = ["metrics-exporter-prometheus"]
-rust-tls = ["reqwest/rustls-tls", "sha1w/sha1-ring", "librqbit-core/sha1-ring", "dht/sha1-ring"]
+rust-tls = ["reqwest/rustls-tls", "sha1w/sha1-ring", "librtbit-core/sha1-ring", "dht/sha1-ring"]
 storage_middleware = ["lru"]
 storage_examples = []
 tracing-subscriber-utils = ["tracing-subscriber"]
@@ -50,13 +50,13 @@ home = { workspace = true, optional = true }
 bencode.workspace = true
 tracker_comms.workspace = true
 buffers.workspace = true
-librqbit-core.workspace = true
-librqbit-lsd.workspace = true
+librtbit-core.workspace = true
+librtbit-lsd.workspace = true
 clone_to_owned.workspace = true
 peer_binary_protocol.workspace = true
 sha1w.workspace = true
 dht.workspace = true
-librqbit-upnp.workspace = true
+librtbit-upnp.workspace = true
 upnp-serve = { workspace = true, optional = true }
 
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "io-util"] }

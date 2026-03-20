@@ -1,4 +1,4 @@
-use librqbit_upnp::UpnpPortForwarder;
+use librtbit_upnp::UpnpPortForwarder;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -4,17 +4,17 @@ use tracing::{info, warn};
 pub fn get_configuration_directory_linux(
     application: &str,
 ) -> anyhow::Result<directories::ProjectDirs> {
-    // https://github.com/ikatson/rqbit/issues/252
-    // On Linux, "com.rqbit" isn't used resulting in weird folder names like "session".
+    // https://github.com/ikatson/rtbit/issues/252
+    // On Linux, "com.rtbit" isn't used resulting in weird folder names like "session".
     // The code below migrates from old configuration to new.
     let legacy_dir =
-        directories::ProjectDirs::from("com", "rqbit", application).with_context(|| {
-            format!("cannot determine project directory for com.rqbit.{application}")
+        directories::ProjectDirs::from("com", "rtbit", application).with_context(|| {
+            format!("cannot determine project directory for com.rtbit.{application}")
         })?;
     let new_dir =
-        directories::ProjectDirs::from("com", "rqbit", &format!("com.rqbit.{application}"))
+        directories::ProjectDirs::from("com", "rtbit", &format!("com.rtbit.{application}"))
             .with_context(|| {
-                format!("cannot determine project directory for com.rqbit.{application}")
+                format!("cannot determine project directory for com.rtbit.{application}")
             })?;
     for (old, new) in [
         (legacy_dir.cache_dir(), new_dir.cache_dir()),
@@ -33,7 +33,7 @@ pub fn get_configuration_directory_linux(
                 info!(
                     ?old,
                     ?new,
-                    "migrating configuration directories as rqbit was upgraded"
+                    "migrating configuration directories as rtbit was upgraded"
                 );
                 if let Err(e) = std::fs::rename(old, new) {
                     warn!(?old, ?new, "error migrating: {e:#}");
@@ -54,8 +54,8 @@ pub fn get_configuration_directory(application: &str) -> anyhow::Result<director
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        directories::ProjectDirs::from("com", "rqbit", application).with_context(|| {
-            format!("cannot determine project directory for com.rqbit.{application}")
+        directories::ProjectDirs::from("com", "rtbit", application).with_context(|| {
+            format!("cannot determine project directory for com.rtbit.{application}")
         })
     }
 }

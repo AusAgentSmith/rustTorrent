@@ -27,7 +27,7 @@ use futures::{
 };
 
 use leaky_bucket::RateLimiter;
-use librqbit_core::{
+use librtbit_core::{
     compact_ip::{CompactSerialize, CompactSerializeFixedLen},
     crate_version,
     hash_id::Id20,

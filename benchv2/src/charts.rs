@@ -3,7 +3,7 @@ use crate::runner::ClientResult;
 use anyhow::Result;
 use std::path::Path;
 
-const RQBIT_COLOR: &str = "#E45932";
+const RTBIT_COLOR: &str = "#E45932";
 const QBT_COLOR: &str = "#2681FF";
 const BG_COLOR: &str = "#1a1a2e";
 const PANEL_BG: &str = "#16213e";
@@ -103,7 +103,7 @@ fn write_bar_chart(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
 <text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Metric Comparison</text>
 <text x="{}" y="48" fill="{MUTED_TEXT}" font-size="12" text-anchor="middle" font-family="monospace">{desc}</text>
-<text x="{}" y="68" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">■ rqbit</text>
+<text x="{}" y="68" fill="{RTBIT_COLOR}" font-size="11" font-family="monospace">■ rtbit</text>
 <text x="{}" y="68" fill="{QBT_COLOR}" font-size="11" font-family="monospace">■ qBittorrent</text>"#,
         w / 2,
         w / 2,
@@ -142,9 +142,9 @@ fn write_bar_chart(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<(
             y + 12,
         ));
 
-        // rqbit bar
+        // rtbit bar
         svg.push_str(&format!(
-            r#"<rect x="{bar_x}" y="{y}" width="{rq_w:.1}" height="16" fill="{RQBIT_COLOR}" opacity="0.9" rx="2"/>"#,
+            r#"<rect x="{bar_x}" y="{y}" width="{rq_w:.1}" height="16" fill="{RTBIT_COLOR}" opacity="0.9" rx="2"/>"#,
         ));
         svg.push_str(&format!(
             r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="9" font-family="monospace">{:.1} {unit}</text>"#,
@@ -195,7 +195,7 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
 <text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Time Series</text>
 <text x="{}" y="48" fill="{MUTED_TEXT}" font-size="12" text-anchor="middle" font-family="monospace">{desc}</text>
-<text x="{}" y="66" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">— rqbit</text>
+<text x="{}" y="66" fill="{RTBIT_COLOR}" font-size="11" font-family="monospace">— rtbit</text>
 <text x="{}" y="66" fill="{QBT_COLOR}" font-size="11" font-family="monospace">— qBittorrent</text>"#,
         w / 2,
         w / 2,
@@ -281,7 +281,7 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
 
         // Plot data for both clients
         for (result, color, label) in [
-            (rq, RQBIT_COLOR, "rqbit"),
+            (rq, RTBIT_COLOR, "rtbit"),
             (qb, QBT_COLOR, "qBittorrent"),
         ] {
             if result.timeseries.is_empty() {
@@ -353,8 +353,8 @@ fn write_cross_scenario(results: &[(ClientResult, ClientResult)], dir: &Path) ->
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Cross-Scenario: Speed Ratio (qBittorrent duration / rqbit duration)</text>
-<text x="{}" y="50" fill="{GREEN}" font-size="10" font-family="monospace">Green = rqbit faster</text>
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Cross-Scenario: Speed Ratio (qBittorrent duration / rtbit duration)</text>
+<text x="{}" y="50" fill="{GREEN}" font-size="10" font-family="monospace">Green = rtbit faster</text>
 <text x="{}" y="50" fill="{RED}" font-size="10" font-family="monospace">Red = qBittorrent faster</text>
 <line x1="500" y1="60" x2="500" y2="{}" stroke="{MUTED_TEXT}" stroke-dasharray="4" stroke-width="1"/>
 <text x="500" y="72" fill="{MUTED_TEXT}" font-size="8" text-anchor="middle" font-family="monospace">1.0x (equal)</text>"#,
@@ -436,8 +436,8 @@ fn write_dashboard(results: &[(ClientResult, ClientResult)], dir: &Path) -> Resu
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="18" text-anchor="middle" font-family="monospace" font-weight="bold">Benchmark Dashboard: rqbit vs qBittorrent</text>
-<text x="60" y="55" fill="{RQBIT_COLOR}" font-size="12" font-family="monospace">■ rqbit</text>
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="18" text-anchor="middle" font-family="monospace" font-weight="bold">Benchmark Dashboard: rtbit vs qBittorrent</text>
+<text x="60" y="55" fill="{RTBIT_COLOR}" font-size="12" font-family="monospace">■ rtbit</text>
 <text x="160" y="55" fill="{QBT_COLOR}" font-size="12" font-family="monospace">■ qBittorrent</text>"#,
         w / 2,
     );
@@ -489,7 +489,7 @@ fn write_dashboard(results: &[(ClientResult, ClientResult)], dir: &Path) -> Resu
             let qw = qv / maxv * bw;
 
             svg.push_str(&format!(
-                r#"<rect x="{cx}" y="{}" width="{rw:.0}" height="14" fill="{RQBIT_COLOR}" opacity="0.9" rx="2"/>"#,
+                r#"<rect x="{cx}" y="{}" width="{rw:.0}" height="14" fill="{RTBIT_COLOR}" opacity="0.9" rx="2"/>"#,
                 y + 5,
             ));
             svg.push_str(&format!(

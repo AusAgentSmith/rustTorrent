@@ -11,7 +11,7 @@ scrape_configs:
     static_configs:
       - targets: ["node-exporter:9100"]
 
-  - job_name: "rqbit"
+  - job_name: "rtbit"
     static_configs:
-      - targets: ["rqbit:3030"]
+      - targets: ["rtbit:3030"]
     metrics_path: "/metrics"

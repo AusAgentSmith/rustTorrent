@@ -1,6 +1,6 @@
-# Virtualization in rqbit WebUI
+# Virtualization in rtbit WebUI
 
-This document explains how list virtualization works in the rqbit web interface.
+This document explains how list virtualization works in the rtbit web interface.
 
 ## Performance Results
 
@@ -245,7 +245,7 @@ Focus management needs extra work since items mount/unmount. We track focused in
 - `src/components/CardLayout.tsx` - Card view virtualization
 - `src/components/compact/TorrentTable.tsx` - Table view virtualization
 - `src/components/compact/TorrentTableRow.tsx` - Row component (no style prop needed)
-- `src/rqbit-web.tsx` - `h-screen` for proper height chain
+- `src/rtbit-web.tsx` - `h-screen` for proper height chain
 - `src/components/RootContent.tsx` - Height classes for card view
 - `src/globals.css` - `.hide-scrollbar` utility
 - `package.json` - react-virtuoso dependency

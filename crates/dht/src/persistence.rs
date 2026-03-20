@@ -3,8 +3,8 @@
 use anyhow::Context;
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use librqbit_core::directories::get_configuration_directory;
-use librqbit_core::spawn_utils::spawn_with_cancel;
+use librtbit_core::directories::get_configuration_directory;
+use librtbit_core::spawn_utils::spawn_with_cancel;
 use librqbit_dualstack_sockets::BindDevice;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
@@ -120,7 +120,7 @@ impl PersistentDht {
                                 r.addr = SocketAddr::from(([0, 0, 0, 0], port));
                             } else if r.addr.ip() == Ipv4Addr::UNSPECIFIED {
                                 warn!(
-                                    "patching DHT listen IP address for rqbit 9 upgrade: 0.0.0.0 -> [::]"
+                                    "patching DHT listen IP address for rtbit 9 upgrade: 0.0.0.0 -> [::]"
                                 );
                                 let port = r.addr.port();
                                 r.addr = SocketAddr::from((Ipv6Addr::UNSPECIFIED, port));

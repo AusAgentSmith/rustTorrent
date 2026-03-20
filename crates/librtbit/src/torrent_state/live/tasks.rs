@@ -31,7 +31,7 @@ impl TorrentStateLive {
         self: Arc<Self>,
         mut rx: tokio::sync::mpsc::UnboundedReceiver<(
             tokio::sync::mpsc::UnboundedSender<WriterRequest>,
-            librqbit_core::lengths::ChunkInfo,
+            librtbit_core::lengths::ChunkInfo,
         )>,
     ) -> crate::Result<()> {
         while let Some((tx, ci)) = rx.recv().await {

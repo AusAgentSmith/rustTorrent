@@ -11,7 +11,7 @@ use anyhow::Context;
 use buffers::ByteBufOwned;
 use dht::{DhtStats, Id20};
 use http::StatusCode;
-use librqbit_core::torrent_metainfo::{FileDetailsAttrs, ValidatedTorrentMetaV1Info};
+use librtbit_core::torrent_metainfo::{FileDetailsAttrs, ValidatedTorrentMetaV1Info};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 

@@ -73,14 +73,14 @@ impl HttpApiClient {
     }
 
     #[inline(never)]
-    pub fn validate_rqbit_server(&self) -> BoxFuture<'_, anyhow::Result<()>> {
+    pub fn validate_rtbit_server(&self) -> BoxFuture<'_, anyhow::Result<()>> {
         async move {
             let response = self.client.get(self.base_url.clone()).send().await?;
             let root: ApiRoot = json_response(response).await?;
-            if root.server == "rqbit" {
+            if root.server == "rtbit" {
                 return Ok(());
             }
-            anyhow::bail!("not an rqbit server at {}", &self.base_url)
+            anyhow::bail!("not an rtbit server at {}", &self.base_url)
         }
         .boxed()
     }

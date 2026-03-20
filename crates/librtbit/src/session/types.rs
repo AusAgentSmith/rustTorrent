@@ -13,7 +13,7 @@ use buffers::{ByteBuf, ByteBufOwned};
 use bytes::Bytes;
 use clone_to_owned::CloneToOwned;
 use dht::Id20;
-use librqbit_core::{
+use librtbit_core::{
     directories::get_configuration_directory,
     magnet::Magnet,
     torrent_metainfo::{TorrentMetaV1Owned, ValidatedTorrentMetaV1Info},
@@ -45,7 +45,7 @@ pub(crate) fn torrent_from_bytes(bytes: Bytes) -> anyhow::Result<ParsedTorrentFi
         "all fields in torrent: {:#?}",
         bencode::dyn_from_bytes::<ByteBuf>(&bytes)
     );
-    let parsed = librqbit_core::torrent_metainfo::torrent_from_bytes(&bytes)?;
+    let parsed = librtbit_core::torrent_metainfo::torrent_from_bytes(&bytes)?;
     Ok(ParsedTorrentFile {
         meta: parsed.clone_to_owned(Some(&bytes)),
         torrent_bytes: bytes,
@@ -252,7 +252,7 @@ pub struct SessionOptions {
     /// configuration, including the port it listens on.
     pub disable_dht_persistence: bool,
     /// Pass in to configure DHT persistence filename. This can be used to run multiple
-    /// librqbit instances at a time.
+    /// librtbit instances at a time.
     pub dht_config: Option<dht::PersistentDhtConfig>,
     /// A list o DHT bootstrap nodes as strings of the form host:port or ip:port
     pub dht_bootstrap_addrs: Option<Vec<String>>,

@@ -16,7 +16,7 @@ pub struct UpnpServerSessionAdapter {
 use anyhow::Context;
 use buffers::ByteBufOwned;
 use itertools::Itertools;
-use librqbit_core::torrent_metainfo::ValidatedTorrentMetaV1Info;
+use librtbit_core::torrent_metainfo::ValidatedTorrentMetaV1Info;
 use tracing::{debug, trace, warn};
 use upnp_serve::{
     UpnpServer, UpnpServerOptions,
@@ -373,7 +373,7 @@ mod tests {
     use bencode::bencode_serialize_to_writer;
     use bytes::Bytes;
     use dht::Id20;
-    use librqbit_core::torrent_metainfo::{
+    use librtbit_core::torrent_metainfo::{
         TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned,
     };
     use tempfile::TempDir;

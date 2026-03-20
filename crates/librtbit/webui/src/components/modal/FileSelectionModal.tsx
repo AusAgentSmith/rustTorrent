@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { AddTorrentResponse, AddTorrentOptions } from "../../api-types";
 import { APIContext } from "../../context";
 import { ErrorComponent } from "../ErrorComponent";
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { Spinner } from "../Spinner";
 import { Modal } from "./Modal";
 import { ModalBody } from "./ModalBody";

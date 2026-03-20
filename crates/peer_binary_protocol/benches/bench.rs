@@ -1,6 +1,6 @@
 use bytes::Buf;
 use criterion::{Criterion, criterion_group, criterion_main};
-use librqbit_peer_protocol::DoubleBufHelper;
+use librtbit_peer_protocol::DoubleBufHelper;
 
 use std::hint::black_box as bb;
 

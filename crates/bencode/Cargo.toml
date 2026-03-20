@@ -1,11 +1,11 @@
 [package]
-name = "librqbit-bencode"
+name = "librtbit-bencode"
 version = "3.1.0"
 edition = "2024"
 description = "Bencode serialization and deserialization using Serde"
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-bencode"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-bencode"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 [dependencies]

@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn test_deserialize_torrent_dyn() {
         let mut buf = Vec::new();
-        let filename = "../librqbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent";
+        let filename = "../librtbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent";
         std::fs::File::open(filename)
             .unwrap()
             .read_to_end(&mut buf)
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn test_serialize_torrent_dyn() {
         let mut buf = Vec::new();
-        let filename = "../librqbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent";
+        let filename = "../librtbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent";
         std::fs::File::open(filename)
             .unwrap()
             .read_to_end(&mut buf)

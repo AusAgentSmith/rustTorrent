@@ -1,4 +1,4 @@
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { useErrorStore } from "../../stores/errorStore";
 import { Button } from "../buttons/Button";
 import { Modal } from "./Modal";

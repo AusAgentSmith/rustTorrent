@@ -2,13 +2,13 @@ type PathLike = string;
 type Duration = string;
 type SocketAddr = string;
 
-interface RqbitDesktopConfigDht {
+interface RtbitDesktopConfigDht {
   disable: boolean;
   disable_persistence: boolean;
   persistence_filename: PathLike;
 }
 
-interface RqbitDesktopConfigConnections {
+interface RtbitDesktopConfigConnections {
   enable_tcp_listen: boolean;
   enable_tcp_outgoing: boolean;
   enable_utp: boolean;
@@ -19,20 +19,20 @@ interface RqbitDesktopConfigConnections {
   peer_read_write_timeout: Duration;
 }
 
-interface RqbitDesktopConfigPersistence {
+interface RtbitDesktopConfigPersistence {
   disable: boolean;
   folder: PathLike;
   fastresume: boolean;
 }
 
-interface RqbitDesktopConfigHttpApi {
+interface RtbitDesktopConfigHttpApi {
   disable: boolean;
   listen_addr: SocketAddr;
   read_only: boolean;
   cors_enable_all: boolean;
 }
 
-interface RqbitDesktopConfigUpnp {
+interface RtbitDesktopConfigUpnp {
   disable: boolean;
 
   enable_server: boolean;
@@ -46,18 +46,18 @@ export interface LimitsConfig {
   concurrent_init_limit?: number | null;
 }
 
-export interface RqbitDesktopConfig {
+export interface RtbitDesktopConfig {
   default_download_location: PathLike;
   disable_upload?: boolean;
-  dht: RqbitDesktopConfigDht;
-  connections: RqbitDesktopConfigConnections;
-  upnp: RqbitDesktopConfigUpnp;
-  persistence: RqbitDesktopConfigPersistence;
-  http_api: RqbitDesktopConfigHttpApi;
+  dht: RtbitDesktopConfigDht;
+  connections: RtbitDesktopConfigConnections;
+  upnp: RtbitDesktopConfigUpnp;
+  persistence: RtbitDesktopConfigPersistence;
+  http_api: RtbitDesktopConfigHttpApi;
   ratelimits: LimitsConfig;
 }
 
 export interface CurrentDesktopState {
-  config: RqbitDesktopConfig | null;
+  config: RtbitDesktopConfig | null;
   configured: boolean;
 }

@@ -3,7 +3,7 @@ use bencode::bencode_serialize_to_writer;
 use buffers::ByteBuf;
 use buffers::ByteBufOwned;
 use buffers::ByteBufT;
-use librqbit_core::constants::CHUNK_SIZE;
+use librtbit_core::constants::CHUNK_SIZE;
 use serde::Deserialize;
 use serde_derive::Serialize;
 use std::io::Cursor;
@@ -219,7 +219,7 @@ impl<'a> UtMetadata<ByteBuf<'a>> {
 #[cfg(test)]
 mod tests {
     use buffers::ByteBuf;
-    use librqbit_core::constants::CHUNK_SIZE;
+    use librtbit_core::constants::CHUNK_SIZE;
 
     use crate::{MessageDeserializeError, extended::ut_metadata::UtMetadataData};
 

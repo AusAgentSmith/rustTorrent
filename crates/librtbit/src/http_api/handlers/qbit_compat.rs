@@ -1,7 +1,7 @@
 //! qBittorrent WebUI API v2 compatibility layer.
 //!
 //! This module implements a subset of the qBittorrent WebUI API v2 so that
-//! *arr apps (Sonarr, Radarr, etc.) can use rqbit as a download client by
+//! *arr apps (Sonarr, Radarr, etc.) can use rtbit as a download client by
 //! pretending to be qBittorrent.
 
 use std::{
@@ -366,7 +366,7 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
-/// Map rqbit torrent state to qBittorrent state string.
+/// Map rtbit torrent state to qBittorrent state string.
 fn map_state(state: TorrentStatsState, finished: bool) -> &'static str {
     match (state, finished) {
         (TorrentStatsState::Initializing, _) => "metaDL",
@@ -953,7 +953,7 @@ async fn h_torrents_set_category(
     State(_state): State<Arc<QbitState>>,
     body: Bytes,
 ) -> &'static str {
-    // Categories are not persisted per-torrent in rqbit.
+    // Categories are not persisted per-torrent in rtbit.
     // Accept silently so *arr apps don't error out.
     let _form: SetCategoryForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     "Ok."

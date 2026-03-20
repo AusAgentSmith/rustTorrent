@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Context;
 use axum::body::Bytes;
-use librqbit_core::spawn_utils::spawn_with_cancel;
+use librtbit_core::spawn_utils::spawn_with_cancel;
 use tokio_util::sync::CancellationToken;
 use tracing::{Span, debug_span};
 

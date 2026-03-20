@@ -24,7 +24,7 @@ use url::Url;
 use crate::tracker_comms_http;
 use crate::tracker_comms_udp;
 use crate::tracker_comms_udp::UdpTrackerClient;
-use librqbit_core::hash_id::Id20;
+use librtbit_core::hash_id::Id20;
 
 pub struct TrackerComms {
     info_hash: Id20,

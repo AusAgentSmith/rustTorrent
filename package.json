@@ -1,15 +1,15 @@
 {
-  "name": "rqbit-workspace",
+  "name": "rtbit-workspace",
   "private": true,
   "workspaces": [
     "desktop",
-    "crates/librqbit/webui"
+    "crates/librtbit/webui"
   ],
   "scripts": {
-    "format": "prettier --write 'desktop/src/**/*.{ts,tsx}' 'crates/librqbit/webui/src/**/*.{ts,tsx}'",
-    "format:check": "prettier --check 'desktop/src/**/*.{ts,tsx}' 'crates/librqbit/webui/src/**/*.{ts,tsx}'",
-    "lint": "npm run lint --workspace=crates/librqbit/webui",
-    "lint:fix": "npm run lint:fix --workspace=crates/librqbit/webui"
+    "format": "prettier --write 'desktop/src/**/*.{ts,tsx}' 'crates/librtbit/webui/src/**/*.{ts,tsx}'",
+    "format:check": "prettier --check 'desktop/src/**/*.{ts,tsx}' 'crates/librtbit/webui/src/**/*.{ts,tsx}'",
+    "lint": "npm run lint --workspace=crates/librtbit/webui",
+    "lint:fix": "npm run lint:fix --workspace=crates/librtbit/webui"
   },
   "devDependencies": {
     "prettier": "^3.7"

@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use librqbit_core::{hash_id::Id20, spawn_utils::spawn_with_cancel};
+use librtbit_core::{hash_id::Id20, spawn_utils::spawn_with_cancel};
 use librqbit_dualstack_sockets::{BindDevice, UdpSocket};
 use parking_lot::RwLock;
 use rand::Rng;
@@ -421,7 +421,7 @@ impl UdpTrackerClient {
 mod tests {
     use std::{io::Write, str::FromStr};
 
-    use librqbit_core::{hash_id::Id20, peer_id::generate_peer_id};
+    use librtbit_core::{hash_id::Id20, peer_id::generate_peer_id};
 
     use crate::tracker_comms_udp::{
         AnnounceFields, ConnectionId, EVENT_NONE, EVENT_STARTED, Request, Response,

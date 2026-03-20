@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use librqbit_core::torrent_metainfo::FileDetailsAttrs;
+use librtbit_core::torrent_metainfo::FileDetailsAttrs;
 
 #[derive(Debug, Clone)]
 pub struct FileInfo {

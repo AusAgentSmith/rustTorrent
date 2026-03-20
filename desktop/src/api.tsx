@@ -1,16 +1,16 @@
-import { RqbitDesktopConfig } from "./configuration";
+import { RtbitDesktopConfig } from "./configuration";
 import {
   AddTorrentResponse,
   CategoryInfo,
   LimitsConfig,
   ListTorrentsResponse,
-  RqbitAPI,
+  RtbitAPI,
   TorrentDetails,
   TorrentStats,
   ErrorDetails,
   SessionStats,
   PeerStatsSnapshot,
-} from "rqbit-webui/src/api-types";
+} from "rtbit-webui/src/api-types";
 
 import { InvokeArgs, invoke } from "@tauri-apps/api/core";
 
@@ -71,7 +71,7 @@ async function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export const makeAPI = (configuration: RqbitDesktopConfig): RqbitAPI => {
+export const makeAPI = (configuration: RtbitDesktopConfig): RtbitAPI => {
   const getHttpBase = () => {
     if (!configuration.http_api.listen_addr) {
       return null;

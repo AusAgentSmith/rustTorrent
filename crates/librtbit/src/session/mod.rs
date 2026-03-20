@@ -52,11 +52,11 @@ use buffers::ByteBufOwned;
 use dht::{Dht, DhtBuilder, DhtConfig, Id20, PersistentDht};
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
 use itertools::Itertools;
-use librqbit_core::{
+use librtbit_core::{
     crate_version, peer_id::generate_azereus_style, spawn_utils::spawn_with_cancel,
     torrent_metainfo::ValidatedTorrentMetaV1Info,
 };
-use librqbit_lsd::{LocalServiceDiscovery, LocalServiceDiscoveryOptions};
+use librtbit_lsd::{LocalServiceDiscovery, LocalServiceDiscoveryOptions};
 use librqbit_utp::BindDevice;
 use parking_lot::RwLock;
 use tokio::sync::Notify;
@@ -589,7 +589,7 @@ impl Session {
             let mut opts = opts.unwrap_or_default();
             let add_res = match add {
                 AddTorrent::Url(magnet) if magnet.starts_with("magnet:") || magnet.len() == 40 => {
-                    let magnet = librqbit_core::magnet::Magnet::parse(&magnet)
+                    let magnet = librtbit_core::magnet::Magnet::parse(&magnet)
                         .context("provided path is not a valid magnet URL")?;
                     let info_hash = magnet
                         .as_id20()
@@ -1253,7 +1253,7 @@ impl Session {
 mod tests {
     use buffers::ByteBuf;
     use itertools::Itertools;
-    use librqbit_core::torrent_metainfo::{TorrentMetaV1, torrent_from_bytes};
+    use librtbit_core::torrent_metainfo::{TorrentMetaV1, torrent_from_bytes};
 
     use super::torrent_file_from_info_bytes;
 

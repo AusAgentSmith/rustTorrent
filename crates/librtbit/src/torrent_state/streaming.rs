@@ -12,7 +12,7 @@ use std::{
 use anyhow::Context;
 use dashmap::DashMap;
 
-use librqbit_core::lengths::{CurrentPiece, Lengths, ValidPieceIndex};
+use librtbit_core::lengths::{CurrentPiece, Lengths, ValidPieceIndex};
 use tokio::{
     io::{AsyncRead, AsyncSeek},
     sync::OwnedSemaphorePermit,

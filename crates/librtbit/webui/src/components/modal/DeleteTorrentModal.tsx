@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { TorrentListItem } from "../../api-types";
 import { APIContext } from "../../context";
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { useTorrentStore } from "../../stores/torrentStore";
 import { useUIStore } from "../../stores/uiStore";
 import { Button } from "../buttons/Button";

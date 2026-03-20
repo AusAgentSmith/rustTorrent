@@ -2,7 +2,7 @@ use std::{collections::VecDeque, net::SocketAddr, str::FromStr, sync::atomic::At
 
 use bencode::ByteBufOwned;
 use chrono::{DateTime, TimeDelta, Utc};
-use librqbit_core::{compact_ip::CompactSocketAddr, hash_id::Id20};
+use librtbit_core::{compact_ip::CompactSocketAddr, hash_id::Id20};
 use parking_lot::RwLock;
 use rand::RngCore;
 use serde::{

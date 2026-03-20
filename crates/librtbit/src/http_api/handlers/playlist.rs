@@ -67,7 +67,7 @@ fn build_playlist_content<I: IntoIterator<Item = (TorrentIdOrHash, usize, String
             ("Content-Type", "application/mpegurl; charset=utf-8"),
             (
                 "Content-Disposition",
-                "attachment; filename=\"rqbit-playlist.m3u8\"",
+                "attachment; filename=\"rtbit-playlist.m3u8\"",
             ),
         ],
         format!("#EXTM3U\r\n{body}"), // https://en.wikipedia.org/wiki/M3U

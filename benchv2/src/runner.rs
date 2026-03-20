@@ -1,4 +1,4 @@
-use crate::clients::{qbittorrent::QBittorrentClient, rqbit::RqbitClient, transmission::TransmissionClient};
+use crate::clients::{qbittorrent::QBittorrentClient, rtbit::RtbitClient, transmission::TransmissionClient};
 use crate::config::{self, Scenario, MB, GB};
 use crate::metrics::{MetricSample, MetricsCollector};
 use crate::{datagen, docker, report, charts};
@@ -123,7 +123,7 @@ pub async fn run(
     results_dir: PathBuf,
 ) -> Result<()> {
     tracing::info!("============================================================");
-    tracing::info!("  BitTorrent Client Benchmark: rqbit vs qBittorrent (Rust)");
+    tracing::info!("  BitTorrent Client Benchmark: rtbit vs qBittorrent (Rust)");
     tracing::info!("============================================================");
     tracing::info!("Scenarios: {scenario_selector}");
     tracing::info!("Data dir: {}", data_dir.display());
@@ -138,14 +138,14 @@ pub async fn run(
     tracing::info!("Docker connected.");
 
     // Init clients
-    let rqbit = RqbitClient::new(config::RQBIT_API);
+    let rtbit = RtbitClient::new(config::RTBIT_API);
     let qbt = QBittorrentClient::new(config::QBT_API);
     let mut metrics = MetricsCollector::new(docker::connect()?);
 
     // Wait for services
     tracing::info!("Waiting for services...");
     wait_for_service("tracker", "http://tracker:6969/health", 120).await?;
-    wait_for_service("rqbit", &format!("{}/", config::RQBIT_API), 120).await?;
+    wait_for_service("rtbit", &format!("{}/", config::RTBIT_API), 120).await?;
     wait_for_service("qBittorrent", &format!("{}/", config::QBT_API), 120).await?;
     wait_for_service("mock-seeder", "http://mock-seeder:8080/health", 120).await?;
 
@@ -168,7 +168,7 @@ pub async fn run(
     tracing::info!("  Seeders: {ok}/{} RPC-ready", seeders.len());
 
     // Resolve container IDs for stats collection
-    metrics.resolve_container_id("rqbit").await;
+    metrics.resolve_container_id("rtbit").await;
     metrics.resolve_container_id("qbittorrent").await;
 
     // Configure qBittorrent
@@ -213,7 +213,7 @@ pub async fn run(
 
         // Clean download directories to prevent stale data
         tracing::info!("Cleaning download directories...");
-        clean_download_dir(&docker_client, "rqbit", "/home/rqbit/downloads").await;
+        clean_download_dir(&docker_client, "rtbit", "/home/rtbit/downloads").await;
         clean_download_dir(&docker_client, "qbittorrent", "/downloads").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -263,13 +263,13 @@ pub async fn run(
 
         tracing::info!("Seeding ready. Running downloads sequentially.");
 
-        // Run rqbit — re-announce mock peers so tracker has fresh entries
+        // Run rtbit — re-announce mock peers so tracker has fresh entries
         if sc.mock_peers > 0 {
             trigger_mock_seeder_announce().await;
         }
-        let rqbit_result =
-            run_client("rqbit", sc, &tpaths, &rqbit, &qbt, &metrics).await;
-        cleanup_rqbit(&rqbit).await;
+        let rtbit_result =
+            run_client("rtbit", sc, &tpaths, &rtbit, &qbt, &metrics).await;
+        cleanup_rtbit(&rtbit).await;
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
         // Run qBittorrent — re-announce again for fresh tracker entries
@@ -277,7 +277,7 @@ pub async fn run(
             trigger_mock_seeder_announce().await;
         }
         let qbt_result =
-            run_client("qbittorrent", sc, &tpaths, &rqbit, &qbt, &metrics).await;
+            run_client("qbittorrent", sc, &tpaths, &rtbit, &qbt, &metrics).await;
         cleanup_qbt(&qbt).await;
 
         // Clean seeders
@@ -288,7 +288,7 @@ pub async fn run(
         }
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-        all_results.push((rqbit_result, qbt_result));
+        all_results.push((rtbit_result, qbt_result));
     }
 
     // Generate reports
@@ -313,7 +313,7 @@ async fn run_client(
     client_name: &str,
     sc: &Scenario,
     tpaths: &[PathBuf],
-    rqbit: &RqbitClient,
+    rtbit: &RtbitClient,
     qbt: &QBittorrentClient,
     metrics: &MetricsCollector,
 ) -> ClientResult {
@@ -341,12 +341,12 @@ async fn run_client(
 
     tracing::info!("  [{client_name}] Adding {} torrent(s)...", tpaths.len());
 
-    let mut rqbit_ids = Vec::new();
-    if client_name == "rqbit" {
+    let mut rtbit_ids = Vec::new();
+    if client_name == "rtbit" {
         for tp in tpaths {
-            match rqbit.add_torrent(tp).await {
-                Ok(id) => rqbit_ids.push(id),
-                Err(e) => tracing::error!("  [rqbit] Failed to add {}: {e}", tp.display()),
+            match rtbit.add_torrent(tp).await {
+                Ok(id) => rtbit_ids.push(id),
+                Err(e) => tracing::error!("  [rtbit] Failed to add {}: {e}", tp.display()),
             }
         }
     } else {
@@ -380,10 +380,10 @@ async fn run_client(
             break;
         }
 
-        let (finished, progress, speed) = if client_name == "rqbit" {
-            let fin = rqbit.all_finished(&rqbit_ids).await.unwrap_or(false);
-            let prog = rqbit.progress_fraction(&rqbit_ids).await;
-            let spd = rqbit.aggregate_speed(&rqbit_ids).await;
+        let (finished, progress, speed) = if client_name == "rtbit" {
+            let fin = rtbit.all_finished(&rtbit_ids).await.unwrap_or(false);
+            let prog = rtbit.progress_fraction(&rtbit_ids).await;
+            let spd = rtbit.aggregate_speed(&rtbit_ids).await;
             (fin, prog, spd)
         } else {
             let fin = qbt.all_finished().await.unwrap_or(false);
@@ -403,8 +403,8 @@ async fn run_client(
         if finished {
             tracing::info!("  [{client_name}] Reported complete — verifying...");
             // Verify the download actually happened
-            let verified = if client_name == "rqbit" {
-                verify_rqbit_download(rqbit, &rqbit_ids, sc.total_bytes()).await
+            let verified = if client_name == "rtbit" {
+                verify_rtbit_download(rtbit, &rtbit_ids, sc.total_bytes()).await
             } else {
                 verify_qbt_download(qbt, sc.total_bytes()).await
             };
@@ -484,11 +484,11 @@ async fn run_client(
     result
 }
 
-/// Verify rqbit actually downloaded the expected bytes (not stale/cached data).
-async fn verify_rqbit_download(rqbit: &RqbitClient, ids: &[u64], expected_bytes: u64) -> bool {
+/// Verify rtbit actually downloaded the expected bytes (not stale/cached data).
+async fn verify_rtbit_download(rtbit: &RtbitClient, ids: &[u64], expected_bytes: u64) -> bool {
     let mut total_progress = 0u64;
     for &id in ids {
-        if let Ok(s) = rqbit.stats(id).await {
+        if let Ok(s) = rtbit.stats(id).await {
             let progress = s
                 .get("progress_bytes")
                 .and_then(|v| v.as_u64())
@@ -499,7 +499,7 @@ async fn verify_rqbit_download(rqbit: &RqbitClient, ids: &[u64], expected_bytes:
                 .unwrap_or(0);
             if progress < total {
                 tracing::warn!(
-                    "  [rqbit] Torrent {id}: {progress}/{total} bytes — incomplete!"
+                    "  [rtbit] Torrent {id}: {progress}/{total} bytes — incomplete!"
                 );
                 return false;
             }
@@ -508,12 +508,12 @@ async fn verify_rqbit_download(rqbit: &RqbitClient, ids: &[u64], expected_bytes:
     }
     if total_progress < expected_bytes {
         tracing::warn!(
-            "  [rqbit] Total downloaded {total_progress} < expected {expected_bytes}"
+            "  [rtbit] Total downloaded {total_progress} < expected {expected_bytes}"
         );
         return false;
     }
     tracing::info!(
-        "  [rqbit] Verified: {} MB downloaded",
+        "  [rtbit] Verified: {} MB downloaded",
         total_progress / MB
     );
     true
@@ -565,14 +565,14 @@ async fn clean_download_dir(docker_client: &bollard::Docker, service: &str, dir:
     }
 }
 
-async fn cleanup_rqbit(rqbit: &RqbitClient) {
-    tracing::info!("  [rqbit] Cleaning up...");
-    let _ = rqbit.delete_all().await;
+async fn cleanup_rtbit(rtbit: &RtbitClient) {
+    tracing::info!("  [rtbit] Cleaning up...");
+    let _ = rtbit.delete_all().await;
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    if let Ok(remaining) = rqbit.list_torrents().await {
+    if let Ok(remaining) = rtbit.list_torrents().await {
         if !remaining.is_empty() {
-            tracing::warn!("  [rqbit] {} torrent(s) still present, retrying...", remaining.len());
-            let _ = rqbit.delete_all().await;
+            tracing::warn!("  [rtbit] {} torrent(s) still present, retrying...", remaining.len());
+            let _ = rtbit.delete_all().await;
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     }

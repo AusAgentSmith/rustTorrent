@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, bail};
 use buffers::{ByteBuf, ByteBufOwned};
 use clone_to_owned::CloneToOwned;
-use librqbit_core::{constants::CHUNK_SIZE, lengths::ChunkInfo, spawn_utils::spawn_with_cancel};
+use librtbit_core::{constants::CHUNK_SIZE, lengths::ChunkInfo, spawn_utils::spawn_with_cancel};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use peer_binary_protocol::{
     Handshake, Message, Piece, Request,
@@ -239,7 +239,7 @@ impl PeerConnectionHandler for &'_ PeerHandler {
         self.state.get_approx_have_bytes() > 0
     }
 
-    fn should_transmit_have(&self, id: librqbit_core::lengths::ValidPieceIndex) -> bool {
+    fn should_transmit_have(&self, id: librtbit_core::lengths::ValidPieceIndex) -> bool {
         if self.state.shared.options.disable_upload() {
             return false;
         }
@@ -440,9 +440,9 @@ impl PeerHandler {
     /// Acquire a piece for this peer: try steal (10x) -> reserve -> steal (3x).
     ///
     /// Returns the piece index to download, or None if no pieces are available.
-    fn acquire_next_piece(&self) -> crate::Result<Option<librqbit_core::lengths::ValidPieceIndex>> {
+    fn acquire_next_piece(&self) -> crate::Result<Option<librtbit_core::lengths::ValidPieceIndex>> {
         // Steal info to process after releasing the peer lock
-        let mut steal_info: Option<(SocketAddr, librqbit_core::lengths::ValidPieceIndex)> = None;
+        let mut steal_info: Option<(SocketAddr, librtbit_core::lengths::ValidPieceIndex)> = None;
 
         let result = self
             .state

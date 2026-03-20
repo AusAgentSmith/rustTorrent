@@ -7,7 +7,7 @@ use std::{
 use crate::{Error, Result, session::CheckedIncomingConnection, stream_connect::ConnectionKind};
 use buffers::{ByteBuf, ByteBufOwned};
 use futures::TryFutureExt;
-use librqbit_core::{
+use librtbit_core::{
     hash_id::Id20,
     lengths::{ChunkInfo, ValidPieceIndex},
     peer_id::try_decode_peer_id,
@@ -519,7 +519,7 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use librqbit_core::hash_id::Id20;
+    use librtbit_core::hash_id::Id20;
     use peer_binary_protocol::{Handshake, Message, MessageDeserializeError, MAX_MSG_LEN};
 
     #[test]

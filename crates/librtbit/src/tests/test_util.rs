@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::bail;
-use librqbit_core::{Id20, crate_version, peer_id::generate_azereus_style};
+use librtbit_core::{Id20, crate_version, peer_id::generate_azereus_style};
 use parking_lot::RwLock;
 use rand::{Rng, RngCore, SeedableRng, rng};
 use tempfile::TempDir;
@@ -43,7 +43,7 @@ pub fn create_default_random_dir_with_torrents(
     file_size: usize,
     tempdir_prefix: Option<&str>,
 ) -> TempDir {
-    let dir = TempDir::with_prefix(tempdir_prefix.unwrap_or("rqbit_test")).unwrap();
+    let dir = TempDir::with_prefix(tempdir_prefix.unwrap_or("rtbit_test")).unwrap();
     info!(path=?dir.path(), "created tempdir");
     for f in 0..num_files {
         create_new_file_with_random_content(&dir.path().join(format!("{f}.data")), file_size);

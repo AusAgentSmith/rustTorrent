@@ -1,5 +1,5 @@
 import { BsX } from "react-icons/bs";
-import { ErrorWithLabel } from "../rqbit-web";
+import { ErrorWithLabel } from "../rtbit-web";
 
 const AlertDanger: React.FC<{
   title: string;

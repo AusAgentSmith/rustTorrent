@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use anyhow::Context;
-use librqbit_core::lengths::{Lengths, ValidPieceIndex};
+use librtbit_core::lengths::{Lengths, ValidPieceIndex};
 use parking_lot::RwLock;
 
 use crate::type_aliases::FileInfos;

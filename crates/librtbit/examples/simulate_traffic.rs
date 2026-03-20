@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::Context;
 use bytes::Bytes;
-use librqbit::{
+use librtbit::{
     AddTorrent, AddTorrentOptions, Api, ConnectionOptions, CreateTorrentOptions,
     CreateTorrentResult, ListenerOptions, PeerConnectionOptions, Session, SessionOptions,
     create_torrent, generate_azereus_style,
@@ -18,7 +18,7 @@ use librqbit::{
     spawn_utils::BlockingSpawner,
     tracing_subscriber_config_utils::{InitLoggingOptions, init_logging},
 };
-use librqbit_core::constants::CHUNK_SIZE;
+use librtbit_core::constants::CHUNK_SIZE;
 use librqbit_dualstack_sockets::{BindOpts, TcpListener};
 use rand::{RngCore, SeedableRng, seq::IndexedRandom};
 use tracing::info;
@@ -146,15 +146,15 @@ impl TestHarness {
     async fn start_peer(&self, id: usize) -> anyhow::Result<Arc<Session>> {
         let out = self.td.join(format!("peer_{}", id));
         let listen_mode = [
-            librqbit::ListenerMode::TcpOnly,
-            librqbit::ListenerMode::UtpOnly,
+            librtbit::ListenerMode::TcpOnly,
+            librtbit::ListenerMode::UtpOnly,
         ]
         .choose(&mut rand::rng())
         .copied()
         .unwrap();
 
         let listen_port = BASE_PORT + 1 + id as u16; // 50001, 50002, etc.
-        let peer_id = generate_azereus_style(*b"rQ", librqbit_core::crate_version!());
+        let peer_id = generate_azereus_style(*b"rQ", librtbit_core::crate_version!());
         let root_span = tracing::info_span!("peer", id, port = listen_port);
 
         let session = Session::new_with_opts(
@@ -248,7 +248,7 @@ impl TestHarness {
     async fn run_main(&self) -> anyhow::Result<()> {
         let path = self.td.join("main");
 
-        let peer_id = generate_azereus_style(*b"rQ", librqbit_core::crate_version!());
+        let peer_id = generate_azereus_style(*b"rQ", librtbit_core::crate_version!());
         let root_span = tracing::info_span!("main", port = BASE_PORT);
 
         let session = Session::new_with_opts(
@@ -261,7 +261,7 @@ impl TestHarness {
                 peer_id: Some(peer_id),
                 root_span: Some(root_span),
                 listen: Some(ListenerOptions {
-                    mode: librqbit::ListenerMode::TcpAndUtp,
+                    mode: librtbit::ListenerMode::TcpAndUtp,
                     listen_addr: (Ipv6Addr::UNSPECIFIED, BASE_PORT).into(),
                     enable_upnp_port_forwarding: false,
                     utp_opts: None,
@@ -327,7 +327,7 @@ impl TestHarness {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let root = std::env::temp_dir().join("rqbit-simulate-traffic");
+    let root = std::env::temp_dir().join("rtbit-simulate-traffic");
 
     // Clean up before creating log file
     let _ = std::fs::remove_dir_all(&root);

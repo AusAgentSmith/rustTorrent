@@ -3,52 +3,52 @@ all:
 @PHONY: webui-deps
 webui-deps:
 	cd desktop && npm install
-	cd crates/librqbit/webui && npm install
+	cd crates/librtbit/webui && npm install
 
 @PHONY: webui-dev
 webui-dev: webui-deps
-	cd crates/librqbit/webui && \
+	cd crates/librtbit/webui && \
 	npm run dev
 
 # NOTE: on LG TV using hostname is unstable for some reason, use IP address.
-export RQBIT_UPNP_SERVER_ENABLE ?= true
-export RQBIT_UPNP_SERVER_FRIENDLY_NAME ?= rqbit-dev
-export RQBIT_HTTP_API_LISTEN_ADDR ?= [::]:3030
-export RQBIT_ENABLE_PROMETHEUS_EXPORTER ?= true
-export RQBIT_EXPERIMENTAL_UTP_LISTEN_ENABLE ?= true
-export RQBIT_HTTP_API_ALLOW_CREATE ?= true
-export RQBIT_FASTRESUME = true
+export RTBIT_UPNP_SERVER_ENABLE ?= true
+export RTBIT_UPNP_SERVER_FRIENDLY_NAME ?= rtbit-dev
+export RTBIT_HTTP_API_LISTEN_ADDR ?= [::]:3030
+export RTBIT_ENABLE_PROMETHEUS_EXPORTER ?= true
+export RTBIT_EXPERIMENTAL_UTP_LISTEN_ENABLE ?= true
+export RTBIT_HTTP_API_ALLOW_CREATE ?= true
+export RTBIT_FASTRESUME = true
 
 CARGO_RUN_FLAGS ?=
-RQBIT_OUTPUT_FOLDER ?= /tmp/scratch
-RQBIT_POSTGRES_CONNECTION_STRING ?= postgres:///rqbit
+RTBIT_OUTPUT_FOLDER ?= /tmp/scratch
+RTBIT_POSTGRES_CONNECTION_STRING ?= postgres:///rtbit
 
 # Alternatively run this on OSX to profile easily
 # cargo instruments --profile release-debug --features=_disable_disk_write_net_benchmark -t time --time-limit 20000 -- download -o /tmp/scratch/ --overwrite
 @PHONY: devserver-profile
 devserver-profile:
-	cargo run --release $(CARGO_RUN_FLAGS) -- server start $(RQBIT_OUTPUT_FOLDER)
+	cargo run --release $(CARGO_RUN_FLAGS) -- server start $(RTBIT_OUTPUT_FOLDER)
 
 # DEV variables (that's why defined after devserver-profile)
-export RQBIT_LOG_FILE ?= /tmp/rqbit-log
-export RQBIT_LOG_FILE_RUST_LOG ?= debug,librqbit=trace,upnp_serve=trace,librqbit_utp=debug
+export RTBIT_LOG_FILE ?= /tmp/rtbit-log
+export RTBIT_LOG_FILE_RUST_LOG ?= debug,librtbit=trace,upnp_serve=trace,librqbit_utp=debug
 export CORS_ALLOW_REGEXP ?= '.*'
 
 @PHONY: devserver
 devserver:
-	echo -n '' > $(RQBIT_LOG_FILE) && \
+	echo -n '' > $(RTBIT_LOG_FILE) && \
 	cargo run $(CARGO_RUN_FLAGS) -- \
-	server start $(RQBIT_OUTPUT_FOLDER)
+	server start $(RTBIT_OUTPUT_FOLDER)
 
 @PHONY: devserver
 devserver-postgres:
-	echo -n '' > $(RQBIT_LOG_FILE) && \
+	echo -n '' > $(RTBIT_LOG_FILE) && \
 	cargo run $(CARGO_RUN_FLAGS) -- \
-	server start --fastresume --persistence-location $(RQBIT_POSTGRES_CONNECTION_STRING) $(RQBIT_OUTPUT_FOLDER)
+	server start --fastresume --persistence-location $(RTBIT_POSTGRES_CONNECTION_STRING) $(RTBIT_OUTPUT_FOLDER)
 
 @PHONY: testserver
 testserver:
-	ulimit -n unlimited && cargo run -p librqbit --features http-api,tracing-subscriber-utils,webui,prometheus --example simulate_traffic
+	ulimit -n unlimited && cargo run -p librtbit --features http-api,tracing-subscriber-utils,webui,prometheus --example simulate_traffic
 
 @PHONY: docker-build-xx-one-platform
 docker-build-xx-one-platform:
@@ -56,7 +56,7 @@ docker-build-xx-one-platform:
 		--platform $(PLATFORM) \
 		--output type=local,dest=target/cross/$(PLATFORM) . && \
 	docker build \
-		-t ikatson/rqbit:$(shell git describe --tags)-dev-$(shell echo $(PLATFORM) | tr '/' '-') \
+		-t ikatson/rtbit:$(shell git describe --tags)-dev-$(shell echo $(PLATFORM) | tr '/' '-') \
 		--platform $(PLATFORM) \
 		-f docker/Dockerfile \
 		target/cross/
@@ -87,9 +87,9 @@ release-linux-current-target:
 debug-linux-docker-x86_64:
 	CARGO_RELEASE_PROFILE=dev \
 	$(MAKE) release-linux-x86_64 && \
-	cp target/x86_64-unknown-linux-musl/debug/rqbit target/cross/linux/amd64/ && \
-	docker build -t ikatson/rqbit:tmp-debug -f docker/Dockerfile --platform linux/amd64 target/cross && \
-	docker push ikatson/rqbit:tmp-debug
+	cp target/x86_64-unknown-linux-musl/debug/rtbit target/cross/linux/amd64/ && \
+	docker build -t ikatson/rtbit:tmp-debug -f docker/Dockerfile --platform linux/amd64 target/cross && \
+	docker push ikatson/rtbit:tmp-debug
 
 @PHONY: release-linux-x86_64
 release-linux-x86_64:

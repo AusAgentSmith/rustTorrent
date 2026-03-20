@@ -30,7 +30,7 @@ export const AdvancedTab: React.FC = () => {
             type="text"
             value={rustLog}
             onChange={(e) => setRustLog(e.target.value)}
-            placeholder="e.g. librqbit=debug,info"
+            placeholder="e.g. librtbit=debug,info"
             className="flex-1 px-3 py-1.5 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary"
           />
           <Button
@@ -45,7 +45,7 @@ export const AdvancedTab: React.FC = () => {
       </div>
       <div className="text-secondary text-xs">
         Change the logging level at runtime. Examples: &quot;info&quot;,
-        &quot;librqbit=debug&quot;, &quot;librqbit::session=trace&quot;
+        &quot;librtbit=debug&quot;, &quot;librtbit::session=trace&quot;
       </div>
     </div>
   );

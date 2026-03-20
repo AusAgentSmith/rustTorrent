@@ -167,7 +167,7 @@ USN: {usn}::{device_kind}\r
             debug!(?addr, "refusing to reply to a link-local address");
             return Ok(None);
         }
-        let local_ip = ::librqbit_upnp::get_local_ip_relative_to(addr, self.socket.nics())?;
+        let local_ip = ::librtbit_upnp::get_local_ip_relative_to(addr, self.socket.nics())?;
         let location = {
             let mut loc = self.opts.description_http_location.clone();
             let _ = loc.set_ip_host(local_ip);

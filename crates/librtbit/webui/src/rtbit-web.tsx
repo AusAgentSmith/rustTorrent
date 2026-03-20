@@ -41,7 +41,7 @@ type PendingUpload =
   | { type: "multi"; files: File[] }
   | null;
 
-export const RqbitWebUI = (props: {
+export const RtbitWebUI = (props: {
   title: string;
   version: string;
   menuButtons?: JSX.Element[];

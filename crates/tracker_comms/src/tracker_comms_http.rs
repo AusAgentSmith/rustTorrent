@@ -8,7 +8,7 @@ use std::{
     net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
-use librqbit_core::{
+use librtbit_core::{
     compact_ip::{CompactListInBuffer, CompactSerialize, CompactSerializeFixedLen},
     hash_id::Id20,
 };

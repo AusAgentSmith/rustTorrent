@@ -156,7 +156,7 @@ impl ReadBuf {
                 // In this case, 2 &mut references DO exist lexically, but in reality the
                 // latter one is a reborrow that ends with the block.
                 //
-                // Run with `cargo +nightly miri test -p librqbit --features miri test_read_buf_miri -- --nocapture --ignore`
+                // Run with `cargo +nightly miri test -p librtbit --features miri test_read_buf_miri -- --nocapture --ignore`
                 let this = unsafe { &mut *(self as *mut Self) };
                 let (first, second) = as_slices!(this);
                 match Message::deserialize(first, second) {
@@ -203,7 +203,7 @@ impl ReadBuf {
 
 #[cfg(test)]
 mod tests {
-    use librqbit_core::constants::CHUNK_SIZE;
+    use librtbit_core::constants::CHUNK_SIZE;
     use peer_binary_protocol::{
         MAX_MSG_LEN, Message, Piece,
         extended::{

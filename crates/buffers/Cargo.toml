@@ -1,10 +1,10 @@
 [package]
-name = "librqbit-buffers"
+name = "librtbit-buffers"
 version = "4.2.0"
 edition = "2024"
-description = "Utils to work with &[u8] and Vec<u8> in librqbit source code."
+description = "Utils to work with &[u8] and Vec<u8> in librtbit source code."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-buffers"
+documentation = "https://docs.rs/librtbit-buffers"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

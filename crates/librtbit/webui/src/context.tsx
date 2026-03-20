@@ -3,11 +3,11 @@ import {
   CategoryInfo,
   DhtStats,
   LimitsConfig,
-  RqbitAPI,
+  RtbitAPI,
   SessionStats,
 } from "./api-types";
 
-export const APIContext = createContext<RqbitAPI>({
+export const APIContext = createContext<RtbitAPI>({
   listTorrents: () => {
     throw new Error("Function not implemented.");
   },

@@ -2,7 +2,7 @@ use crate::state::UpnpServerStateInner;
 use anyhow::Context;
 use axum::response::IntoResponse;
 use http::{HeaderName, StatusCode};
-use librqbit_core::spawn_utils::spawn_with_cancel;
+use librtbit_core::spawn_utils::spawn_with_cancel;
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,

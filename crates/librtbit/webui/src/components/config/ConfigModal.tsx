@@ -8,7 +8,7 @@ import { HttpApiTab } from "./HttpApiTab";
 import { SecurityTab } from "./SecurityTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { Spinner } from "../Spinner";
 import { Modal } from "../modal/Modal";
 import { ModalBody } from "../modal/ModalBody";

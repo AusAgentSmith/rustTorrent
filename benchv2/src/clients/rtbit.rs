@@ -1,12 +1,12 @@
 use anyhow::Result;
 use std::path::Path;
 
-pub struct RqbitClient {
+pub struct RtbitClient {
     url: String,
     http: reqwest::Client,
 }
 
-impl RqbitClient {
+impl RtbitClient {
     pub fn new(url: &str) -> Self {
         Self {
             url: url.trim_end_matches('/').to_string(),
@@ -85,7 +85,7 @@ impl RqbitClient {
             .send()
             .await?;
         if resp.status().is_client_error() || resp.status().is_server_error() {
-            tracing::warn!("rqbit delete {id}: HTTP {}", resp.status());
+            tracing::warn!("rtbit delete {id}: HTTP {}", resp.status());
         }
         Ok(())
     }

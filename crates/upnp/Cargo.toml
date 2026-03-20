@@ -1,12 +1,12 @@
 [package]
-name = "librqbit-upnp"
+name = "librtbit-upnp"
 version = "1.0.0"
 authors = ["Igor Katson <igor.katson@gmail.com>"]
 edition = "2024"
-description = "Library used by rqbit torrent client to lease port forwards on the router."
+description = "Library used by rtbit torrent client to lease port forwards on the router."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-upnp"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-upnp"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

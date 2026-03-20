@@ -15,7 +15,7 @@ use std::{
 };
 
 use buffers::ByteBuf;
-use librqbit_core::lengths::ValidPieceIndex;
+use librtbit_core::lengths::ValidPieceIndex;
 use peer_binary_protocol::Piece;
 
 use crate::{
@@ -319,7 +319,7 @@ impl PieceTracker {
 mod tests {
     use super::*;
     use crate::{bitv::BitV as BitVTrait, type_aliases::BF};
-    use librqbit_core::lengths::Lengths;
+    use librtbit_core::lengths::Lengths;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     fn peer(id: u8) -> PeerHandle {

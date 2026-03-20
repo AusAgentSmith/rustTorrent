@@ -14,7 +14,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "benchv2", about = "BitTorrent client benchmark: rqbit vs qBittorrent")]
+#[command(name = "benchv2", about = "BitTorrent client benchmark: rtbit vs qBittorrent")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
                 let items: Vec<serde_json::Value> = serde_json::from_str(&data)?;
                 let mut results: Vec<(runner::ClientResult, runner::ClientResult)> = Vec::new();
                 for item in &items {
-                    let rq: runner::ClientResult = serde_json::from_value(item["rqbit"].clone())?;
+                    let rq: runner::ClientResult = serde_json::from_value(item["rtbit"].clone())?;
                     let qb: runner::ClientResult = serde_json::from_value(item["qbittorrent"].clone())?;
                     results.push((rq, qb));
                 }

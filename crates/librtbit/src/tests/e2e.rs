@@ -1,7 +1,7 @@
 use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::{Context, bail};
-use librqbit_core::magnet::Magnet;
+use librtbit_core::magnet::Magnet;
 use rand::Rng;
 use tokio::{
     spawn,
@@ -68,7 +68,7 @@ async fn _test_e2e_download(mode: ListenerMode, drop_checks: &DropChecks) {
     let num_files: usize = 8;
 
     let tempdir =
-        create_default_random_dir_with_torrents(num_files, file_length, Some("rqbit_e2e"));
+        create_default_random_dir_with_torrents(num_files, file_length, Some("rtbit_e2e"));
     let torrent_file = create_torrent(
         dbg!(tempdir.path()),
         crate::CreateTorrentOptions {
@@ -203,7 +203,7 @@ async fn _test_e2e_download(mode: ListenerMode, drop_checks: &DropChecks) {
 
     // 3. Start a client with the initial peers, and download the file.
     for _ in 0..client_iters {
-        let root = tempfile::TempDir::with_prefix("rqbit_e2e_client").unwrap();
+        let root = tempfile::TempDir::with_prefix("rtbit_e2e_client").unwrap();
         let outdir = root.path().join("out");
         let session_persistence = root.path().join("session");
         let session = Session::new_with_opts(

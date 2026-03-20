@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/rqbit",
-    "crates/librqbit",
+    "crates/rtbit",
+    "crates/librtbit",
     "crates/buffers",
     "crates/clone_to_owned",
     "crates/bencode",
     "crates/sha1w",
-    "crates/librqbit_core",
-    "crates/librqbit_lsd",
+    "crates/librtbit_core",
+    "crates/librtbit_lsd",
     "crates/peer_binary_protocol",
     "crates/dht",
     "crates/upnp",
@@ -20,13 +20,13 @@ exclude = ["benchv2"]
 
 # Everything except desktop
 default-members = [
-    "crates/rqbit",
-    "crates/librqbit",
+    "crates/rtbit",
+    "crates/librtbit",
     "crates/buffers",
     "crates/clone_to_owned",
     "crates/bencode",
     "crates/sha1w",
-    "crates/librqbit_core",
+    "crates/librtbit_core",
     "crates/peer_binary_protocol",
     "crates/dht",
     "crates/upnp",
@@ -52,18 +52,18 @@ debug = true
 
 [workspace.dependencies]
 # Internal crates - keys are import names used in source code, package is the actual crate name
-librqbit = { path = "crates/librqbit", version = "0.0.1", default-features = false }
-bencode = { path = "crates/bencode", package = "librqbit-bencode", version = "3.1", default-features = false }
-buffers = { path = "crates/buffers", package = "librqbit-buffers", version = "4.2" }
-clone_to_owned = { path = "crates/clone_to_owned", package = "librqbit-clone-to-owned", version = "3" }
-librqbit-core = { path = "crates/librqbit_core", version = "5", default-features = false }
-dht = { path = "crates/dht", package = "librqbit-dht", version = "5.3.0", default-features = false }
-librqbit-lsd = { path = "crates/librqbit_lsd", version = "0.1.0", default-features = false }
-peer_binary_protocol = { path = "crates/peer_binary_protocol", package = "librqbit-peer-protocol", version = "4.3", default-features = false }
-sha1w = { path = "crates/sha1w", package = "librqbit-sha1-wrapper", version = "4.1", default-features = false }
-tracker_comms = { path = "crates/tracker_comms", package = "librqbit-tracker-comms", version = "3", default-features = false }
-librqbit-upnp = { path = "crates/upnp", version = "1" }
-upnp-serve = { path = "crates/upnp-serve", package = "librqbit-upnp-serve", version = "1", default-features = false }
+librtbit = { path = "crates/librtbit", version = "0.0.1", default-features = false }
+bencode = { path = "crates/bencode", package = "librtbit-bencode", version = "3.1", default-features = false }
+buffers = { path = "crates/buffers", package = "librtbit-buffers", version = "4.2" }
+clone_to_owned = { path = "crates/clone_to_owned", package = "librtbit-clone-to-owned", version = "3" }
+librtbit-core = { path = "crates/librtbit_core", version = "5", default-features = false }
+dht = { path = "crates/dht", package = "librtbit-dht", version = "5.3.0", default-features = false }
+librtbit-lsd = { path = "crates/librtbit_lsd", version = "0.1.0", default-features = false }
+peer_binary_protocol = { path = "crates/peer_binary_protocol", package = "librtbit-peer-protocol", version = "4.3", default-features = false }
+sha1w = { path = "crates/sha1w", package = "librtbit-sha1-wrapper", version = "4.1", default-features = false }
+tracker_comms = { path = "crates/tracker_comms", package = "librtbit-tracker-comms", version = "3", default-features = false }
+librtbit-upnp = { path = "crates/upnp", version = "1" }
+upnp-serve = { path = "crates/upnp-serve", package = "librtbit-upnp-serve", version = "1", default-features = false }
 
 # External crates
 anyhow = "1"

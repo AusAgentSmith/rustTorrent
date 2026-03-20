@@ -1,11 +1,11 @@
 [package]
-name = "librqbit-upnp-serve"
+name = "librtbit-upnp-serve"
 version = "1.0.1"
 edition = "2024"
 description = "Simple UPnP MediaServer implementation"
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-upnp-serve"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-upnp-serve"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 [dependencies]
@@ -19,9 +19,9 @@ serde_derive.workspace = true
 http.workspace = true
 httparse.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-librqbit-upnp.workspace = true
+librtbit-upnp.workspace = true
 gethostname.workspace = true
-librqbit-core.workspace = true
+librtbit-core.workspace = true
 mime_guess.workspace = true
 url.workspace = true
 parking_lot.workspace = true

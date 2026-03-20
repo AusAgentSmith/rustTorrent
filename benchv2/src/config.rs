@@ -4,7 +4,7 @@ pub const MB: u64 = 1024 * 1024;
 pub const GB: u64 = 1024 * MB;
 
 pub const TRACKER_ANNOUNCE: &str = "http://tracker:6969/announce";
-pub const RQBIT_API: &str = "http://rqbit:3030";
+pub const RTBIT_API: &str = "http://rtbit:3030";
 pub const QBT_API: &str = "http://qbittorrent:8080";
 pub const PROMETHEUS_API: &str = "http://prometheus:9090";
 

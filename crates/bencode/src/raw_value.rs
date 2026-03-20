@@ -2,7 +2,7 @@ use serde::Serialize;
 
 pub struct RawValue<T>(pub T);
 
-pub(crate) const TAG: &str = "::librqbit_bencode::RawValue";
+pub(crate) const TAG: &str = "::librtbit_bencode::RawValue";
 
 impl<T> Serialize for RawValue<T>
 where

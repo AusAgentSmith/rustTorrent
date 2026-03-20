@@ -1,6 +1,6 @@
-# rqbit GUI Application
+# rtbit GUI Application
 
-This is a thin tauri wrapper for the web ui of rqbit.
+This is a thin tauri wrapper for the web ui of rtbit.
 
 ## Recommended IDE Setup
 
@@ -18,14 +18,14 @@ cargo install tauri-cli
 
 ## How to build GUI
 
-* Go to `rqbit/crates/librqbit/webui`
+* Go to `rtbit/crates/librtbit/webui`
   
   ```
   npm install
   npm run build
   ```
   
-* Go to `rqbit/desktop`
+* Go to `rtbit/desktop`
   
   ```
   npm install

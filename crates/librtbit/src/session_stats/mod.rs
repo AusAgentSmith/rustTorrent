@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-use librqbit_core::speed_estimator::SpeedEstimator;
+use librtbit_core::speed_estimator::SpeedEstimator;
 use snapshot::SessionStatsSnapshot;
 use tracing::debug_span;
 

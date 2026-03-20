@@ -4,7 +4,7 @@ import {
   ErrorDetails as ApiErrorDetails,
 } from "../../api-types";
 import { APIContext } from "../../context";
-import { ErrorWithLabel } from "../../rqbit-web";
+import { ErrorWithLabel } from "../../rtbit-web";
 import { FileSelectionModal } from "../modal/FileSelectionModal";
 import { Button } from "./Button";
 

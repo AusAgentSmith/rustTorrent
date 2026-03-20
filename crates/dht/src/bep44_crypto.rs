@@ -3,7 +3,7 @@
 //! Provides Ed25519 signing/verification and target computation for BEP 44
 //! (Storing arbitrary data in the DHT) mutable items.
 
-use librqbit_core::hash_id::Id20;
+use librtbit_core::hash_id::Id20;
 use sha1w::ISha1;
 
 /// Compute the DHT target for a BEP 44 mutable item.

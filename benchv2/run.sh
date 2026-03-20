@@ -4,7 +4,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 cat <<'BANNER'
 ╔═══════════════════════════════════════════════════════════╗
-║  benchv2: rqbit vs qBittorrent (Rust-native)             ║
+║  benchv2: rtbit vs qBittorrent (Rust-native)             ║
 ╚═══════════════════════════════════════════════════════════╝
 BANNER
 

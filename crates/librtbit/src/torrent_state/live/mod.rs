@@ -1,4 +1,4 @@
-// The main logic of rqbit is here - connecting to peers, reading and writing messages
+// The main logic of rtbit is here - connecting to peers, reading and writing messages
 // to them, tracking peer state etc.
 //
 // ## Architecture
@@ -58,7 +58,7 @@ use std::{
 
 use anyhow::Context;
 use buffers::ByteBufOwned;
-use librqbit_core::{
+use librtbit_core::{
     hash_id::Id20,
     lengths::{ChunkInfo, Lengths, ValidPieceIndex},
     spawn_utils::spawn_with_cancel,

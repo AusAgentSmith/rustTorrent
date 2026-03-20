@@ -1,7 +1,7 @@
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use buffers::{ByteBuf, ByteBufOwned, ByteBufT};
-use librqbit_core::compact_ip::{
+use librtbit_core::compact_ip::{
     CompactListInBuffer, CompactListInBufferOwned, CompactSerialize, CompactSerializeFixedLen,
 };
 use serde_derive::{Deserialize, Serialize};

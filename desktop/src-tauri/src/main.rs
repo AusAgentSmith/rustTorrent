@@ -11,9 +11,9 @@ use std::{
 };
 
 use anyhow::Context;
-use config::RqbitDesktopConfig;
+use config::RtbitDesktopConfig;
 use http::StatusCode;
-use librqbit::{
+use librtbit::{
     AddTorrent, AddTorrentOptions, Api, ApiError, Session, SessionOptions,
     SessionPersistenceConfig, WithStatusError,
     api::{
@@ -31,7 +31,7 @@ use serde::Serialize;
 use tracing::{debug_span, error, info, warn};
 
 struct StateShared {
-    config: config::RqbitDesktopConfig,
+    config: config::RtbitDesktopConfig,
     api: Option<Api>,
 }
 
@@ -41,14 +41,14 @@ struct State {
     init_logging: InitLoggingResult,
 }
 
-fn read_config(path: &str) -> anyhow::Result<RqbitDesktopConfig> {
+fn read_config(path: &str) -> anyhow::Result<RtbitDesktopConfig> {
     let rdr = BufReader::new(File::open(path)?);
-    let mut config: RqbitDesktopConfig = serde_json::from_reader(rdr)?;
+    let mut config: RtbitDesktopConfig = serde_json::from_reader(rdr)?;
     config.persistence.fix_backwards_compat();
     Ok(config)
 }
 
-fn write_config(path: &str, config: &RqbitDesktopConfig) -> anyhow::Result<()> {
+fn write_config(path: &str, config: &RtbitDesktopConfig) -> anyhow::Result<()> {
     std::fs::create_dir_all(Path::new(path).parent().context("no parent")?)
         .context("error creating dirs")?;
     let tmp = format!("{}.tmp", path);
@@ -66,7 +66,7 @@ fn write_config(path: &str, config: &RqbitDesktopConfig) -> anyhow::Result<()> {
 
 async fn api_from_config(
     init_logging: &InitLoggingResult,
-    config: &RqbitDesktopConfig,
+    config: &RtbitDesktopConfig,
 ) -> anyhow::Result<Api> {
     config
         .validate()
@@ -85,7 +85,7 @@ async fn api_from_config(
 
     let (listen, connect) = config.connections.as_listener_and_connect_opts();
 
-    let mut http_api_opts = librqbit::http_api::HttpApiOptions {
+    let mut http_api_opts = librtbit::http_api::HttpApiOptions {
         read_only: config.http_api.read_only,
         basic_auth: None,
         ..Default::default()
@@ -125,7 +125,7 @@ async fn api_from_config(
         },
     )
     .await
-    .context("couldn't set up librqbit session")?;
+    .context("couldn't set up librtbit session")?;
 
     let api = Api::new(
         session.clone(),
@@ -146,7 +146,7 @@ async fn api_from_config(
                 .map(|s| s.to_owned())
                 .unwrap_or_else(|| {
                     format!(
-                        "rqbit-desktop@{}",
+                        "rtbit-desktop@{}",
                         gethostname::gethostname().to_string_lossy()
                     )
                 });
@@ -166,7 +166,7 @@ async fn api_from_config(
         let http_api_task = async move {
             let listener = TcpListener::bind_tcp(listen_addr, Default::default())
                 .with_context(|| format!("error listening on {}", listen_addr))?;
-            librqbit::http_api::HttpApi::new(api.clone(), Some(http_api_opts))
+            librtbit::http_api::HttpApi::new(api.clone(), Some(http_api_opts))
                 .make_http_api_and_run(listener, upnp_router)
                 .await
         };
@@ -178,7 +178,7 @@ async fn api_from_config(
 
 impl State {
     async fn new(init_logging: InitLoggingResult) -> Self {
-        let config_filename = directories::ProjectDirs::from("com", "rqbit", "desktop")
+        let config_filename = directories::ProjectDirs::from("com", "rtbit", "desktop")
             .expect("directories::ProjectDirs::from")
             .config_dir()
             .join("config.json")
@@ -217,7 +217,7 @@ impl State {
             .with_status_error(StatusCode::FAILED_DEPENDENCY, "not configured")
     }
 
-    async fn configure(&self, config: RqbitDesktopConfig) -> Result<(), ApiError> {
+    async fn configure(&self, config: RtbitDesktopConfig) -> Result<(), ApiError> {
         {
             let g = self.shared.read();
             if let Some(shared) = g.as_ref()
@@ -251,13 +251,13 @@ impl State {
 
 #[derive(Default, Serialize)]
 struct CurrentState {
-    config: Option<RqbitDesktopConfig>,
+    config: Option<RtbitDesktopConfig>,
     configured: bool,
 }
 
 #[tauri::command]
-fn config_default() -> config::RqbitDesktopConfig {
-    config::RqbitDesktopConfig::default()
+fn config_default() -> config::RtbitDesktopConfig {
+    config::RtbitDesktopConfig::default()
 }
 
 #[tauri::command]
@@ -275,7 +275,7 @@ fn config_current(state: tauri::State<'_, State>) -> CurrentState {
 #[tauri::command]
 async fn config_change(
     state: tauri::State<'_, State>,
-    config: RqbitDesktopConfig,
+    config: RtbitDesktopConfig,
 ) -> Result<EmptyJsonResponse, ApiError> {
     state.configure(config).await.map(|_| EmptyJsonResponse {})
 }
@@ -414,7 +414,7 @@ async fn start() {
     })
     .unwrap();
 
-    match librqbit::try_increase_nofile_limit() {
+    match librtbit::try_increase_nofile_limit() {
         Ok(limit) => info!(limit = limit, "increased open file limit"),
         Err(e) => warn!("failed increasing open file limit: {:#}", e),
     };

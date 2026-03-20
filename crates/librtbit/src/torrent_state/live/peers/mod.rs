@@ -1,7 +1,7 @@
 use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration};
 
 use dashmap::DashMap;
-use librqbit_core::lengths::ValidPieceIndex;
+use librtbit_core::lengths::ValidPieceIndex;
 use parking_lot::RwLock;
 use peer_binary_protocol::{Message, Request};
 

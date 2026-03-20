@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use bencode::from_bytes;
 use buffers::{ByteBuf, ByteBufOwned};
 use bytes::Bytes;
-use librqbit_core::{
+use librtbit_core::{
     constants::CHUNK_SIZE,
     hash_id::Id20,
     lengths::{ChunkInfo, last_element_size},
@@ -251,7 +251,7 @@ impl PeerConnectionHandler for Handler {
         Ok(())
     }
 
-    fn should_transmit_have(&self, _id: librqbit_core::lengths::ValidPieceIndex) -> bool {
+    fn should_transmit_have(&self, _id: librtbit_core::lengths::ValidPieceIndex) -> bool {
         false
     }
 }

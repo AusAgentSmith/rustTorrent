@@ -4,7 +4,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 cat <<'BANNER'
 ╔═══════════════════════════════════════════════════════╗
-║  BitTorrent Client Benchmark: rqbit vs qBittorrent   ║
+║  BitTorrent Client Benchmark: rtbit vs qBittorrent   ║
 ╚═══════════════════════════════════════════════════════╝
 BANNER
 
@@ -73,7 +73,7 @@ fi
 echo "[*] Scenarios:   $SCENARIOS"
 echo "[*] Seeders:     $MAX_SEEDERS real, $MOCK_PEERS mock"
 echo "[*] Building and starting services..."
-echo "    (First run builds rqbit from source — this takes a while)"
+echo "    (First run builds rtbit from source — this takes a while)"
 echo ""
 
 docker compose up --build --abort-on-container-exit --exit-code-from orchestrator

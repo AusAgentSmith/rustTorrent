@@ -1,4 +1,4 @@
-// For production-grade code look at rqbit::main(), which does the same but has more options.
+// For production-grade code look at rtbit::main(), which does the same but has more options.
 //
 // Usage:
 // cargo run --release --example ubuntu /tmp/ubuntu/
@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session};
+use librtbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session};
 use tracing::info;
 
 // This is ubuntu-21.04-live-server-amd64.iso.torrent

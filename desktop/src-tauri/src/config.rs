@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use librqbit::{
+use librtbit::{
     ConnectionOptions, ListenerMode, ListenerOptions, PeerConnectionOptions, dht::PersistentDht,
     limits::LimitsConfig,
 };
@@ -13,13 +13,13 @@ use serde_with::serde_as;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct RqbitDesktopConfigDht {
+pub struct RtbitDesktopConfigDht {
     pub disable: bool,
     pub disable_persistence: bool,
     pub persistence_filename: PathBuf,
 }
 
-impl Default for RqbitDesktopConfigDht {
+impl Default for RtbitDesktopConfigDht {
     fn default() -> Self {
         Self {
             disable: false,
@@ -32,7 +32,7 @@ impl Default for RqbitDesktopConfigDht {
 #[serde_as]
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct RqbitDesktopConfigConnections {
+pub struct RtbitDesktopConfigConnections {
     pub enable_tcp_listen: bool,
     pub enable_tcp_outgoing: bool,
     pub enable_utp: bool,
@@ -46,7 +46,7 @@ pub struct RqbitDesktopConfigConnections {
     pub peer_read_write_timeout: Duration,
 }
 
-impl RqbitDesktopConfigConnections {
+impl RtbitDesktopConfigConnections {
     pub fn as_listener_and_connect_opts(&self) -> (Option<ListenerOptions>, ConnectionOptions) {
         let mode = match (self.enable_tcp_listen, self.enable_utp) {
             (true, true) => Some(ListenerMode::TcpAndUtp),
@@ -77,7 +77,7 @@ impl RqbitDesktopConfigConnections {
     }
 }
 
-impl Default for RqbitDesktopConfigConnections {
+impl Default for RtbitDesktopConfigConnections {
     fn default() -> Self {
         Self {
             enable_tcp_listen: true,
@@ -94,7 +94,7 @@ impl Default for RqbitDesktopConfigConnections {
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct RqbitDesktopConfigPersistence {
+pub struct RtbitDesktopConfigPersistence {
     pub disable: bool,
 
     #[serde(default)]
@@ -111,7 +111,7 @@ pub struct RqbitDesktopConfigPersistence {
     pub filename: PathBuf,
 }
 
-impl RqbitDesktopConfigPersistence {
+impl RtbitDesktopConfigPersistence {
     pub(crate) fn fix_backwards_compat(&mut self) {
         if self.folder != Path::new("") {
             return;
@@ -124,9 +124,9 @@ impl RqbitDesktopConfigPersistence {
     }
 }
 
-impl Default for RqbitDesktopConfigPersistence {
+impl Default for RtbitDesktopConfigPersistence {
     fn default() -> Self {
-        let folder = librqbit::SessionPersistenceConfig::default_json_persistence_folder().unwrap();
+        let folder = librtbit::SessionPersistenceConfig::default_json_persistence_folder().unwrap();
         Self {
             disable: false,
             folder,
@@ -139,13 +139,13 @@ impl Default for RqbitDesktopConfigPersistence {
 #[serde_as]
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct RqbitDesktopConfigHttpApi {
+pub struct RtbitDesktopConfigHttpApi {
     pub disable: bool,
     pub listen_addr: SocketAddr,
     pub read_only: bool,
 }
 
-impl Default for RqbitDesktopConfigHttpApi {
+impl Default for RtbitDesktopConfigHttpApi {
     fn default() -> Self {
         Self {
             disable: Default::default(),
@@ -157,7 +157,7 @@ impl Default for RqbitDesktopConfigHttpApi {
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(default)]
-pub struct RqbitDesktopConfigUpnp {
+pub struct RtbitDesktopConfigUpnp {
     #[serde(default)]
     pub enable_server: bool,
 
@@ -167,7 +167,7 @@ pub struct RqbitDesktopConfigUpnp {
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct RqbitDesktopConfig {
+pub struct RtbitDesktopConfig {
     pub default_download_location: PathBuf,
 
     /// Move completed torrents to this folder.
@@ -178,17 +178,17 @@ pub struct RqbitDesktopConfig {
     #[serde(default)]
     pub disable_upload: bool,
 
-    pub dht: RqbitDesktopConfigDht,
-    pub connections: RqbitDesktopConfigConnections,
-    pub upnp: RqbitDesktopConfigUpnp,
-    pub persistence: RqbitDesktopConfigPersistence,
-    pub http_api: RqbitDesktopConfigHttpApi,
+    pub dht: RtbitDesktopConfigDht,
+    pub connections: RtbitDesktopConfigConnections,
+    pub upnp: RtbitDesktopConfigUpnp,
+    pub persistence: RtbitDesktopConfigPersistence,
+    pub http_api: RtbitDesktopConfigHttpApi,
 
     #[serde(default)]
     pub ratelimits: LimitsConfig,
 }
 
-impl Default for RqbitDesktopConfig {
+impl Default for RtbitDesktopConfig {
     fn default() -> Self {
         let userdirs = directories::UserDirs::new().expect("directories::UserDirs::new()");
         let download_folder = userdirs
@@ -211,7 +211,7 @@ impl Default for RqbitDesktopConfig {
     }
 }
 
-impl RqbitDesktopConfig {
+impl RtbitDesktopConfig {
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.upnp.enable_server {
             if self.http_api.disable {

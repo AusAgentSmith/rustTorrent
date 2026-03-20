@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use dashmap::DashMap;
-use librqbit_core::hash_id::Id20;
+use librtbit_core::hash_id::Id20;
 
 /// A stored BEP 44 mutable item.
 #[derive(Debug, Clone)]

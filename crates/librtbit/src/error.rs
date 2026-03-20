@@ -119,7 +119,7 @@ pub enum Error {
     SessionDestroyed,
 
     #[error(transparent)]
-    Core(#[from] librqbit_core::Error),
+    Core(#[from] librtbit_core::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

@@ -3,7 +3,7 @@
 
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-import { RqbitWebUI } from "./rqbit-web";
+import { RtbitWebUI } from "./rtbit-web";
 import { APIContext } from "./context";
 import { MockAPI } from "./mock-api";
 import "./globals.css";
@@ -11,7 +11,7 @@ import "./globals.css";
 const RootWithMockAPI = () => {
   return (
     <APIContext.Provider value={MockAPI}>
-      <RqbitWebUI title="rqbit (MOCK)" version="mock-1.0.0" />
+      <RtbitWebUI title="rtbit (MOCK)" version="mock-1.0.0" />
     </APIContext.Provider>
   );
 };

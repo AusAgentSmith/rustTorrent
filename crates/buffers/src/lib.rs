@@ -1,7 +1,7 @@
-// This crate used for making working with &[u8] or Vec<u8> generic in other parts of librqbit,
+// This crate used for making working with &[u8] or Vec<u8> generic in other parts of librtbit,
 // for nicer display of binary data etc.
 //
-// Not useful outside of librqbit.
+// Not useful outside of librtbit.
 
 use std::borrow::Borrow;
 

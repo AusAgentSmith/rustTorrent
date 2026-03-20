@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use librqbit_upnp::{SSDP_SEARCH_ROOT_ST, discover_once, discover_services};
+use librtbit_upnp::{SSDP_SEARCH_ROOT_ST, discover_once, discover_services};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

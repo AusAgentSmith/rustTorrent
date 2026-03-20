@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::Context;
 use futures::{StreamExt, stream::BoxStream};
-use librqbit_core::{Id20, spawn_utils::spawn};
+use librtbit_core::{Id20, spawn_utils::spawn};
 use sqlx::{Pool, Postgres};
 use tracing::debug_span;
 

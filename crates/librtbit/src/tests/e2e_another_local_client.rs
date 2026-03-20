@@ -17,7 +17,7 @@ const TORRENT_FILENAME: &str = "/tmp/canary.torrent";
 // Where to download
 const OUTPUT_FOLDER: &str = "/tmp/utptest";
 
-// It's hard to find the binary in target/.../deps/librqbit*, so symlink itself
+// It's hard to find the binary in target/.../deps/librtbit*, so symlink itself
 // here for easy profiling.
 #[cfg(unix)]
 const BINARY_SYMLINK: &str = "/tmp/rtest";

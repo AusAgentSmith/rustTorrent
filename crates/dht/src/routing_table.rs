@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Instant};
 
-use librqbit_core::hash_id::Id20;
+use librtbit_core::hash_id::Id20;
 use rand::RngCore;
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tracing::{debug, trace};
@@ -577,7 +577,7 @@ mod tests {
         time::Instant,
     };
 
-    use librqbit_core::hash_id::Id20;
+    use librtbit_core::hash_id::Id20;
     use rand::Rng;
 
     use crate::routing_table::compute_split_start_end;

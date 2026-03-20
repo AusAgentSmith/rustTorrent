@@ -632,7 +632,7 @@ mod tests {
     use super::*;
 
     const TORRENT_BYTES: &[u8] =
-        include_bytes!("../../librqbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent");
+        include_bytes!("../../librtbit/resources/ubuntu-21.04-desktop-amd64.iso.torrent");
 
     #[test]
     fn test_deserialize_torrent_borrowed() {

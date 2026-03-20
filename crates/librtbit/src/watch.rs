@@ -6,7 +6,7 @@ use std::{
 
 use crate::Magnet;
 use anyhow::{Context, bail};
-use librqbit_core::{spawn_utils::spawn, torrent_metainfo::torrent_from_bytes};
+use librtbit_core::{spawn_utils::spawn, torrent_metainfo::torrent_from_bytes};
 use notify::Watcher;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{debug, debug_span, error, trace, warn};

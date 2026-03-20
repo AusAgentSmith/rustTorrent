@@ -40,7 +40,7 @@ impl OurFileExt for File {
             (l0, l1) => {
                 // concatenate the buffers in memory so that we issue one write call instead of 2
                 // assumes the message is <= CHUNK_SIZE
-                use librqbit_core::constants::CHUNK_SIZE;
+                use librtbit_core::constants::CHUNK_SIZE;
                 let mut buf = [0u8; CHUNK_SIZE as usize];
 
                 buf.get_mut(..l0)
@@ -192,7 +192,7 @@ impl OpenedFile {
 mod tests {
     use std::io::Read;
 
-    use librqbit_core::constants::CHUNK_SIZE;
+    use librtbit_core::constants::CHUNK_SIZE;
     use peer_binary_protocol::DoubleBufHelper;
     use tempfile::TempDir;
 

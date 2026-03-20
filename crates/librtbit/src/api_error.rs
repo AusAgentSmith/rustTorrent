@@ -106,7 +106,7 @@ pub enum ApiErrorKind {
     #[error(transparent)]
     OtherAnyhow(#[from] anyhow::Error),
     #[error(transparent)]
-    OtherCore(#[from] librqbit_core::Error),
+    OtherCore(#[from] librtbit_core::Error),
     #[error(transparent)]
     OtherError(#[from] crate::Error),
 }
@@ -172,8 +172,8 @@ impl From<crate::Error> for ApiError {
     }
 }
 
-impl From<librqbit_core::Error> for ApiError {
-    fn from(e: librqbit_core::Error) -> Self {
+impl From<librtbit_core::Error> for ApiError {
+    fn from(e: librtbit_core::Error) -> Self {
         Self {
             status: Some(StatusCode::INTERNAL_SERVER_ERROR),
             kind: ApiErrorKind::OtherCore(e),

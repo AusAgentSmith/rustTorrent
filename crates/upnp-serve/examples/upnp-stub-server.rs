@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use axum::routing::get;
-use librqbit_upnp_serve::{
+use librtbit_upnp_serve::{
     UpnpServer, UpnpServerOptions,
     services::content_directory::{
         ContentDirectoryBrowseProvider,

@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { RqbitWebUI } from "rqbit-webui/src/rqbit-web";
-import { CurrentDesktopState, RqbitDesktopConfig } from "./configuration";
+import { RtbitWebUI } from "rtbit-webui/src/rtbit-web";
+import { CurrentDesktopState, RtbitDesktopConfig } from "./configuration";
 import { ConfigModal } from "./configure";
-import { IconButton } from "rqbit-webui/src/components/buttons/IconButton";
+import { IconButton } from "rtbit-webui/src/components/buttons/IconButton";
 import { BsSliders2 } from "react-icons/bs";
-import { APIContext } from "rqbit-webui/src/context";
+import { APIContext } from "rtbit-webui/src/context";
 import { makeAPI } from "./api";
 
-export const RqbitDesktop: React.FC<{
+export const RtbitDesktop: React.FC<{
   version: string;
-  defaultConfig: RqbitDesktopConfig;
+  defaultConfig: RtbitDesktopConfig;
   currentState: CurrentDesktopState;
 }> = ({ version, defaultConfig, currentState }) => {
   let [configured, setConfigured] = useState<boolean>(currentState.configured);
-  let [config, setConfig] = useState<RqbitDesktopConfig>(
+  let [config, setConfig] = useState<RtbitDesktopConfig>(
     currentState.config ?? defaultConfig,
   );
   let [configurationOpened, setConfigurationOpened] = useState<boolean>(false);
@@ -31,11 +31,11 @@ export const RqbitDesktop: React.FC<{
   return (
     <APIContext.Provider value={makeAPI(config)}>
       {configured && (
-        <RqbitWebUI
-          title={`Rqbit Desktop`}
+        <RtbitWebUI
+          title={`Rtbit Desktop`}
           version={version}
           menuButtons={[configButton]}
-        ></RqbitWebUI>
+        ></RtbitWebUI>
       )}
       <ConfigModal
         show={!configured || configurationOpened}

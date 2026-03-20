@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use librqbit::{
+use librtbit::{
     SessionOptions,
     storage::{StorageFactory, StorageFactoryExt, TorrentStorage},
 };
@@ -22,13 +22,13 @@ impl StorageFactory for CustomStorageFactory {
 
     fn create(
         &self,
-        _: &librqbit::ManagedTorrentShared,
-        _: &librqbit::TorrentMetadata,
+        _: &librtbit::ManagedTorrentShared,
+        _: &librtbit::TorrentMetadata,
     ) -> anyhow::Result<Self::Storage> {
         Ok(CustomStorage::default())
     }
 
-    fn clone_box(&self) -> librqbit::storage::BoxStorageFactory {
+    fn clone_box(&self) -> librtbit::storage::BoxStorageFactory {
         self.boxed()
     }
 }
@@ -60,8 +60,8 @@ impl TorrentStorage for CustomStorage {
 
     fn init(
         &mut self,
-        _meta: &librqbit::ManagedTorrentShared,
-        _: &librqbit::TorrentMetadata,
+        _meta: &librtbit::ManagedTorrentShared,
+        _: &librtbit::TorrentMetadata,
     ) -> anyhow::Result<()> {
         anyhow::bail!("not implemented")
     }
@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
         Err(_) => unsafe { std::env::set_var("RUST_LOG", "info") },
     }
     tracing_subscriber::fmt::init();
-    let s = librqbit::Session::new_with_opts(
+    let s = librtbit::Session::new_with_opts(
         Default::default(),
         SessionOptions {
             disable_dht_persistence: true,
@@ -86,10 +86,10 @@ async fn main() -> anyhow::Result<()> {
     .await?;
     let handle = s
         .add_torrent(
-            librqbit::AddTorrent::TorrentFileBytes(Bytes::from_static(include_bytes!(
+            librtbit::AddTorrent::TorrentFileBytes(Bytes::from_static(include_bytes!(
                 "../resources/ubuntu-21.04-live-server-amd64.iso.torrent"
             ))),
-            Some(librqbit::AddTorrentOptions {
+            Some(librtbit::AddTorrentOptions {
                 storage_factory: Some(CustomStorageFactory::default().boxed()),
                 paused: false,
                 ..Default::default()

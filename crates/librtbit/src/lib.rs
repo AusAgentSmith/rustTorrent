@@ -4,7 +4,7 @@
 //! # Quick usage example
 //!
 //! ```no_run
-//! use librqbit::*;
+//! use librtbit::*;
 //!
 //! tokio_test::block_on(async {
 //!     let session = Session::new("/tmp/where-to-download".into()).await.unwrap();
@@ -19,7 +19,7 @@
 //! # Overview
 //! The main type to start off with is [`Session`].
 //!
-//! It also proved useful to use the [`Api`] when building the rqbit desktop app, as it provides
+//! It also proved useful to use the [`Api`] when building the rtbit desktop app, as it provides
 //! a facade that works with simple serializable types.
 //!
 
@@ -89,7 +89,7 @@ pub use api::Api;
 pub use api_error::{ApiError, WithStatus, WithStatusError};
 pub use create_torrent_file::{CreateTorrentOptions, CreateTorrentResult, create_torrent};
 pub use dht;
-pub use librqbit_core::spawn_utils::spawn as librqbit_spawn;
+pub use librtbit_core::spawn_utils::spawn as librtbit_spawn;
 pub use listen::{ListenerMode, ListenerOptions};
 pub use peer_connection::PeerConnectionOptions;
 pub use session::{
@@ -105,20 +105,20 @@ pub use type_aliases::FileInfos;
 
 pub use buffers::*;
 pub use clone_to_owned::CloneToOwned;
-pub use librqbit_core::magnet::*;
-pub use librqbit_core::peer_id::*;
-pub use librqbit_core::torrent_metainfo::*;
+pub use librtbit_core::magnet::*;
+pub use librtbit_core::peer_id::*;
+pub use librtbit_core::torrent_metainfo::*;
 
 #[cfg(test)]
 mod tests;
 
-/// The cargo version of librqbit.
+/// The cargo version of librtbit.
 pub const fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
 pub const fn client_name_and_version() -> &'static str {
-    concat!("rqbit ", env!("CARGO_PKG_VERSION"))
+    concat!("rtbit ", env!("CARGO_PKG_VERSION"))
 }
 
 pub fn try_increase_nofile_limit() -> anyhow::Result<u64> {

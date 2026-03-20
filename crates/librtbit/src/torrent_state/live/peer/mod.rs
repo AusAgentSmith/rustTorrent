@@ -5,8 +5,8 @@ use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use librqbit_core::hash_id::Id20;
-use librqbit_core::lengths::ChunkInfo;
+use librtbit_core::hash_id::Id20;
+use librtbit_core::lengths::ChunkInfo;
 
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::debug;

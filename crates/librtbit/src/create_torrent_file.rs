@@ -7,9 +7,9 @@ use anyhow::Context;
 use bencode::{WithRawBytes, bencode_serialize_to_writer};
 use buffers::ByteBufOwned;
 use bytes::Bytes;
-use librqbit_core::Id20;
-use librqbit_core::magnet::Magnet;
-use librqbit_core::torrent_metainfo::{TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned};
+use librtbit_core::Id20;
+use librtbit_core::magnet::Magnet;
+use librtbit_core::torrent_metainfo::{TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned};
 use sha1w::ISha1;
 
 use crate::spawn_utils::BlockingSpawner;
@@ -245,7 +245,7 @@ pub async fn create_torrent<'a>(
 
 #[cfg(test)]
 mod tests {
-    use librqbit_core::torrent_metainfo::torrent_from_bytes;
+    use librtbit_core::torrent_metainfo::torrent_from_bytes;
 
     use crate::{create_torrent, spawn_utils::BlockingSpawner};
 
@@ -256,7 +256,7 @@ mod tests {
         let dir = test_util::create_default_random_dir_with_torrents(
             3,
             1000 * 1000,
-            Some("rqbit_test_create_torrent"),
+            Some("rtbit_test_create_torrent"),
         );
         let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))
             .await
@@ -330,7 +330,7 @@ mod tests {
         let dir = test_util::create_default_random_dir_with_torrents(
             2,
             100_000,
-            Some("rqbit_test_roundtrip"),
+            Some("rtbit_test_roundtrip"),
         );
 
         let torrent = create_torrent(dir.path(), Default::default(), &BlockingSpawner::new(1))

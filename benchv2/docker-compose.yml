@@ -37,7 +37,7 @@ services:
     networks: [bench]
     depends_on: [tracker]
 
-  rqbit:
+  rtbit:
     build:
       context: ..
       dockerfile: Dockerfile
@@ -52,14 +52,14 @@ services:
       - "1s"
       - server
       - start
-      - /home/rqbit/downloads
+      - /home/rtbit/downloads
     environment:
-      - RQBIT_HTTP_API_LISTEN_ADDR=0.0.0.0:3030
-      - RQBIT_LISTEN_PORT=4240
+      - RTBIT_HTTP_API_LISTEN_ADDR=0.0.0.0:3030
+      - RTBIT_LISTEN_PORT=4240
     volumes:
-      - downloads-rqbit:/home/rqbit/downloads
-      - rqbit-db:/home/rqbit/db
-      - rqbit-cache:/home/rqbit/cache
+      - downloads-rtbit:/home/rtbit/downloads
+      - rtbit-db:/home/rtbit/db
+      - rtbit-cache:/home/rtbit/cache
     networks: [bench]
     depends_on: [tracker]
 
@@ -92,7 +92,7 @@ services:
       - tracker
       - seeder
       - mock-seeder
-      - rqbit
+      - rtbit
       - qbittorrent
 
 networks:
@@ -102,8 +102,8 @@ networks:
 volumes:
   testdata:
   torrents:
-  downloads-rqbit:
+  downloads-rtbit:
   downloads-qbt:
   qbt-config:
-  rqbit-db:
-  rqbit-cache:
+  rtbit-db:
+  rtbit-cache:

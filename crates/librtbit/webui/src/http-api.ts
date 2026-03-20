@@ -6,7 +6,7 @@ import {
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
-  RqbitAPI,
+  RtbitAPI,
   SessionStats,
   TorrentDetails,
   TorrentStats,
@@ -283,7 +283,7 @@ export const AuthAPI = {
   },
 };
 
-export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
+export const API: RtbitAPI & { getVersion: () => Promise<string> } = {
   getStreamLogsUrl: () => apiUrl + "/stream_logs",
   listTorrents: (opts?: {
     withStats?: boolean;

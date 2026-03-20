@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use anyhow::{Context, bail};
 use buffers::ByteBufOwned;
 use futures::{Stream, stream::BoxStream};
-use librqbit_core::torrent_metainfo::ValidatedTorrentMetaV1Info;
+use librtbit_core::torrent_metainfo::ValidatedTorrentMetaV1Info;
 use tracing::{debug, info, warn};
 
 use crate::{merge_streams::merge_streams, storage::TorrentStorage, type_aliases::FileInfos};

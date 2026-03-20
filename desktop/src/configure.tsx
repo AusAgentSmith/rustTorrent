@@ -1,16 +1,16 @@
 import React, { useState } from "react";
-import { RqbitDesktopConfig } from "./configuration";
+import { RtbitDesktopConfig } from "./configuration";
 import { invokeAPI } from "./api";
-import { ErrorDetails } from "rqbit-webui/src/api-types";
-import { ErrorWithLabel } from "rqbit-webui/src/rqbit-web";
-import { FormCheckbox } from "rqbit-webui/src/components/forms/FormCheckbox";
-import { FormInput as FI } from "rqbit-webui/src/components/forms/FormInput";
-import { Fieldset } from "rqbit-webui/src/components/forms/Fieldset";
+import { ErrorDetails } from "rtbit-webui/src/api-types";
+import { ErrorWithLabel } from "rtbit-webui/src/rtbit-web";
+import { FormCheckbox } from "rtbit-webui/src/components/forms/FormCheckbox";
+import { FormInput as FI } from "rtbit-webui/src/components/forms/FormInput";
+import { Fieldset } from "rtbit-webui/src/components/forms/Fieldset";
 import {
   TabbedConfigModal,
   ConfigTab,
-} from "rqbit-webui/src/components/modal/TabbedConfigModal";
-import { RateLimitsTab } from "rqbit-webui/src/components/config/RateLimitsTab";
+} from "rtbit-webui/src/components/modal/TabbedConfigModal";
+import { RateLimitsTab } from "rtbit-webui/src/components/config/RateLimitsTab";
 
 const FormCheck: React.FC<{
   label: string;
@@ -57,10 +57,10 @@ const FormInput: React.FC<{
 export const ConfigModal: React.FC<{
   show: boolean;
   handleStartReconfigure: () => void;
-  handleConfigured: (config: RqbitDesktopConfig) => void;
+  handleConfigured: (config: RtbitDesktopConfig) => void;
   handleCancel?: () => void;
-  initialConfig: RqbitDesktopConfig;
-  defaultConfig: RqbitDesktopConfig;
+  initialConfig: RtbitDesktopConfig;
+  defaultConfig: RtbitDesktopConfig;
 }> = ({
   show,
   handleStartReconfigure,
@@ -69,7 +69,7 @@ export const ConfigModal: React.FC<{
   initialConfig,
   defaultConfig,
 }) => {
-  const [config, setConfig] = useState<RqbitDesktopConfig>(initialConfig);
+  const [config, setConfig] = useState<RtbitDesktopConfig>(initialConfig);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<ErrorWithLabel | null>(null);
 
@@ -159,9 +159,9 @@ export const ConfigModal: React.FC<{
                 name="disable_upload"
                 checked={config.disable_upload}
                 onChange={handleToggleChange}
-                help="Disable uploading entirely. If this is set, rqbit won't share piece availability and will disconnect on download request.
+                help="Disable uploading entirely. If this is set, rtbit won't share piece availability and will disconnect on download request.
 
-Might be useful e.g. if rqbit upload consumes all your upload bandwidth and interferes with your other Internet usage."
+Might be useful e.g. if rtbit upload consumes all your upload bandwidth and interferes with your other Internet usage."
               />
             )}
         </Fieldset>
@@ -209,7 +209,7 @@ Might be useful e.g. if rqbit upload consumes all your upload bandwidth and inte
             name="persistence.disable"
             checked={!config.persistence.disable}
             onChange={handleToggleChange}
-            help="If you disable session persistence, rqbit won't remember the torrents you had before restart."
+            help="If you disable session persistence, rtbit won't remember the torrents you had before restart."
           />
           <FormInput
             label="Persistence folder"
@@ -359,7 +359,7 @@ Might be useful e.g. if rqbit upload consumes all your upload bandwidth and inte
             name="upnp.enable_server"
             checked={config.upnp.enable_server}
             onChange={handleToggleChange}
-            help="If enabled, rqbit will advertise the media to supported LAN devices, e.g. TVs."
+            help="If enabled, rtbit will advertise the media to supported LAN devices, e.g. TVs."
           />
           <FormInput
             inputType="text"
@@ -368,7 +368,7 @@ Might be useful e.g. if rqbit upload consumes all your upload bandwidth and inte
             value={config.upnp.server_friendly_name}
             disabled={!config.upnp.enable_server}
             onChange={handleInputChange}
-            help="The name displayed on supported devices. If not set will be generated, will look smth like <rqbit at HOSTNAME>."
+            help="The name displayed on supported devices. If not set will be generated, will look smth like <rtbit at HOSTNAME>."
           />
         </Fieldset>
       ),
@@ -379,7 +379,7 @@ Might be useful e.g. if rqbit upload consumes all your upload bandwidth and inte
     <TabbedConfigModal
       isOpen={show}
       onClose={handleCancel}
-      title="Configure Rqbit desktop"
+      title="Configure Rtbit desktop"
       tabs={tabs}
       onSave={handleOkClick}
       onReset={() => setConfig(defaultConfig)}

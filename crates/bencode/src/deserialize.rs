@@ -588,7 +588,7 @@ where
             type Value = WithRawBytes<T, Buf>;
 
             fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-                fmt.write_str("WithRawBytes only works with librqbit_bencode")
+                fmt.write_str("WithRawBytes only works with librtbit_bencode")
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>

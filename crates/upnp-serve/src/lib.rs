@@ -72,7 +72,7 @@ impl UpnpServer {
         let ssdp_runner = crate::ssdp::SsdpRunner::new(ssdp::SsdpRunnerOptions {
             usn: usn.clone(),
             description_http_location,
-            server_string: "Linux/3.4 UPnP/1.0 rqbit/1".to_owned(),
+            server_string: "Linux/3.4 UPnP/1.0 rtbit/1".to_owned(),
             notify_interval: Duration::from_secs(60),
             shutdown: opts.cancellation_token.clone(),
         })

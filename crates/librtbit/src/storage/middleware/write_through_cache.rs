@@ -8,7 +8,7 @@ An example, untested and unproven to be useful.
 use std::num::NonZeroUsize;
 
 use anyhow::Context;
-use librqbit_core::lengths::{Lengths, ValidPieceIndex};
+use librtbit_core::lengths::{Lengths, ValidPieceIndex};
 use lru::LruCache;
 use parking_lot::RwLock;
 

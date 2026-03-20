@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BitTorrent Client Benchmark — rqbit vs qBittorrent
+BitTorrent Client Benchmark — rtbit vs qBittorrent
 
 Orchestrates test-data generation, seeding, downloading, metric collection,
 and report generation inside a Docker Compose stack.
@@ -43,7 +43,7 @@ GB = 1024 * MB
 TRACKER_ANNOUNCE = "http://tracker:6969/announce"
 TRACKER_STATS = "http://tracker:6969/stats"
 TRACKER_HEALTH = "http://tracker:6969/health"
-RQBIT_API = "http://rqbit:3030"
+RTBIT_API = "http://rtbit:3030"
 QBT_API = "http://qbittorrent:8080"
 PROMETHEUS_API = "http://prometheus:9090"
 
@@ -429,10 +429,10 @@ class TransmissionClient:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# rqbit API client
+# rtbit API client
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class RqbitClient:
+class RtbitClient:
     def __init__(self, url: str):
         self.url = url.rstrip("/")
         self.http = make_session()
@@ -485,10 +485,10 @@ class RqbitClient:
         try:
             resp = self.http.post(f"{self.url}/torrents/{torrent_id}/delete", timeout=10)
             if resp.status_code >= 400:
-                log.warning("  rqbit delete %s: HTTP %d — %s",
+                log.warning("  rtbit delete %s: HTTP %d — %s",
                             torrent_id, resp.status_code, resp.text[:200])
         except Exception as e:
-            log.warning("  rqbit delete %s failed: %s", torrent_id, e)
+            log.warning("  rtbit delete %s failed: %s", torrent_id, e)
 
     def delete_all(self):
         for t in self.list_torrents():
@@ -503,7 +503,7 @@ class RqbitClient:
         # Verify removal
         remaining = self.list_torrents()
         if remaining:
-            log.warning("  rqbit: %d torrent(s) still present after delete_all", len(remaining))
+            log.warning("  rtbit: %d torrent(s) still present after delete_all", len(remaining))
 
     def all_finished(self, ids: List[int]) -> bool:
         return all(self.stats(i).get("finished", False) for i in ids)
@@ -516,7 +516,7 @@ class RqbitClient:
             live = s.get("live")
             if live:
                 ds = live.get("download_speed", {})
-                # rqbit serializes Speed as {"mbps": <float>, "human_readable": "..."}
+                # rtbit serializes Speed as {"mbps": <float>, "human_readable": "..."}
                 # where "mbps" is actually MiB/s (mebibytes per second)
                 if isinstance(ds, dict):
                     mibps = ds.get("mbps", 0)
@@ -849,7 +849,7 @@ class SeederManager:
 class BenchmarkRunner:
     def __init__(self):
         self.docker = docker.from_env()
-        self.rqbit = RqbitClient(RQBIT_API)
+        self.rtbit = RtbitClient(RTBIT_API)
         self.qbt = QBittorrentClient(QBT_API)
         self.seeders = SeederManager(self.docker)
         self.metrics = MetricsCollector(docker_client=self.docker)
@@ -865,7 +865,7 @@ class BenchmarkRunner:
         log.info("Waiting for services...")
         services = [
             ("tracker", TRACKER_HEALTH),
-            ("rqbit",   f"{RQBIT_API}/"),
+            ("rtbit",   f"{RTBIT_API}/"),
             ("qBittorrent", f"{QBT_API}/"),
             ("prometheus",  f"{PROMETHEUS_API}/-/healthy"),
         ]
@@ -966,14 +966,14 @@ class BenchmarkRunner:
 
         log.info("  [%s] Adding %d torrent(s)...", client_name, len(torrent_paths))
 
-        if client_name == "rqbit":
+        if client_name == "rtbit":
             ids = []
             for tp in torrent_paths:
                 try:
-                    tid = self.rqbit.add_torrent(tp)
+                    tid = self.rtbit.add_torrent(tp)
                     ids.append(tid)
                 except Exception as e:
-                    log.error("  [rqbit] Failed to add %s: %s", tp.name, e)
+                    log.error("  [rtbit] Failed to add %s: %s", tp.name, e)
         else:
             for tp in torrent_paths:
                 try:
@@ -993,10 +993,10 @@ class BenchmarkRunner:
         deadline = start_time + sc.timeout
         while time.time() < deadline:
             try:
-                if client_name == "rqbit":
-                    finished = self.rqbit.all_finished(ids) if ids else False
-                    progress = self.rqbit.progress_fraction(ids) if ids else 0
-                    speed = self.rqbit.aggregate_speed(ids) if ids else 0
+                if client_name == "rtbit":
+                    finished = self.rtbit.all_finished(ids) if ids else False
+                    progress = self.rtbit.progress_fraction(ids) if ids else 0
+                    speed = self.rtbit.aggregate_speed(ids) if ids else 0
                 else:
                     finished = self.qbt.all_finished()
                     progress = self.qbt.progress_fraction()
@@ -1079,8 +1079,8 @@ class BenchmarkRunner:
     def cleanup_client(self, client_name: str):
         log.info("  [%s] Cleaning up...", client_name)
         try:
-            if client_name == "rqbit":
-                self.rqbit.delete_all()
+            if client_name == "rtbit":
+                self.rtbit.delete_all()
             else:
                 self.qbt.delete_all()
         except Exception as e:
@@ -1089,13 +1089,13 @@ class BenchmarkRunner:
         time.sleep(3)
         # Verify cleanup
         try:
-            if client_name == "rqbit":
-                remaining = self.rqbit.list_torrents()
+            if client_name == "rtbit":
+                remaining = self.rtbit.list_torrents()
                 if remaining:
                     log.warning("  [%s] Still has %d torrent(s) after cleanup!",
                                 client_name, len(remaining))
                     # Force retry
-                    self.rqbit.delete_all()
+                    self.rtbit.delete_all()
                     time.sleep(2)
         except Exception:
             pass
@@ -1125,7 +1125,7 @@ class BenchmarkRunner:
             log.info("Waiting for seeders to verify (timeout %ds)...", verify_timeout)
             if not self.seeders.wait_all_seeding(sc.real_seeders, timeout=verify_timeout):
                 log.error("Seeders not ready — skipping scenario")
-                empty = ClientResult(client="rqbit", scenario=sc.name)
+                empty = ClientResult(client="rtbit", scenario=sc.name)
                 return (empty, ClientResult(client="qbittorrent", scenario=sc.name))
 
         # ── Mock seeder is always running and auto-discovers torrents ────
@@ -1139,9 +1139,9 @@ class BenchmarkRunner:
                  "Running downloads sequentially.",
                  sc.real_seeders, sc.mock_peers, sc.total_peers)
 
-        # Run rqbit
-        rqbit_result = self._run_client("rqbit", sc, tpaths)
-        self.cleanup_client("rqbit")
+        # Run rtbit
+        rtbit_result = self._run_client("rtbit", sc, tpaths)
+        self.cleanup_client("rtbit")
 
         # Brief cooldown between clients
         time.sleep(3)
@@ -1155,13 +1155,13 @@ class BenchmarkRunner:
             self.seeders.remove_all()
         time.sleep(2)
 
-        return (rqbit_result, qbt_result)
+        return (rtbit_result, qbt_result)
 
     # ── Run all scenarios ────────────────────────────────────────────────
 
     def run(self):
         log.info("=" * 60)
-        log.info("  BitTorrent Client Benchmark: rqbit vs qBittorrent")
+        log.info("  BitTorrent Client Benchmark: rtbit vs qBittorrent")
         log.info("=" * 60)
 
         self.wait_for_services()
@@ -1189,12 +1189,12 @@ class BenchmarkRunner:
                 rep_label = f" (rep {rep+1}/{sc.repetitions})" if sc.repetitions > 1 else ""
                 try:
                     log.info("--- %s%s ---", sc.name, rep_label)
-                    rqbit_res, qbt_res = self.run_scenario(sc)
+                    rtbit_res, qbt_res = self.run_scenario(sc)
                     # Tag repetition in result
                     if sc.repetitions > 1:
-                        rqbit_res.scenario = f"{sc.name}_r{rep+1}"
+                        rtbit_res.scenario = f"{sc.name}_r{rep+1}"
                         qbt_res.scenario = f"{sc.name}_r{rep+1}"
-                    self.all_results.append((rqbit_res, qbt_res))
+                    self.all_results.append((rtbit_res, qbt_res))
                 except Exception as e:
                     log.error("Scenario %s%s failed: %s", sc.name, rep_label,
                               e, exc_info=True)
@@ -1216,7 +1216,7 @@ class BenchmarkRunner:
         for rq, qb in self.all_results:
             json_data.append({
                 "scenario": rq.scenario,
-                "rqbit": asdict(rq),
+                "rtbit": asdict(rq),
                 "qbittorrent": asdict(qb),
             })
         json_path.write_text(json.dumps(json_data, indent=2, default=str))
@@ -1246,14 +1246,14 @@ class BenchmarkRunner:
         lines = []
         lines.append("")
         lines.append("=" * 78)
-        lines.append("  BENCHMARK RESULTS: rqbit vs qBittorrent")
+        lines.append("  BENCHMARK RESULTS: rtbit vs qBittorrent")
         lines.append("=" * 78)
 
         for rq, qb in self.all_results:
             lines.append("")
             lines.append(f"  Scenario: {rq.scenario}")
             lines.append("-" * 78)
-            lines.append(f"  {'Metric':<24} {'rqbit':>15} {'qBittorrent':>15} {'Delta':>12}")
+            lines.append(f"  {'Metric':<24} {'rtbit':>15} {'qBittorrent':>15} {'Delta':>12}")
             lines.append("-" * 78)
 
             metrics = [
@@ -1282,7 +1282,7 @@ class BenchmarkRunner:
         lines.append("")
         lines.append("  Lower-is-better metrics: Duration, Time to 1st Piece, CPU, Memory, IO Wait")
         lines.append("  Higher-is-better metrics: Speed, Net RX, Disk Write")
-        lines.append("  Delta shows rqbit advantage: positive = rqbit wins")
+        lines.append("  Delta shows rtbit advantage: positive = rtbit wins")
         lines.append("")
         return lines
 
@@ -1294,17 +1294,17 @@ class BenchmarkRunner:
             return "—"
         pct = ((qb_val - rq_val) / qb_val) * 100
         if lower_is_better:
-            # Lower rqbit = positive delta (rqbit wins)
+            # Lower rtbit = positive delta (rtbit wins)
             prefix = "+" if pct > 0 else ""
         else:
-            # Higher rqbit = positive delta, so invert
+            # Higher rtbit = positive delta, so invert
             pct = -pct
             prefix = "+" if pct > 0 else ""
         return f"{prefix}{pct:.1f}%"
 
     # ── Chart generation ────────────────────────────────────────────────
 
-    COLORS = {"rqbit": "#E45932", "qbittorrent": "#2681FF"}
+    COLORS = {"rtbit": "#E45932", "qbittorrent": "#2681FF"}
 
     def _generate_charts(self, charts_dir: Path):
         """Generate all charts from benchmark results."""
@@ -1383,7 +1383,7 @@ class BenchmarkRunner:
         fig.suptitle(f"Time-Series Metrics — {scenario}", fontsize=16, y=0.98)
 
         for ax, (key, label, unit, scale) in zip(axes, active_metrics):
-            for result, name in [(rq, "rqbit"), (qb, "qbittorrent")]:
+            for result, name in [(rq, "rtbit"), (qb, "qbittorrent")]:
                 ts = result.timeseries
                 if not ts:
                     continue
@@ -1434,7 +1434,7 @@ class BenchmarkRunner:
 
         fig, ax = plt.subplots(figsize=(max(10, len(labels) * 1.5), 6))
         bars1 = ax.bar([i - width / 2 for i in x], rq_vals, width,
-                       label="rqbit", color=self.COLORS["rqbit"], alpha=0.9)
+                       label="rtbit", color=self.COLORS["rtbit"], alpha=0.9)
         bars2 = ax.bar([i + width / 2 for i in x], qb_vals, width,
                        label="qBittorrent", color=self.COLORS["qbittorrent"], alpha=0.9)
 
@@ -1482,7 +1482,7 @@ class BenchmarkRunner:
         # Duration
         ax = axes[0, 0]
         ax.bar([i - w / 2 for i in x], rq_durations, w,
-               label="rqbit", color=self.COLORS["rqbit"])
+               label="rtbit", color=self.COLORS["rtbit"])
         ax.bar([i + w / 2 for i in x], qb_durations, w,
                label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax.set_title("Duration (seconds, lower = better)")
@@ -1494,7 +1494,7 @@ class BenchmarkRunner:
         # Speed
         ax = axes[0, 1]
         ax.bar([i - w / 2 for i in x], rq_speeds, w,
-               label="rqbit", color=self.COLORS["rqbit"])
+               label="rtbit", color=self.COLORS["rtbit"])
         ax.bar([i + w / 2 for i in x], qb_speeds, w,
                label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax.set_title("Avg Speed (Mbps, higher = better)")
@@ -1506,7 +1506,7 @@ class BenchmarkRunner:
         # Memory
         ax = axes[1, 0]
         ax.bar([i - w / 2 for i in x], rq_mem, w,
-               label="rqbit", color=self.COLORS["rqbit"])
+               label="rtbit", color=self.COLORS["rtbit"])
         ax.bar([i + w / 2 for i in x], qb_mem, w,
                label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax.set_title("Peak Memory (MB, lower = better)")
@@ -1518,7 +1518,7 @@ class BenchmarkRunner:
         # CPU
         ax = axes[1, 1]
         ax.bar([i - w / 2 for i in x], rq_cpu, w,
-               label="rqbit", color=self.COLORS["rqbit"])
+               label="rtbit", color=self.COLORS["rtbit"])
         ax.bar([i + w / 2 for i in x], qb_cpu, w,
                label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax.set_title("Peak CPU (%%, lower = better)")
@@ -1538,7 +1538,7 @@ class BenchmarkRunner:
         fig.suptitle("Resource Efficiency", fontsize=16, y=0.98)
 
         for result_set, name in [
-            ([(rq,) for rq, _ in self.all_results], "rqbit"),
+            ([(rq,) for rq, _ in self.all_results], "rtbit"),
             ([(qb,) for _, qb in self.all_results], "qbittorrent"),
         ]:
             speeds = [r[0].avg_speed_mbps for r in result_set]
@@ -1587,7 +1587,7 @@ class BenchmarkRunner:
         fig = plt.figure(figsize=(18, 6 + 4 * n_scenarios))
         gs = GridSpec(1 + n_scenarios, 3, figure=fig, hspace=0.4, wspace=0.3)
 
-        fig.suptitle("Benchmark Dashboard: rqbit vs qBittorrent",
+        fig.suptitle("Benchmark Dashboard: rtbit vs qBittorrent",
                      fontsize=18, y=0.99, fontweight="bold")
 
         # ── Row 0: Summary bar charts ────────────────────────────────────
@@ -1603,7 +1603,7 @@ class BenchmarkRunner:
         colors = ["#4CAF50" if s >= 1.0 else "#FF5722" for s in speedups]
         bars = ax0.barh(scenarios, speedups, color=colors, alpha=0.85)
         ax0.axvline(x=1.0, color="#888", linestyle="--", linewidth=1)
-        ax0.set_xlabel("Speed Ratio (>1 = rqbit faster)")
+        ax0.set_xlabel("Speed Ratio (>1 = rtbit faster)")
         ax0.set_title("Relative Performance")
         for bar, val in zip(bars, speedups):
             ax0.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2,
@@ -1617,7 +1617,7 @@ class BenchmarkRunner:
         x = range(len(scenarios))
         w = 0.35
         ax1.bar([i - w / 2 for i in x], rq_mem, w,
-                label="rqbit", color=self.COLORS["rqbit"])
+                label="rtbit", color=self.COLORS["rtbit"])
         ax1.bar([i + w / 2 for i in x], qb_mem, w,
                 label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax1.set_title("Peak Memory (MB)")
@@ -1631,7 +1631,7 @@ class BenchmarkRunner:
         rq_cpu = [rq.cpu_peak for rq, _ in self.all_results]
         qb_cpu = [qb.cpu_peak for _, qb in self.all_results]
         ax2.bar([i - w / 2 for i in x], rq_cpu, w,
-                label="rqbit", color=self.COLORS["rqbit"])
+                label="rtbit", color=self.COLORS["rtbit"])
         ax2.bar([i + w / 2 for i in x], qb_cpu, w,
                 label="qBittorrent", color=self.COLORS["qbittorrent"])
         ax2.set_title("Peak CPU (%)")
@@ -1646,7 +1646,7 @@ class BenchmarkRunner:
 
             # CPU time series
             ax_cpu = fig.add_subplot(gs[row_idx, 0])
-            for result, name in [(rq, "rqbit"), (qb, "qbittorrent")]:
+            for result, name in [(rq, "rtbit"), (qb, "qbittorrent")]:
                 if result.timeseries:
                     t = self._ts_to_relative(result.timeseries)
                     vals = [p.get("cpu_pct", 0) for p in result.timeseries]
@@ -1661,7 +1661,7 @@ class BenchmarkRunner:
 
             # Memory time series
             ax_mem = fig.add_subplot(gs[row_idx, 1])
-            for result, name in [(rq, "rqbit"), (qb, "qbittorrent")]:
+            for result, name in [(rq, "rtbit"), (qb, "qbittorrent")]:
                 if result.timeseries:
                     t = self._ts_to_relative(result.timeseries)
                     vals = [p.get("mem_bytes", 0) / MB for p in result.timeseries]
@@ -1676,7 +1676,7 @@ class BenchmarkRunner:
 
             # IO Wait time series
             ax_io = fig.add_subplot(gs[row_idx, 2])
-            for result, name in [(rq, "rqbit"), (qb, "qbittorrent")]:
+            for result, name in [(rq, "rtbit"), (qb, "qbittorrent")]:
                 if result.timeseries:
                     t = self._ts_to_relative(result.timeseries)
                     vals = [p.get("iowait_pct", 0) for p in result.timeseries]

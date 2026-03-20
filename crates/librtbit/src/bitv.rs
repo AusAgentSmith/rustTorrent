@@ -84,7 +84,7 @@ impl Drop for DiskBackedBitV {
     }
 }
 
-// NOTE on mmap. rqbit used it for a while, but it has issues on slow disks.
+// NOTE on mmap. rtbit used it for a while, but it has issues on slow disks.
 // We want writes to bitv to be instant in RAM. However when disk is slow, occasionally
 // the writes stall which blocks the executor.
 // Thus this separate "thread" of flushing was implemented.
@@ -106,7 +106,7 @@ impl DiskBackedBitV {
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DiskFlushRequest>();
         let flush_filename = filename.clone();
-        librqbit_core::spawn_utils::spawn(
+        librtbit_core::spawn_utils::spawn(
             debug_span!("diskbitv-flusher", ?filename),
             format!("DiskBackedBitV::flusher {filename:?}"),
             async move {

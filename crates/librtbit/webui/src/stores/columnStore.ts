@@ -210,9 +210,9 @@ export const COLUMN_DEFS: ColumnDef[] = [
   },
 ];
 
-const STORAGE_KEY_WIDTHS = "rqbit-column-widths";
-const STORAGE_KEY_VISIBLE = "rqbit-column-visible";
-const STORAGE_KEY_ORDER = "rqbit-column-order";
+const STORAGE_KEY_WIDTHS = "rtbit-column-widths";
+const STORAGE_KEY_VISIBLE = "rtbit-column-visible";
+const STORAGE_KEY_ORDER = "rtbit-column-order";
 
 function loadJson(key: string): Record<string, any> {
   try {

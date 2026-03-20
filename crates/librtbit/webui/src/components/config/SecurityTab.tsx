@@ -64,7 +64,7 @@ export const SecurityTab: React.FC = () => {
         <div className="text-secondary text-sm">
           Authentication is not enabled. Set{" "}
           <code className="text-xs bg-surface px-1 py-0.5 rounded">
-            RQBIT_HTTP_BASIC_AUTH_USERPASS
+            RTBIT_HTTP_BASIC_AUTH_USERPASS
           </code>{" "}
           or use the first-boot setup to enable it.
         </div>

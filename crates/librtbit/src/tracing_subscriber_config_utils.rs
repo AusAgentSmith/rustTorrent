@@ -2,7 +2,7 @@ use std::io::LineWriter;
 
 use anyhow::Context;
 use bytes::Bytes;
-use librqbit_core::spawn_utils::spawn;
+use librtbit_core::spawn_utils::spawn;
 use tracing::debug_span;
 use tracing_subscriber::{filter::FilterExt, fmt::MakeWriter};
 
@@ -94,7 +94,7 @@ pub fn init_logging(opts: InitLoggingOptions) -> anyhow::Result<InitLoggingResul
                         let line_broadcast = line_broadcast.clone();
                         move |_| line_broadcast.receiver_count() > 0
                     })
-                    .and(EnvFilter::builder().parse("info,librqbit=debug").unwrap()),
+                    .and(EnvFilter::builder().parse("info,librtbit=debug").unwrap()),
                 ),
         );
 
@@ -120,7 +120,7 @@ pub fn init_logging(opts: InitLoggingOptions) -> anyhow::Result<InitLoggingResul
                     .with_writer(log_file)
                     .with_filter(
                         EnvFilter::builder()
-                            .parse(opts.log_file_rust_log.unwrap_or("info,librqbit=debug"))
+                            .parse(opts.log_file_rust_log.unwrap_or("info,librtbit=debug"))
                             .context("can't parse log-file-rust-log")?,
                     ),
             )

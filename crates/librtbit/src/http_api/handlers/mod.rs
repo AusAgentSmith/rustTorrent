@@ -69,7 +69,7 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}",
             "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
         },
-        "server": "rqbit",
+        "server": "rtbit",
         "version": env!("CARGO_PKG_VERSION"),
     });
 

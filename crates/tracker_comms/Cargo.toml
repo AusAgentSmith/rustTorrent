@@ -1,11 +1,11 @@
 [package]
-name = "librqbit-tracker-comms"
+name = "librtbit-tracker-comms"
 version = "3.0.0"
 edition = "2024"
-description = "Common interface around various sha1 implementations used in rqbit torrent client."
+description = "Common interface around various sha1 implementations used in rtbit torrent client."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-tracker-comms"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-tracker-comms"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -15,7 +15,7 @@ anyhow.workspace = true
 futures.workspace = true
 async-stream.workspace = true
 buffers.workspace = true
-librqbit-core.workspace = true
+librtbit-core.workspace = true
 byteorder.workspace = true
 serde.workspace = true
 serde_derive.workspace = true

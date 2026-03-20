@@ -1,8 +1,8 @@
 [package]
-name = "rqbit-desktop"
+name = "rtbit-desktop"
 edition = "2024"
 version = "0.0.1"
-description = "rqbit torrent client"
+description = "rtbit torrent client"
 authors = ["Igor Katson igor.katson@gmail.com"]
 license = ""
 repository = ""
@@ -16,7 +16,7 @@ tauri.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
-librqbit = { workspace = true, features = [
+librtbit = { workspace = true, features = [
     "tracing-subscriber-utils",
     "http-api",
     "webui",
@@ -43,4 +43,4 @@ librqbit-dualstack-sockets.workspace = true
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
-disable-upload = ["librqbit/disable-upload"]
+disable-upload = ["librtbit/disable-upload"]

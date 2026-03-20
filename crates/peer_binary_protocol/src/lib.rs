@@ -1,6 +1,6 @@
 // BitTorrent peer protocol implementation: parsing, serialization etc.
 //
-// Can be used outside of librqbit.
+// Can be used outside of librtbit.
 
 mod double_buf;
 pub mod extended;
@@ -12,7 +12,7 @@ use byteorder::{BE, ByteOrder};
 use bytes::Bytes;
 use clone_to_owned::CloneToOwned;
 use extended::PeerExtendedMessageIds;
-use librqbit_core::{constants::CHUNK_SIZE, hash_id::Id20, lengths::ChunkInfo};
+use librtbit_core::{constants::CHUNK_SIZE, hash_id::Id20, lengths::ChunkInfo};
 use serde_derive::{Deserialize, Serialize};
 
 pub use crate::double_buf::DoubleBufHelper;
@@ -559,7 +559,7 @@ mod tests {
 
     use crate::extended::handshake::ExtendedHandshake;
 
-    const EXTENDED: &[u8] = include_bytes!("../../librqbit/resources/test/extended-handshake.bin");
+    const EXTENDED: &[u8] = include_bytes!("../../librtbit/resources/test/extended-handshake.bin");
 
     use super::*;
     #[test]

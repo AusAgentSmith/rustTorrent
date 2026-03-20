@@ -15,7 +15,7 @@ use anyhow::{Context, bail};
 use async_trait::async_trait;
 use futures::{StreamExt, stream::BoxStream};
 use itertools::Itertools;
-use librqbit_core::Id20;
+use librtbit_core::Id20;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, trace, warn};

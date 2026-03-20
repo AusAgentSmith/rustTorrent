@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { RqbitWebUI } from "./rqbit-web";
+import { RtbitWebUI } from "./rtbit-web";
 import { customSetInterval } from "./helper/customSetInterval";
 import { APIContext } from "./context";
 import { API, AuthAPI } from "./http-api";
@@ -81,7 +81,7 @@ const RootWithVersion = () => {
             if (prev == version) {
               return prev;
             }
-            const title = `rqbit web - v${version}`;
+            const title = `rtbit web - v${version}`;
             document.title = title;
             return version;
           });
@@ -97,7 +97,7 @@ const RootWithVersion = () => {
   return (
     <APIContext.Provider value={API}>
       <AuthGate>
-        <RqbitWebUI title="rqbit" version={version} />
+        <RtbitWebUI title="rtbit" version={version} />
       </AuthGate>
     </APIContext.Provider>
   );

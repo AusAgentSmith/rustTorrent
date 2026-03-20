@@ -1,11 +1,11 @@
 [Unit]
-Description=rqbit Bittorrent client
-After=rqbit.socket
-Requires=rqbit.socket
+Description=rtbit Bittorrent client
+After=rtbit.socket
+Requires=rtbit.socket
 
 [Service]
-EnvironmentFile=-%E/rqbit/rqbit.conf
-ExecStart=rqbit server start %h/Downloads
+EnvironmentFile=-%E/rtbit/rtbit.conf
+ExecStart=rtbit server start %h/Downloads
 
 [Install]
-Also=rqbit.socket
+Also=rtbit.socket

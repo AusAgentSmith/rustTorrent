@@ -176,7 +176,7 @@ impl<'de, const N: usize> Deserialize<'de> for Id<N> {
     }
 }
 
-/// A 20-byte hash used throughout librqbit, for torrent info hashes, peer ids etc.
+/// A 20-byte hash used throughout librtbit, for torrent info hashes, peer ids etc.
 pub type Id20 = Id<20>;
 /// A 32-byte hash used in Bittorrent V2, for torrent info hashes, piece hashing, etc.
 pub type Id32 = Id<32>;

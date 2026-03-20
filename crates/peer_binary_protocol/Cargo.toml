@@ -1,11 +1,11 @@
 [package]
-name = "librqbit-peer-protocol"
+name = "librtbit-peer-protocol"
 version = "4.3.0"
 edition = "2024"
-description = "Protocol for working with torrent peers. Used in rqbit torrent client."
+description = "Protocol for working with torrent peers. Used in rtbit torrent client."
 license = "Apache-2.0"
-documentation = "https://docs.rs/librqbit-peer-protocol"
-repository = "https://github.com/ikatson/rqbit"
+documentation = "https://docs.rs/librtbit-peer-protocol"
+repository = "https://github.com/ikatson/rtbit"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,7 +16,7 @@ byteorder.workspace = true
 buffers.workspace = true
 bencode.workspace = true
 clone_to_owned.workspace = true
-librqbit-core.workspace = true
+librtbit-core.workspace = true
 bitvec.workspace = true
 anyhow.workspace = true
 bytes.workspace = true

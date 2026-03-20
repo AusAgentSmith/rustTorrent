@@ -8,8 +8,8 @@ use anyhow::Context;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::BoxStream;
-use librqbit_core::Id20;
-use librqbit_core::magnet::Magnet;
+use librtbit_core::Id20;
+use librtbit_core::magnet::Magnet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{

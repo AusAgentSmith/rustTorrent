@@ -1,4 +1,4 @@
-# rqbit
+# rtbit
 
 A modern BitTorrent client written in Rust, targeting full **BitTorrent V2 (BEP 52)** compliance. Fast, lightweight, and built for both humans and automation.
 
@@ -9,63 +9,28 @@ A modern BitTorrent client written in Rust, targeting full **BitTorrent V2 (BEP 
 ### Download a torrent
 
 ```bash
-rqbit download 'magnet:?...'
+rtbit download 'magnet:?...'
 ```
 
 ### Run as a server
 
 ```bash
-rqbit server start ~/Downloads
+rtbit server start ~/Downloads
 ```
 
 The Web UI is available at [http://localhost:3030/web/](http://localhost:3030/web/) and the API at [http://localhost:3030/](http://localhost:3030/).
-
-### Docker
-
-```bash
-docker run -d --name rqbit \
-  -p 3030:3030 -p 4240:4240/tcp -p 4240:4240/udp \
-  -v rqbit-db:/home/rqbit/db \
-  -v rqbit-cache:/home/rqbit/cache \
-  -v ~/Downloads:/home/rqbit/downloads \
-  ikatson/rqbit \
-  server start /home/rqbit/downloads
-```
-
-Or with Docker Compose:
-
-```yaml
-services:
-  rqbit:
-    image: ikatson/rqbit
-    ports:
-      - "3030:3030"
-      - "4240:4240/tcp"
-      - "4240:4240/udp"
-    volumes:
-      - rqbit-db:/home/rqbit/db
-      - rqbit-cache:/home/rqbit/cache
-      - ./downloads:/home/rqbit/downloads
-    environment:
-      RQBIT_HTTP_API_LISTEN_ADDR: "0.0.0.0:3030"
-      RQBIT_FASTRESUME: "true"
-
-volumes:
-  rqbit-db:
-  rqbit-cache:
-```
 
 ### Install
 
 ```bash
 # Homebrew
-brew install rqbit
+brew install rtbit
 
 # Cargo
-cargo install rqbit
+cargo install rtbit
 
 # Pre-built binaries
-# https://github.com/ikatson/rqbit/releases
+# https://github.com/ikatson/rtbit/releases
 ```
 
 ## Features
@@ -89,7 +54,7 @@ cargo install rqbit
 
 ### Performance
 
-rqbit is designed to be lightweight and fast. The server typically runs within a few tens of megabytes of RAM, making it suitable for Raspberry Pi and other constrained environments. Users have reported saturating 20 Gbps links.
+rtbit is designed to be lightweight and fast. The server typically runs within a few tens of megabytes of RAM, making it suitable for Raspberry Pi and other constrained environments. Users have reported saturating 20 Gbps links.
 
 ### Supported BEPs
 
@@ -115,7 +80,7 @@ rqbit is designed to be lightweight and fast. The server typically runs within a
 
 ## API
 
-rqbit exposes a full HTTP API at `http://localhost:3030/`. Interactive Swagger documentation is available at `/swagger` when the server is running.
+rtbit exposes a full HTTP API at `http://localhost:3030/`. Interactive Swagger documentation is available at `/swagger` when the server is running.
 
 Key endpoints:
 
@@ -137,7 +102,7 @@ Key endpoints:
 Set basic auth via environment variable:
 
 ```bash
-RQBIT_HTTP_BASIC_AUTH_USERPASS=username:password rqbit server start ~/Downloads
+RTBIT_HTTP_BASIC_AUTH_USERPASS=username:password rtbit server start ~/Downloads
 ```
 
 ### Adding torrents via API

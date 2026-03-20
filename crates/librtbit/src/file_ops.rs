@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use buffers::{ByteBuf, ByteBufOwned};
-use librqbit_core::{
+use librtbit_core::{
     lengths::{ChunkInfo, ValidPieceIndex},
     torrent_metainfo::ValidatedTorrentMetaV1Info,
 };

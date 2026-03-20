@@ -12,7 +12,7 @@ pub fn write_json(
         .map(|(rq, qb)| {
             serde_json::json!({
                 "scenario": rq.scenario,
-                "rqbit": rq,
+                "rtbit": rq,
                 "qbittorrent": qb,
             })
         })
@@ -57,7 +57,7 @@ pub fn build_summary(results: &[(ClientResult, ClientResult)]) -> String {
     let mut lines = Vec::new();
     lines.push(String::new());
     lines.push("=".repeat(78));
-    lines.push("  BENCHMARK RESULTS: rqbit vs qBittorrent".into());
+    lines.push("  BENCHMARK RESULTS: rtbit vs qBittorrent".into());
     lines.push("=".repeat(78));
 
     for (rq, qb) in results {
@@ -66,7 +66,7 @@ pub fn build_summary(results: &[(ClientResult, ClientResult)]) -> String {
         lines.push("-".repeat(78));
         lines.push(format!(
             "  {:24} {:>15} {:>15} {:>12}",
-            "Metric", "rqbit", "qBittorrent", "Delta"
+            "Metric", "rtbit", "qBittorrent", "Delta"
         ));
         lines.push("-".repeat(78));
 
@@ -95,7 +95,7 @@ pub fn build_summary(results: &[(ClientResult, ClientResult)]) -> String {
     lines.push(String::new());
     lines.push("  Lower-is-better: Duration, Time to 1st Piece, CPU, Memory, IO Wait".into());
     lines.push("  Higher-is-better: Speed, Net RX, Disk Write".into());
-    lines.push("  Delta shows rqbit advantage: positive = rqbit wins".into());
+    lines.push("  Delta shows rtbit advantage: positive = rtbit wins".into());
     lines.push(String::new());
     lines.join("\n")
 }

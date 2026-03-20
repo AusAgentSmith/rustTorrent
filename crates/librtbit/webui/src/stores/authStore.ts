@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-const TOKEN_KEY = "rqbit_access_token";
-const REFRESH_TOKEN_KEY = "rqbit_refresh_token";
-const TOKEN_EXPIRY_KEY = "rqbit_token_expiry";
+const TOKEN_KEY = "rtbit_access_token";
+const REFRESH_TOKEN_KEY = "rtbit_refresh_token";
+const TOKEN_EXPIRY_KEY = "rtbit_token_expiry";
 
 export type AuthState =
   | "loading" // checking auth status

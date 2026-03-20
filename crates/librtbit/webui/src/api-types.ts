@@ -240,7 +240,7 @@ const EXAMPLE_LOG_JSON: JSONLogLine = {
   timestamp: "2023-12-08T21:48:13.649165Z",
   level: "DEBUG",
   fields: { message: "successfully port forwarded 192.168.0.112:4225" },
-  target: "librqbit_upnp",
+  target: "librtbit_upnp",
   span: { port: 4225, name: "manage_port" },
   spans: [
     { port: 4225, name: "upnp_forward" },
@@ -268,7 +268,7 @@ export interface JSONLogLine {
   spans: Span[];
 }
 
-export interface RqbitAPI {
+export interface RtbitAPI {
   getPlaylistUrl: (index: number) => string | null;
   getStreamLogsUrl: () => string | null;
   listTorrents: (opts?: {

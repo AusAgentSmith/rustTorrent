@@ -144,7 +144,7 @@ impl Session {
         port: u16,
         bind_device: Option<BindDevice>,
     ) -> anyhow::Result<()> {
-        let pf = librqbit_upnp::UpnpPortForwarder::new(vec![port], None, bind_device)?;
+        let pf = librtbit_upnp::UpnpPortForwarder::new(vec![port], None, bind_device)?;
         pf.run_forever().await
     }
 }

@@ -10,7 +10,7 @@ use http::{
     HeaderMap, HeaderName, HeaderValue, StatusCode,
     header::{CONTENT_DISPOSITION, CONTENT_TYPE},
 };
-use librqbit_core::magnet::Magnet;
+use librtbit_core::magnet::Magnet;
 use serde::{Deserialize, Serialize};
 
 use super::ApiState;
@@ -389,7 +389,7 @@ pub async fn h_peer_stats_prometheus(
 
     let mut buf = String::new();
 
-    const NAME: &str = "rqbit_peer_fetched_bytes";
+    const NAME: &str = "rtbit_peer_fetched_bytes";
 
     use core::fmt::Write;
     writeln!(&mut buf, "# TYPE {NAME} counter").unwrap();

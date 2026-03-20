@@ -1,4 +1,4 @@
-name: Deploy rqbit
+name: Deploy rtbit
 
 on:
   push:
@@ -19,10 +19,10 @@ jobs:
             cd ~/rustTorrent || { git clone https://gitea.sprooty.com/sprooty/rustTorrent.git ~/rustTorrent && cd ~/rustTorrent; }
             git pull
             docker compose up --build -d
-            echo "Waiting for rqbit to start..."
+            echo "Waiting for rtbit to start..."
             for i in $(seq 1 12); do
               if curl -sf http://localhost:3030/ > /dev/null 2>&1; then
-                echo "rqbit is healthy"
+                echo "rtbit is healthy"
                 exit 0
               fi
               sleep 5

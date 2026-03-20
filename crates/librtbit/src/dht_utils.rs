@@ -3,14 +3,14 @@ use std::{collections::HashSet, net::SocketAddr, sync::Arc};
 use anyhow::Context;
 use buffers::ByteBufOwned;
 use futures::{Stream, StreamExt, stream::FuturesUnordered};
-use librqbit_core::torrent_metainfo::TorrentMetaV1Info;
+use librtbit_core::torrent_metainfo::TorrentMetaV1Info;
 use tracing::{Instrument, debug, debug_span};
 
 use crate::{
     peer_connection::PeerConnectionOptions, peer_info_reader, spawn_utils::BlockingSpawner,
     stream_connect::StreamConnector,
 };
-use librqbit_core::hash_id::Id20;
+use librtbit_core::hash_id::Id20;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -108,7 +108,7 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
 #[cfg(test)]
 mod tests {
     use dht::{DhtBuilder, Id20};
-    use librqbit_core::peer_id::generate_peer_id;
+    use librtbit_core::peer_id::generate_peer_id;
 
     use super::*;
     use std::{

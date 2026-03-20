@@ -1,6 +1,6 @@
 # WebUI Architecture Guide
 
-This document helps Claude work efficiently on the rqbit webui codebase.
+This document helps Claude work efficiently on the rtbit webui codebase.
 
 ## Tech Stack
 - React 18 + TypeScript
@@ -15,7 +15,7 @@ src/
 ├── api-types.ts        # TypeScript types matching backend API
 ├── http-api.ts         # API client (all backend calls)
 ├── context.tsx         # React contexts (APIContext)
-├── rqbit-web.tsx       # App shell, header, menu buttons
+├── rtbit-web.tsx       # App shell, header, menu buttons
 ├── main.tsx            # Entry point
 ├── stores/             # Zustand stores
 │   ├── torrentStore.ts # Global torrent list, loading states
@@ -168,7 +168,7 @@ Dev server runs at http://localhost:3031/, connects to backend at :3030.
 
 ## Mock Mode (No Backend Required)
 
-For UI testing without a real rqbit server, use mock mode:
+For UI testing without a real rtbit server, use mock mode:
 
 ```bash
 npm run dev:mock

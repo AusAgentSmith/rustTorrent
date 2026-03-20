@@ -8,7 +8,7 @@ import {
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
-  RqbitAPI,
+  RtbitAPI,
   SessionStats,
   TorrentDetails,
   TorrentStats,
@@ -425,7 +425,7 @@ for (let i = 0; i < TOTAL_TORRENTS; i++) {
 }
 
 // Mock API implementation
-export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
+export const MockAPI: RtbitAPI & { getVersion: () => Promise<string> } = {
   getStreamLogsUrl: () => null,
 
   listTorrents: async (opts?: {

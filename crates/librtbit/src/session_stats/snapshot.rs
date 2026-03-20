@@ -48,53 +48,53 @@ impl SessionStatsSnapshot {
             }};
         }
 
-        m!(counter, rqbit_fetched_bytes, self.counters.fetched_bytes);
-        m!(counter, rqbit_uploaded_bytes, self.counters.uploaded_bytes);
+        m!(counter, rtbit_fetched_bytes, self.counters.fetched_bytes);
+        m!(counter, rtbit_uploaded_bytes, self.counters.uploaded_bytes);
         m!(
             counter,
-            rqbit_blocked_incoming,
+            rtbit_blocked_incoming,
             self.counters.blocked_incoming
         );
         m!(
             counter,
-            rqbit_blocked_outgoing,
+            rtbit_blocked_outgoing,
             self.counters.blocked_outgoing
         );
         m!(
             gauge,
-            rqbit_download_speed_bytes,
+            rtbit_download_speed_bytes,
             self.download_speed.as_bytes()
         );
         m!(
             gauge,
-            rqbit_upload_speed_bytes,
+            rtbit_upload_speed_bytes,
             self.upload_speed.as_bytes()
         );
-        m!(gauge, rqbit_uptime_seconds, self.uptime_seconds);
-        m!(gauge, rqbit_peers_connecting, self.peers.connecting);
-        writeln!(&mut out, "# TYPE rqbit_peers_live gauge").unwrap();
+        m!(gauge, rtbit_uptime_seconds, self.uptime_seconds);
+        m!(gauge, rtbit_peers_connecting, self.peers.connecting);
+        writeln!(&mut out, "# TYPE rtbit_peers_live gauge").unwrap();
         writeln!(
             &mut out,
-            "rqbit_peers_live{{kind=\"tcp\"}} {}",
+            "rtbit_peers_live{{kind=\"tcp\"}} {}",
             self.peers.live_tcp
         )
         .unwrap();
         writeln!(
             &mut out,
-            "rqbit_peers_live{{kind=\"utp\"}} {}",
+            "rtbit_peers_live{{kind=\"utp\"}} {}",
             self.peers.live_utp
         )
         .unwrap();
         writeln!(
             &mut out,
-            "rqbit_peers_live{{kind=\"socks\"}} {}",
+            "rtbit_peers_live{{kind=\"socks\"}} {}",
             self.peers.live_socks
         )
         .unwrap();
-        m!(gauge, rqbit_peers_dead, self.peers.dead);
-        m!(gauge, rqbit_peers_not_needed, self.peers.not_needed);
-        m!(gauge, rqbit_peers_queued, self.peers.queued);
-        m!(gauge, rqbit_peers_seen, self.peers.seen);
-        m!(gauge, rqbit_peers_steals, self.peers.steals);
+        m!(gauge, rtbit_peers_dead, self.peers.dead);
+        m!(gauge, rtbit_peers_not_needed, self.peers.not_needed);
+        m!(gauge, rtbit_peers_queued, self.peers.queued);
+        m!(gauge, rtbit_peers_seen, self.peers.seen);
+        m!(gauge, rtbit_peers_steals, self.peers.steals);
     }
 }

@@ -49,7 +49,7 @@ pub fn make_router(
 ) -> anyhow::Result<axum::Router> {
     let root_desc = render_root_description_xml(&RootDescriptionInputs {
         friendly_name: &friendly_name,
-        manufacturer: "rqbit developers",
+        manufacturer: "rtbit developers",
         model_name: "1.0.0",
         unique_id: &upnp_usn,
         http_prefix: &http_prefix,
@@ -151,7 +151,7 @@ mod tests {
     fn test_device_description_xml_empty_prefix() {
         let xml = render_root_description_xml(&RootDescriptionInputs {
             friendly_name: "My Media",
-            manufacturer: "rqbit",
+            manufacturer: "rtbit",
             model_name: "1.0",
             unique_id: "uuid:abc",
             http_prefix: "",
@@ -175,7 +175,7 @@ mod tests {
         });
 
         // Parse as a UPnP RootDesc using the upnp crate's parser
-        let parsed: librqbit_upnp::RootDesc = quick_xml::de::from_str(&xml).unwrap();
+        let parsed: librtbit_upnp::RootDesc = quick_xml::de::from_str(&xml).unwrap();
         assert_eq!(parsed.devices.len(), 1);
         assert_eq!(parsed.devices[0].friendly_name, "Parseable Server");
         assert_eq!(parsed.devices[0].service_list.services.len(), 2);

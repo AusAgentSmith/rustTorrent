@@ -12,13 +12,13 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::Shell;
-use librqbit::{
+use librtbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ConnectionOptions,
     CreateTorrentOptions, ListOnlyResponse, ListenerMode, ListenerOptions, PeerConnectionOptions,
     Session, SessionOptions, SessionPersistenceConfig, TorrentStatsState,
     dht,
     http_api::{HttpApi, HttpApiOptions},
-    librqbit_spawn,
+    librtbit_spawn,
     limits::LimitsConfig,
     storage::{
         StorageFactory, StorageFactoryExt,
@@ -70,146 +70,146 @@ fn parse_umask(value: &str) -> anyhow::Result<libc::mode_t> {
 #[command(version, author, about)]
 struct Opts {
     /// The console loglevel
-    #[arg(value_enum, short = 'v', env = "RQBIT_LOG_LEVEL_CONSOLE")]
+    #[arg(value_enum, short = 'v', env = "RTBIT_LOG_LEVEL_CONSOLE")]
     log_level: Option<LogLevel>,
 
     /// The log filename to also write to in addition to the console.
-    #[arg(long = "log-file", env = "RQBIT_LOG_FILE")]
+    #[arg(long = "log-file", env = "RTBIT_LOG_FILE")]
     log_file: Option<String>,
 
     /// The value for RUST_LOG in the log file
     #[arg(
         long = "log-file-rust-log",
-        default_value = "librqbit=debug,info",
-        env = "RQBIT_LOG_FILE_RUST_LOG"
+        default_value = "librtbit=debug,info",
+        env = "RTBIT_LOG_FILE_RUST_LOG"
     )]
     log_file_rust_log: String,
 
     /// The interval to poll trackers, e.g. 30s.
     /// Trackers send the refresh interval when we connect to them. Often this is
     /// pretty big, e.g. 30 minutes. This can force a certain value.
-    #[arg(short = 'i', long = "tracker-refresh-interval", value_parser = parse_duration::parse, env="RQBIT_TRACKER_REFRESH_INTERVAL")]
+    #[arg(short = 'i', long = "tracker-refresh-interval", value_parser = parse_duration::parse, env="RTBIT_TRACKER_REFRESH_INTERVAL")]
     force_tracker_interval: Option<Duration>,
 
     /// The listen address for HTTP API.
     ///
-    /// This option will be ignored if rqbit is passed a socket by systemd via socket activation.
+    /// This option will be ignored if rtbit is passed a socket by systemd via socket activation.
     ///
-    /// Otherwise, if not set, "rqbit server" will listen on 127.0.0.1:3030, and "rqbit download"
+    /// Otherwise, if not set, "rtbit server" will listen on 127.0.0.1:3030, and "rtbit download"
     /// will listen on an ephemeral port that it will print.
-    #[arg(long = "http-api-listen-addr", env = "RQBIT_HTTP_API_LISTEN_ADDR")]
+    #[arg(long = "http-api-listen-addr", env = "RTBIT_HTTP_API_LISTEN_ADDR")]
     http_api_listen_addr: Option<SocketAddr>,
 
     /// Allow creating torrents via HTTP API
-    #[arg(long = "http-api-allow-create", env = "RQBIT_HTTP_API_ALLOW_CREATE")]
+    #[arg(long = "http-api-allow-create", env = "RTBIT_HTTP_API_ALLOW_CREATE")]
     http_api_allow_create: bool,
 
     /// Set this flag if you want to use tokio's single threaded runtime.
     /// It MAY perform better, but the main purpose is easier debugging, as time
     /// profilers work better with this one.
-    #[arg(short, long, env = "RQBIT_SINGLE_THREAD_RUNTIME")]
+    #[arg(short, long, env = "RTBIT_SINGLE_THREAD_RUNTIME")]
     single_thread_runtime: bool,
 
-    #[arg(long = "disable-dht", env = "RQBIT_DHT_DISABLE")]
+    #[arg(long = "disable-dht", env = "RTBIT_DHT_DISABLE")]
     disable_dht: bool,
 
     /// Set this to disable DHT reading and storing it's state.
-    /// For now this is a useful workaround if you want to launch multiple rqbit instances,
+    /// For now this is a useful workaround if you want to launch multiple rtbit instances,
     /// otherwise DHT port will conflict.
     #[arg(
         long = "disable-dht-persistence",
-        env = "RQBIT_DHT_PERSISTENCE_DISABLE"
+        env = "RTBIT_DHT_PERSISTENCE_DISABLE"
     )]
     disable_dht_persistence: bool,
 
     /// How often to write DHT routing table to disk, e.g. 60s, 5m, 10m.
     /// Default is 60s. Higher values reduce disk I/O at the cost of potentially losing
     /// more DHT state if the process crashes.
-    #[arg(long = "dht-dump-interval", value_parser = parse_duration::parse, env = "RQBIT_DHT_DUMP_INTERVAL")]
+    #[arg(long = "dht-dump-interval", value_parser = parse_duration::parse, env = "RTBIT_DHT_DUMP_INTERVAL")]
     dht_dump_interval: Option<Duration>,
 
     /// Set DHT bootstrap addrs
     /// A comma separated list of host:port or ip:port
-    #[arg(long = "dht-bootstrap-addrs", env = "RQBIT_DHT_BOOTSTRAP")]
+    #[arg(long = "dht-bootstrap-addrs", env = "RTBIT_DHT_BOOTSTRAP")]
     dht_bootstrap_addrs: Option<String>,
 
     /// The connect timeout, e.g. 1s, 1.5s, 100ms etc.
-    #[arg(long = "peer-connect-timeout", value_parser = parse_duration::parse, default_value="2s", env="RQBIT_PEER_CONNECT_TIMEOUT")]
+    #[arg(long = "peer-connect-timeout", value_parser = parse_duration::parse, default_value="2s", env="RTBIT_PEER_CONNECT_TIMEOUT")]
     peer_connect_timeout: Duration,
 
     /// The timeout for read() and write() operations, e.g. 1s, 1.5s, 100ms etc.
-    #[arg(long = "peer-read-write-timeout" , value_parser = parse_duration::parse, default_value="10s", env="RQBIT_PEER_READ_WRITE_TIMEOUT")]
+    #[arg(long = "peer-read-write-timeout" , value_parser = parse_duration::parse, default_value="10s", env="RTBIT_PEER_READ_WRITE_TIMEOUT")]
     peer_read_write_timeout: Duration,
 
     /// The maximum number of connected peers per torrent.
-    #[arg(long = "peer-limit", env = "RQBIT_PEER_LIMIT")]
+    #[arg(long = "peer-limit", env = "RTBIT_PEER_LIMIT")]
     peer_limit: Option<usize>,
 
     /// How many threads to spawn for the executor.
-    #[arg(short = 't', long, env = "RQBIT_RUNTIME_WORKER_THREADS")]
+    #[arg(short = 't', long, env = "RTBIT_RUNTIME_WORKER_THREADS")]
     worker_threads: Option<usize>,
 
     /// Disable listening for incoming connections over TCP. Note that outgoing connections
     /// can still be made (--disable-tcp-connect to disable).
-    #[arg(long = "disable-tcp-listen", env = "RQBIT_TCP_LISTEN_DISABLE")]
+    #[arg(long = "disable-tcp-listen", env = "RTBIT_TCP_LISTEN_DISABLE")]
     disable_tcp_listen: bool,
 
     /// Disable outgoing connections over TCP.
     /// Note that listening over TCP for incoming connections is enabled by default
     /// (--disable-tcp-listen to disable).
-    #[arg(long = "disable-tcp-connect", env = "RQBIT_TCP_CONNECT_DISABLE")]
+    #[arg(long = "disable-tcp-connect", env = "RTBIT_TCP_CONNECT_DISABLE")]
     disable_tcp_connect: bool,
 
     /// Enable to listen and connect over uTP
     #[arg(
         long = "experimental-enable-utp-listen",
-        env = "RQBIT_EXPERIMENTAL_UTP_LISTEN_ENABLE"
+        env = "RTBIT_EXPERIMENTAL_UTP_LISTEN_ENABLE"
     )]
     enable_utp_listen: bool,
 
     /// The port to listen for incoming connections (applies to both TCP and uTP).
     ///
-    /// Defaults to 4240 for the server, and an ephemeral port for "rqbit download / rqbit share".
-    #[arg(long = "listen-port", env = "RQBIT_LISTEN_PORT")]
+    /// Defaults to 4240 for the server, and an ephemeral port for "rtbit download / rtbit share".
+    #[arg(long = "listen-port", env = "RTBIT_LISTEN_PORT")]
     listen_port: Option<u16>,
 
     /// The port to advertise to trackers and DHT.
     ///
     /// If not set, will be the same as listen-port.
-    #[arg(long = "announce-port", env = "RQBIT_ANNOUNCE_PORT")]
+    #[arg(long = "announce-port", env = "RTBIT_ANNOUNCE_PORT")]
     announce_port: Option<u16>,
 
     /// What's the IP to listen on. Default is to listen on all interfaces on IPv4 and IPv6.
-    #[arg(long = "listen-ip", default_value = "::", env = "RQBIT_LISTEN_IP")]
+    #[arg(long = "listen-ip", default_value = "::", env = "RTBIT_LISTEN_IP")]
     listen_ip: IpAddr,
 
-    /// By default, rqbit will try to publish LISTEN_PORT through UPnP on your router.
+    /// By default, rtbit will try to publish LISTEN_PORT through UPnP on your router.
     /// This can disable it.
     #[arg(
         long = "disable-upnp-port-forward",
-        env = "RQBIT_UPNP_PORT_FORWARD_DISABLE"
+        env = "RTBIT_UPNP_PORT_FORWARD_DISABLE"
     )]
     disable_upnp_port_forward: bool,
 
-    /// If set, will run a UPnP Media server on RQBIT_HTTP_API_LISTEN_ADDR.
-    #[arg(long = "enable-upnp-server", env = "RQBIT_UPNP_SERVER_ENABLE")]
+    /// If set, will run a UPnP Media server on RTBIT_HTTP_API_LISTEN_ADDR.
+    #[arg(long = "enable-upnp-server", env = "RTBIT_UPNP_SERVER_ENABLE")]
     enable_upnp_server: bool,
 
     /// UPnP server name that would be displayed on devices in your network.
     #[arg(
         long = "upnp-server-friendly-name",
-        env = "RQBIT_UPNP_SERVER_FRIENDLY_NAME"
+        env = "RTBIT_UPNP_SERVER_FRIENDLY_NAME"
     )]
     upnp_server_friendly_name: Option<String>,
     /// What network device to bind to for DHT, BT-UDP, BT-TCP, trackers and LSD.
     /// On OSX will use IP(V6)_BOUND_IF, on Linux will use SO_BINDTODEVICE.
     ///
     /// Not supported on Windows (will error if you try to use it).
-    #[arg(long = "bind-device", env = "RQBIT_BIND_DEVICE")]
+    #[arg(long = "bind-device", env = "RTBIT_BIND_DEVICE")]
     bind_device_name: Option<String>,
 
     /// Force IPv4 only.
-    #[arg(long = "ipv4-only", env = "RQBIT_IPV4_ONLY")]
+    #[arg(long = "ipv4-only", env = "RTBIT_IPV4_ONLY")]
     ipv4_only: bool,
 
     #[command(subcommand)]
@@ -221,7 +221,7 @@ struct Opts {
     #[arg(
         long = "max-blocking-threads",
         default_value = "8",
-        env = "RQBIT_RUNTIME_MAX_BLOCKING_THREADS"
+        env = "RTBIT_RUNTIME_MAX_BLOCKING_THREADS"
     )]
     max_blocking_threads: u16,
 
@@ -234,11 +234,11 @@ struct Opts {
     /// The format is socks5://[username:password]@host:port
     ///
     /// You may also want to disable incoming connections via --disable-tcp-listen.
-    #[arg(long, env = "RQBIT_SOCKS_PROXY_URL")]
+    #[arg(long, env = "RTBIT_SOCKS_PROXY_URL")]
     socks_url: Option<String>,
 
     /// How many torrents can be initializing (rehashing) at the same time
-    #[arg(long, default_value = "5", env = "RQBIT_CONCURRENT_INIT_LIMIT")]
+    #[arg(long, default_value = "5", env = "RTBIT_CONCURRENT_INIT_LIMIT")]
     concurrent_init_limit: usize,
 
     /// Set the process umask to this value.
@@ -248,48 +248,48 @@ struct Opts {
     ///
     /// Read more at https://man7.org/linux/man-pages/man2/umask.2.html
     #[cfg(not(target_os = "windows"))]
-    #[arg(long, env = "RQBIT_UMASK", value_parser=parse_umask)]
+    #[arg(long, env = "RTBIT_UMASK", value_parser=parse_umask)]
     umask: Option<libc::mode_t>,
 
-    /// Disable uploading entirely. If this is set, rqbit won't share piece availability
+    /// Disable uploading entirely. If this is set, rtbit won't share piece availability
     /// and will disconnect on download request.
     ///
-    /// Might be useful e.g. if rqbit upload consumes all your upload bandwidth and interferes
+    /// Might be useful e.g. if rtbit upload consumes all your upload bandwidth and interferes
     /// with your other Internet usage.
     #[cfg(feature = "disable-upload")]
-    #[arg(long, env = "RQBIT_DISABLE_UPLOAD")]
+    #[arg(long, env = "RTBIT_DISABLE_UPLOAD")]
     disable_upload: bool,
 
     /// Limit download speed to bytes-per-second.
-    #[arg(long = "ratelimit-download", env = "RQBIT_RATELIMIT_DOWNLOAD")]
+    #[arg(long = "ratelimit-download", env = "RTBIT_RATELIMIT_DOWNLOAD")]
     ratelimit_download_bps: Option<NonZeroU32>,
 
     /// Limit upload speed to bytes-per-second.
-    #[arg(long = "ratelimit-upload", env = "RQBIT_RATELIMIT_UPLOAD")]
+    #[arg(long = "ratelimit-upload", env = "RTBIT_RATELIMIT_UPLOAD")]
     ratelimit_upload_bps: Option<NonZeroU32>,
 
     /// Downloads a p2p blocklist from this url and blocks connections from/to those peers.
     /// Supports file:/// and http(s):// URLs. Format is newline-delimited "name:start_ip-end_ip"
     /// E.g. https://github.com/Naunter/BT_BlockLists/raw/refs/heads/master/bt_blocklists.gz
-    #[arg(long, env = "RQBIT_BLOCKLIST_URL")]
+    #[arg(long, env = "RTBIT_BLOCKLIST_URL")]
     blocklist_url: Option<String>,
 
     /// Downloads a p2p allowlist from this url and blocks ALL connections BUT from/to those peers.
     /// Supports file:/// and http(s):// URLs. Format is newline-delimited "name:start_ip-end_ip"
     /// E.g. https://github.com/Naunter/BT_BlockLists/raw/refs/heads/master/bt_blocklists.gz
-    #[arg(long, env = "RQBIT_ALLOWLIST_URL")]
+    #[arg(long, env = "RTBIT_ALLOWLIST_URL")]
     allowlist_url: Option<String>,
 
     /// The filename with tracker URLs to always use for each torrent. Newline-delimited.
-    #[arg(long, env = "RQBIT_TRACKERS_FILENAME")]
+    #[arg(long, env = "RTBIT_TRACKERS_FILENAME")]
     trackers_filename: Option<String>,
 
-    /// Disable local peer discovery (LSD). By default rqbit will announce torrents to LAN.
-    #[arg(long = "disable-lsd", env = "RQBIT_LSD_DISABLE")]
+    /// Disable local peer discovery (LSD). By default rtbit will announce torrents to LAN.
+    #[arg(long = "disable-lsd", env = "RTBIT_LSD_DISABLE")]
     disable_local_peer_discovery: bool,
 
     /// Disable trackers (for debugging DHT, LSD and --initial-peers)
-    #[arg(long = "disable-trackers", env = "RQBIT_TRACKERS_DISABLE")]
+    #[arg(long = "disable-trackers", env = "RTBIT_TRACKERS_DISABLE")]
     disable_trackers: bool,
 }
 
@@ -301,7 +301,7 @@ struct ServerStartOptions {
     #[arg(
         long = "disable-persistence",
         help = "Disable server persistence. It will not read or write its state to disk.",
-        env = "RQBIT_SESSION_PERSISTENCE_DISABLE"
+        env = "RTBIT_SESSION_PERSISTENCE_DISABLE"
     )]
     /// Disable session persistence.
     disable_persistence: bool,
@@ -310,12 +310,12 @@ struct ServerStartOptions {
     /// If starts with postgres://, will use postgres as the backend instead of JSON file.
     #[arg(
         long = "persistence-location",
-        env = "RQBIT_SESSION_PERSISTENCE_LOCATION"
+        env = "RTBIT_SESSION_PERSISTENCE_LOCATION"
     )]
     persistence_location: Option<String>,
 
     /// [Experimental] if set, will try to resume quickly after restart and skip checksumming.
-    #[arg(long = "fastresume", env = "RQBIT_FASTRESUME")]
+    #[arg(long = "fastresume", env = "RTBIT_FASTRESUME")]
     fastresume: bool,
 
     /// Maximum denominator for fast resume probabilistic validation.
@@ -323,18 +323,18 @@ struct ServerStartOptions {
     /// Higher values check more pieces (stricter). Only meaningful with --fastresume.
     #[arg(
         long = "fastresume-validation-denom",
-        env = "RQBIT_FASTRESUME_VALIDATION_DENOM"
+        env = "RTBIT_FASTRESUME_VALIDATION_DENOM"
     )]
     fastresume_validation_denom: Option<u32>,
 
     /// The folder to watch for added .torrent files. All files in this folder will be automatically added
     /// to the session.
-    #[arg(long = "watch-folder", env = "RQBIT_WATCH_FOLDER")]
+    #[arg(long = "watch-folder", env = "RTBIT_WATCH_FOLDER")]
     watch_folder: Option<String>,
 
     /// Move completed torrents to this folder. When a torrent finishes downloading,
     /// its files will be moved from the output folder to this folder.
-    #[arg(long = "completed-folder", env = "RQBIT_COMPLETED_FOLDER")]
+    #[arg(long = "completed-folder", env = "RTBIT_COMPLETED_FOLDER")]
     completed_folder: Option<String>,
 }
 
@@ -421,24 +421,24 @@ struct ShareOpts {
     #[arg(short = 'n', long)]
     name: Option<String>,
 
-    /// Tracker URLs to share to (comma separated). Will append these to trackers from RQBIT_TRACKERS_FILENAME.
+    /// Tracker URLs to share to (comma separated). Will append these to trackers from RTBIT_TRACKERS_FILENAME.
     #[arg(value_delimiter = ',', num_args = 0..32)]
     trackers: Vec<url::Url>,
 }
 
 #[derive(Parser)]
 enum SubCommand {
-    /// Start rqbit server with HTTP API.
+    /// Start rtbit server with HTTP API.
     Server(ServerOpts),
     /// Create a torrent from a given path and announce it. Stateless.
     Share(ShareOpts),
     /// Download a single torrent, stateless.
     Download(DownloadOpts),
-    /// Shell completions. eval "$(rqbit completions bash)"
+    /// Shell completions. eval "$(rtbit completions bash)"
     Completions(CompletionsOpts),
 }
 
-/// Return the API listener socket passed to rqbit by systemd, if any.
+/// Return the API listener socket passed to rtbit by systemd, if any.
 ///
 /// An error indicates that the process was passed socket information by systemd, but we were unable
 /// to parse and/or use it.
@@ -499,7 +499,7 @@ fn main() -> anyhow::Result<()> {
         clap_complete::generate(
             completions_opts.shell,
             &mut Opts::command(),
-            "rqbit",
+            "rtbit",
             &mut io::stdout(),
         );
         return Ok(());
@@ -560,7 +560,7 @@ fn main() -> anyhow::Result<()> {
 
     let result = rt.block_on(async_main(opts, token.clone()));
     if let Err(e) = result.as_ref() {
-        error!("error running rqbit: {e:?}");
+        error!("error running rtbit: {e:?}");
     }
     rt.shutdown_timeout(Duration::from_secs(1));
     match result {
@@ -600,7 +600,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         log_file_rust_log: Some(&opts.log_file_rust_log),
     })?;
 
-    match librqbit::try_increase_nofile_limit() {
+    match librtbit::try_increase_nofile_limit() {
         Ok(limit) => info!(limit = limit, "increased open file limit"),
         Err(e) => warn!("failed increasing open file limit: {:#}", e),
     };
@@ -660,7 +660,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             fn wrap<S: StorageFactory + Clone>(s: S) -> impl StorageFactory {
                 #[cfg(feature = "debug_slow_disk")]
                 {
-                    use librqbit::storage::middleware::{
+                    use librtbit::storage::middleware::{
                         slow::SlowStorageFactory, timing::TimingStorageFactory,
                     };
                     TimingStorageFactory::new("hdd".to_owned(), SlowStorageFactory::new(s))
@@ -699,12 +699,12 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         completed_folder: None,
     };
 
-    // Credential store for persistent auth — uses the rqbit config directory
+    // Credential store for persistent auth — uses the rtbit config directory
     let credential_store = {
-        let config_dir = librqbit_core::directories::get_configuration_directory("session")
+        let config_dir = librtbit_core::directories::get_configuration_directory("session")
             .map(|d| d.config_dir().to_owned())
             .unwrap_or_else(|_| PathBuf::from("."));
-        Arc::new(librqbit::http_api::auth::CredentialStore::new(config_dir))
+        Arc::new(librtbit::http_api::auth::CredentialStore::new(config_dir))
     };
 
     // Load auth: credential store first, then env var fallback
@@ -714,7 +714,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             "loaded credentials from credential store"
         );
         Some((creds.username, creds.password))
-    } else if let Ok(up) = std::env::var("RQBIT_HTTP_BASIC_AUTH_USERPASS") {
+    } else if let Ok(up) = std::env::var("RTBIT_HTTP_BASIC_AUTH_USERPASS") {
         let (u, p) = up
             .split_once(":")
             .context("basic auth credentials should be in format username:password")?;
@@ -725,7 +725,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
 
     // Always create token store (needed for setup flow and login)
     let token_store = Some(std::sync::Arc::new(
-        librqbit::http_api::auth::TokenStore::new(),
+        librtbit::http_api::auth::TokenStore::new(),
     ));
 
     #[allow(clippy::needless_update)]
@@ -772,7 +772,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                             }
                             #[cfg(not(feature = "postgres"))]
                             {
-                                anyhow::bail!("rqbit was compiled without postgres support")
+                                anyhow::bail!("rtbit was compiled without postgres support")
                             }
                         } else {
                             sopts.persistence = Some(SessionPersistenceConfig::Json {
@@ -792,7 +792,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 let session =
                     Session::new_with_opts(PathBuf::from(&start_opts.output_folder), sopts)
                         .await
-                        .context("error initializing rqbit session")?;
+                        .context("error initializing rtbit session")?;
                 spawn_stats_printer(session.clone());
 
                 if let Some(watch_folder) = start_opts.watch_folder.as_ref() {
@@ -818,7 +818,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 anyhow::bail!("you must provide at least one URL to download")
             }
 
-            // "rqbit download" is ephemeral, so disable all persistence.
+            // "rtbit download" is ephemeral, so disable all persistence.
             sopts.disable_dht_persistence = true;
             sopts.persistence = None;
 
@@ -853,9 +853,9 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 sopts,
             )
             .await
-            .context("error initializing rqbit session")?;
+            .context("error initializing rtbit session")?;
 
-            librqbit_spawn(
+            librtbit_spawn(
                 trace_span!("stats_printer"),
                 "stats_printer",
                 stats_printer(session.clone()),
@@ -872,7 +872,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                     log_config,
                 )
                 .await?;
-                librqbit_spawn(debug_span!("http_api"), "http_api", http_api_fut);
+                librtbit_spawn(debug_span!("http_api"), "http_api", http_api_fut);
             }
 
             let mut added = false;
@@ -962,7 +962,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 anyhow::bail!("{path:?} does not exist")
             }
 
-            // "rqbit share" is ephemeral, so disable all persistence.
+            // "rtbit share" is ephemeral, so disable all persistence.
             sopts.disable_dht_persistence = true;
             sopts.persistence = None;
 
@@ -979,7 +979,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
 
             let session = Session::new_with_opts(PathBuf::new(), sopts)
                 .await
-                .context("error initializing rqbit session")?;
+                .context("error initializing rtbit session")?;
 
             let http_api_fut = start_http_api(
                 cancel,
@@ -1059,7 +1059,7 @@ async fn start_http_api(
                 let server = session
                     .make_upnp_adapter(
                         opts.upnp_server_friendly_name.clone().unwrap_or_else(|| {
-                            format!("rqbit@{}", gethostname::gethostname().to_string_lossy())
+                            format!("rtbit@{}", gethostname::gethostname().to_string_lossy())
                         }),
                         listen_addr.port(),
                     )
@@ -1146,7 +1146,7 @@ async fn stats_printer(session: Arc<Session>) -> Result<(), &'static str> {
 }
 
 fn spawn_stats_printer(session: Arc<Session>) {
-    librqbit_spawn(
+    librtbit_spawn(
         trace_span!("stats_printer"),
         "stats_printer",
         stats_printer(session.clone()),

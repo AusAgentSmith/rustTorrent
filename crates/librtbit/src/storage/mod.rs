@@ -36,7 +36,7 @@ use std::{
     path::Path,
 };
 
-use librqbit_core::lengths::ValidPieceIndex;
+use librtbit_core::lengths::ValidPieceIndex;
 
 use crate::torrent_state::{ManagedTorrentShared, TorrentMetadata};
 
