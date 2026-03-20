@@ -311,6 +311,15 @@ struct ServerStartOptions {
     #[arg(long = "fastresume", env = "RQBIT_FASTRESUME")]
     fastresume: bool,
 
+    /// Maximum denominator for fast resume probabilistic validation.
+    /// Default: 50. Set to 0 to skip probabilistic validation entirely.
+    /// Higher values check more pieces (stricter). Only meaningful with --fastresume.
+    #[arg(
+        long = "fastresume-validation-denom",
+        env = "RQBIT_FASTRESUME_VALIDATION_DENOM"
+    )]
+    fastresume_validation_denom: Option<u32>,
+
     /// The folder to watch for added .torrent files. All files in this folder will be automatically added
     /// to the session.
     #[arg(long = "watch-folder", env = "RQBIT_WATCH_FOLDER")]
@@ -647,6 +656,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         concurrent_init_limit: Some(opts.concurrent_init_limit),
         root_span: None,
         fastresume: false,
+        fastresume_validation_denom: None,
         cancellation_token: Some(cancel.clone()),
         #[cfg(feature = "disable-upload")]
         disable_upload: opts.disable_upload,
@@ -727,6 +737,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
 
                 http_api_opts.read_only = false;
                 sopts.fastresume = start_opts.fastresume;
+                sopts.fastresume_validation_denom = start_opts.fastresume_validation_denom;
 
                 let session =
                     Session::new_with_opts(PathBuf::from(&start_opts.output_folder), sopts)

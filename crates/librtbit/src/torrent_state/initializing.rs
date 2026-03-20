@@ -108,14 +108,28 @@ impl TorrentStateInitializing {
                 }
 
                 // For all the remaining pieces we claim we have, validate them with decreasing probability.
-                let mut queue = queue.iter_ones().collect_vec();
-                queue.shuffle(&mut rand::rng());
-                for (tmp_id, piece_id) in queue.into_iter().enumerate() {
-                    let denom: u32 = (tmp_id + 1).min(50).try_into().unwrap();
-                    if rand::rng().random_ratio(1, denom) {
-                        to_validate.set(piece_id, true);
+                // The denominator cap is configurable via session options.
+                let max_denom: Option<u32> = self
+                    .shared
+                    .session
+                    .upgrade()
+                    .and_then(|s| s.fastresume_validation_denom)
+                    .or(Some(50)); // default: cap at 50
+
+                if let Some(cap) = max_denom
+                    && cap > 0
+                {
+                    let mut queue = queue.iter_ones().collect_vec();
+                    queue.shuffle(&mut rand::rng());
+                    for (tmp_id, piece_id) in queue.into_iter().enumerate() {
+                        let denom: u32 = (tmp_id + 1).min(cap as usize).try_into().unwrap();
+                        if rand::rng().random_ratio(1, denom) {
+                            to_validate.set(piece_id, true);
+                        }
                     }
                 }
+                // max_denom == Some(0): skip probabilistic validation entirely,
+                // only the mandatory one-per-file pieces above will be checked
 
                 let to_validate_count = to_validate.count_ones();
                 for (id, piece_id) in to_validate

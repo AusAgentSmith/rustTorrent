@@ -189,12 +189,18 @@ impl BitVFactory for JsonSessionPersistenceStore {
     async fn load(&self, id: TorrentIdOrHash) -> anyhow::Result<Option<Box<dyn BitV>>> {
         let h = self.to_hash(id).await?;
         let filename = self.bitv_filename(&h);
-        match DiskBackedBitV::new(filename, self.spawner.clone()).await {
+        match DiskBackedBitV::new(filename.clone(), self.spawner.clone()).await {
             Ok(bitv) => Ok(Some(bitv.into_dyn())),
             Err(e) => {
                 if let Some(e) = e.downcast_ref::<std::io::Error>()
                     && matches!(e.kind(), std::io::ErrorKind::NotFound)
                 {
+                    return Ok(None);
+                }
+                // CRC mismatch or other corruption: log warning and return None
+                // to trigger a full integrity check instead of aborting
+                if format!("{e:#}").contains("CRC32 mismatch") {
+                    warn!(?filename, "bitv CRC32 mismatch, will do full check");
                     return Ok(None);
                 }
                 return Err(e);
@@ -225,7 +231,8 @@ impl BitVFactory for JsonSessionPersistenceStore {
             .open(&tmp_filename)
             .await
             .with_context(|| format!("error opening {filename:?}"))?;
-        tokio::io::copy(&mut b.as_raw_slice(), &mut dst)
+        let data = crate::bitv::bitv_with_header(b.as_raw_slice());
+        dst.write_all(&data)
             .await
             .context("error writing bitslice to {filename:?}")?;
         tokio::fs::rename(&tmp_filename, &filename)

@@ -116,6 +116,7 @@ async fn api_from_config(
             connect: Some(connect),
             listen,
             fastresume: config.persistence.fastresume,
+            fastresume_validation_denom: config.persistence.fastresume_validation_denom,
             ratelimits: config.ratelimits,
             #[cfg(feature = "disable-upload")]
             disable_upload: config.disable_upload,

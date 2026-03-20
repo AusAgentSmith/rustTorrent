@@ -2845,6 +2845,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "console-subscriber",
+ "crc32fast",
  "dashmap 6.1.0",
  "futures",
  "governor",

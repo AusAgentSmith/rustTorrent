@@ -116,6 +116,9 @@ pub struct Session {
     _disable_upload: bool,
     pub ipv4_only: bool,
     pub peer_limit: Option<usize>,
+
+    /// Configurable cap for probabilistic fastresume validation denominator.
+    pub(crate) fastresume_validation_denom: Option<u32>,
 }
 
 impl Session {
@@ -368,6 +371,7 @@ impl Session {
                 blocklist,
                 allowlist,
                 lsd,
+                fastresume_validation_denom: opts.fastresume_validation_denom,
             });
 
             if let Some(mut listen) = listen_result {

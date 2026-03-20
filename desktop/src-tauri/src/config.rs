@@ -103,6 +103,9 @@ pub struct RqbitDesktopConfigPersistence {
     #[serde(default)]
     pub fastresume: bool,
 
+    #[serde(default)]
+    pub fastresume_validation_denom: Option<u32>,
+
     /// Deprecated, but keeping for backwards compat for serialized / deserialized config.
     #[serde(default)]
     pub filename: PathBuf,

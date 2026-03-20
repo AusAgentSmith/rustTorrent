@@ -239,6 +239,12 @@ pub struct SessionOptions {
     /// Enable fastresume, to restore state quickly after restart.
     pub fastresume: bool,
 
+    /// Controls the intensity of probabilistic piece validation during fast resume.
+    /// - `None`: uses the built-in default (denominator capped at 50).
+    /// - `Some(0)`: skip probabilistic validation entirely (only per-file mandatory checks).
+    /// - `Some(n)` where n > 0: cap the denominator at n. Higher = more pieces checked.
+    pub fastresume_validation_denom: Option<u32>,
+
     /// Turn on to dump session contents into a file periodically, so that on next start
     /// all remembered torrents will continue where they left off.
     pub persistence: Option<SessionPersistenceConfig>,
