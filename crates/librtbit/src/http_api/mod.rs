@@ -156,7 +156,7 @@ impl HttpApi {
             use utoipa::OpenApi;
             use utoipa_swagger_ui::SwaggerUi;
             main_router = main_router.merge(
-                SwaggerUi::new("/swagger/{tail:.*}")
+                SwaggerUi::new("/swagger/{*tail}")
                     .url("/api-docs/openapi.json", ApiDoc::openapi()),
             );
         }
