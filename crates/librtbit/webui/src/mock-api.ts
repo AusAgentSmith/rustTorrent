@@ -609,4 +609,11 @@ export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
   setRustLog: async (): Promise<void> => {
     await new Promise((r) => setTimeout(r, 100));
   },
+
+  getMetadata: async (): Promise<Uint8Array> => {
+    // Return a minimal bencoded .torrent with mock trackers
+    const mockTorrent =
+      "d8:announce35:udp://tracker.example.com:6969/announce13:announce-listll35:udp://tracker.example.com:6969/announceel38:https://tracker2.example.org:443/announceee4:infod6:lengthi1024ee8:url-list0:e";
+    return new TextEncoder().encode(mockTorrent);
+  },
 };

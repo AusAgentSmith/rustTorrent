@@ -1,14 +1,7 @@
 import { JSX, useCallback, useContext, useMemo, useState } from "react";
 import { FaPause, FaPlay, FaTrash } from "react-icons/fa";
 import { GoSearch, GoX } from "react-icons/go";
-import {
-  BsBodyText,
-  BsGrid,
-  BsListUl,
-  BsMoon,
-  BsSliders2,
-  BsSun,
-} from "react-icons/bs";
+import { BsBodyText, BsMoon, BsSliders2, BsSun } from "react-icons/bs";
 import { HiOutlineMenu } from "react-icons/hi";
 import debounce from "lodash.debounce";
 
@@ -59,8 +52,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const selectedTorrentIds = useUIStore((state) => state.selectedTorrentIds);
   const searchQuery = useUIStore((state) => state.searchQuery);
   const setSearchQuery = useUIStore((state) => state.setSearchQuery);
-  const viewMode = useUIStore((state) => state.viewMode);
-  const toggleViewMode = useUIStore((state) => state.toggleViewMode);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
 
   // Torrent store
@@ -278,19 +269,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <IconButton onClick={handleDarkModeToggle} title="Toggle dark mode">
         {isDark ? <BsSun /> : <BsMoon />}
       </IconButton>
-      {isLargeScreen && (
-        <IconButton
-          onClick={toggleViewMode}
-          title={
-            viewMode === "compact"
-              ? "Switch to card view"
-              : "Switch to table view"
-          }
-        >
-          {viewMode === "compact" ? <BsGrid /> : <BsListUl />}
-        </IconButton>
-      )}
-
       {/* Delete modal */}
       <DeleteTorrentModal
         show={showDeleteModal}

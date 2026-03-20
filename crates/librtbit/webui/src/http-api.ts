@@ -214,4 +214,9 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
   setRustLog: (value: string): Promise<void> => {
     return makeRequest("POST", "/rust_log", value);
   },
+  getMetadata: async (index: number): Promise<Uint8Array> => {
+    return new Uint8Array(
+      await makeBinaryRequest(`/torrents/${index}/metadata`),
+    );
+  },
 };

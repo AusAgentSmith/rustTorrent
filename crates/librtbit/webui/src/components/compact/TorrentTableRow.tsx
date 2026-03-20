@@ -3,12 +3,29 @@ import { StatusIcon } from "../StatusIcon";
 import { formatBytes } from "../../helper/formatBytes";
 import { getCompletionETA } from "../../helper/getCompletionETA";
 import { memo } from "react";
+import { ColumnDef, ColumnId, useColumnStore } from "../../stores/columnStore";
 
 interface TorrentTableRowProps {
   torrent: TorrentListItem;
   isSelected: boolean;
   onRowClick: (id: number, e: React.MouseEvent) => void;
   onCheckboxChange: (id: number) => void;
+  visibleColumns: ColumnDef[];
+}
+
+/** Shared colgroup matching the header */
+function RowColGroup({ columns }: { columns: ColumnDef[] }) {
+  const getWidth = useColumnStore((s) => s.getWidth);
+  return (
+    <colgroup>
+      {columns.map((col) => {
+        const w = getWidth(col.id);
+        return (
+          <col key={col.id} style={w > 0 ? { width: `${w}px` } : undefined} />
+        );
+      })}
+    </colgroup>
+  );
 }
 
 const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
@@ -16,6 +33,7 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
   isSelected,
   onRowClick,
   onCheckboxChange,
+  visibleColumns,
 }) => {
   const stats = torrent.stats;
   const state = stats?.state ?? "";
@@ -52,23 +70,23 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
     onCheckboxChange(torrent.id);
   };
 
-  // Common cell styles to avoid repetition
-  const cellBase = "px-2 align-middle";
-  const numericCell = `w-20 ${cellBase} text-right text-secondary whitespace-nowrap`;
-  const centeredCell = `w-20 ${cellBase} text-center text-secondary whitespace-nowrap`;
+  const cellBorder = "border-r border-divider/40";
 
-  // Use table-fixed layout to match header column widths
-  return (
-    <table className="w-full table-fixed">
-      <tbody>
-        <tr
-          onMouseDown={handleRowClick}
-          className={`cursor-pointer border-b border-divider text-sm h-8 ${
-            isSelected ? "bg-primary/10" : "hover:bg-surface-raised"
-          }`}
-        >
+  function renderCell(col: ColumnDef): React.ReactNode {
+    const alignClass =
+      col.align === "center"
+        ? "text-center"
+        : col.align === "right"
+          ? "text-right"
+          : "text-left";
+    const baseCls = `px-2 align-middle whitespace-nowrap ${cellBorder}`;
+
+    switch (col.id as ColumnId) {
+      case "checkbox":
+        return (
           <td
-            className={`w-8 ${cellBase} text-center`}
+            key="checkbox"
+            className={`px-2 align-middle text-center ${cellBorder}`}
             onMouseDown={handleCheckboxClick}
           >
             <input
@@ -78,7 +96,10 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
               className="w-4 h-4 rounded border-divider-strong bg-surface text-primary focus:ring-primary"
             />
           </td>
-          <td className="w-8 px-1 align-middle">
+        );
+      case "status_icon":
+        return (
+          <td key="status_icon" className={`px-1 align-middle ${cellBorder}`}>
             <StatusIcon
               className="w-5 h-5"
               error={!!error}
@@ -86,12 +107,19 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
               finished={finished}
             />
           </td>
+        );
+      case "id":
+        return (
           <td
-            className={`w-12 ${cellBase} text-center text-tertiary font-mono whitespace-nowrap`}
+            key="id"
+            className={`${baseCls} text-center text-tertiary font-mono`}
           >
             {torrent.id}
           </td>
-          <td className={cellBase}>
+        );
+      case "name":
+        return (
+          <td key="name" className={`px-2 align-middle ${cellBorder}`}>
             <div className="truncate" title={name}>
               {name || "Loading..."}
             </div>
@@ -101,8 +129,19 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
               </div>
             )}
           </td>
-          <td className={numericCell}>{formatBytes(totalBytes)}</td>
-          <td className={`w-24 ${cellBase} text-center`}>
+        );
+      case "size":
+        return (
+          <td key="size" className={`${baseCls} ${alignClass} text-secondary`}>
+            {formatBytes(totalBytes)}
+          </td>
+        );
+      case "progress":
+        return (
+          <td
+            key="progress"
+            className={`px-2 align-middle text-center ${cellBorder}`}
+          >
             <div className="flex items-center gap-2">
               <div className="flex-1 h-1.5 bg-divider rounded-full overflow-hidden">
                 <div
@@ -123,18 +162,100 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
               </span>
             </div>
           </td>
-          <td className={numericCell}>{formatBytes(progressBytes)}</td>
-          <td className={numericCell}>{downloadSpeed}</td>
-          <td className={numericCell}>{uploadSpeed}</td>
-          <td className={numericCell}>
-            {uploadedBytes > 0 && <>{formatBytes(uploadedBytes)}</>}
-          </td>
-          <td className={centeredCell}>{displayEta}</td>
+        );
+      case "downloadedBytes":
+        return (
           <td
-            className={`w-16 ${cellBase} text-center text-secondary whitespace-nowrap`}
+            key="downloadedBytes"
+            className={`${baseCls} ${alignClass} text-secondary`}
           >
+            {formatBytes(progressBytes)}
+          </td>
+        );
+      case "downSpeed":
+        return (
+          <td
+            key="downSpeed"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {downloadSpeed}
+          </td>
+        );
+      case "upSpeed":
+        return (
+          <td
+            key="upSpeed"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {uploadSpeed}
+          </td>
+        );
+      case "uploadedBytes":
+        return (
+          <td
+            key="uploadedBytes"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {uploadedBytes > 0 ? formatBytes(uploadedBytes) : ""}
+          </td>
+        );
+      case "eta":
+        return (
+          <td key="eta" className={`${baseCls} ${alignClass} text-secondary`}>
+            {displayEta}
+          </td>
+        );
+      case "peers":
+        return (
+          <td key="peers" className={`${baseCls} ${alignClass} text-secondary`}>
             {peersDisplay}
           </td>
+        );
+      case "state":
+        return (
+          <td
+            key="state"
+            className={`${baseCls} ${alignClass} text-secondary capitalize`}
+          >
+            {state}
+          </td>
+        );
+      case "info_hash":
+        return (
+          <td
+            key="info_hash"
+            className={`px-2 align-middle font-mono text-xs text-tertiary ${cellBorder}`}
+          >
+            <div className="truncate" title={torrent.info_hash}>
+              {torrent.info_hash}
+            </div>
+          </td>
+        );
+      case "ratio": {
+        const ratio =
+          totalBytes > 0 ? (uploadedBytes / totalBytes).toFixed(2) : "0.00";
+        return (
+          <td key="ratio" className={`${baseCls} ${alignClass} text-secondary`}>
+            {ratio}
+          </td>
+        );
+      }
+      default:
+        return <td key={col.id} className={baseCls} />;
+    }
+  }
+
+  return (
+    <table className="w-full table-fixed">
+      <RowColGroup columns={visibleColumns} />
+      <tbody>
+        <tr
+          onMouseDown={handleRowClick}
+          className={`cursor-pointer border-b border-divider text-sm h-8 ${
+            isSelected ? "bg-primary/10" : "hover:bg-surface-raised"
+          }`}
+        >
+          {visibleColumns.map((col) => renderCell(col))}
         </tr>
       </tbody>
     </table>

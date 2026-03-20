@@ -172,5 +172,10 @@ export const makeAPI = (configuration: RqbitDesktopConfig): RqbitAPI => {
     setRustLog: (value: string) => {
       return invokeAPI<void>("set_rust_log", { value });
     },
+    getMetadata: async (index: number): Promise<Uint8Array> => {
+      return new Uint8Array(
+        await invokeAPI<ArrayBuffer>("torrent_metadata", { id: index }),
+      );
+    },
   };
 };

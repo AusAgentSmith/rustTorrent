@@ -287,4 +287,5 @@ export interface RqbitAPI {
   setLimits: (limits: LimitsConfig) => Promise<void>;
   getDhtStats: () => Promise<DhtStats>;
   setRustLog: (value: string) => Promise<void>;
+  getMetadata: (index: number) => Promise<Uint8Array>;
 }

@@ -5,7 +5,6 @@ import { GeneralTab } from "./GeneralTab";
 import { ConnectionTab } from "./ConnectionTab";
 import { DHTTab } from "./DHTTab";
 import { HttpApiTab } from "./HttpApiTab";
-import { AdvancedTab } from "./AdvancedTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
 import { ErrorWithLabel } from "../../rqbit-web";
@@ -115,11 +114,6 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           id: "http-api",
           label: "HTTP API",
           content: <HttpApiTab />,
-        },
-        {
-          id: "advanced",
-          label: "Advanced",
-          content: <AdvancedTab />,
         },
       ]}
       onSave={handleSave}

@@ -12,7 +12,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["default-tls", "postgres", "webui", "prometheus"]
+default = ["default-tls", "postgres", "webui", "prometheus", "swagger"]
 openssl-vendored = ["openssl/vendored"]
 tokio-console = ["librqbit/tokio-console"]
 webui = ["librqbit/webui"]
@@ -23,6 +23,7 @@ rust-tls = ["librqbit/rust-tls"]
 debug_slow_disk = ["librqbit/storage_middleware"]
 postgres = ["librqbit/postgres"]
 disable-upload = ["librqbit/disable-upload"]
+swagger = ["librqbit/swagger"]
 _disable_disk_write_net_benchmark = [
     "librqbit/_disable_disk_write_net_benchmark",
 ]

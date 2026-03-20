@@ -59,4 +59,7 @@ export const APIContext = createContext<RqbitAPI>({
   setRustLog: function (value: string): Promise<void> {
     throw new Error("Function not implemented.");
   },
+  getMetadata: function (index: number): Promise<Uint8Array> {
+    throw new Error("Function not implemented.");
+  },
 });

@@ -3,11 +3,13 @@ import { Virtuoso } from "react-virtuoso";
 import { TorrentListItem } from "../../api-types";
 import { TorrentTableRow } from "./TorrentTableRow";
 import { useUIStore } from "../../stores/uiStore";
+import { useColumnStore, ColumnDef, ColumnId } from "../../stores/columnStore";
 import { Spinner } from "../Spinner";
-import { TableHeader } from "./TableHeader";
+import { SortIcon } from "../SortIcon";
 import { isTorrentVisible, SortDirection } from "../../helper/torrentFilters";
+import { ColumnMenu } from "./ColumnMenu";
 
-// Extended sort columns for table view (includes columns not in card view)
+// Sort columns: all sortable column IDs
 export type TableSortColumn =
   | "id"
   | "name"
@@ -18,7 +20,9 @@ export type TableSortColumn =
   | "upSpeed"
   | "uploadedBytes"
   | "eta"
-  | "peers";
+  | "peers"
+  | "state"
+  | "ratio";
 
 const DEFAULT_SORT_COLUMN: TableSortColumn = "id";
 const DEFAULT_SORT_DIRECTION: SortDirection = "desc";
@@ -56,7 +60,29 @@ function getTableSortValue(
     }
     case "peers":
       return t.stats?.live?.snapshot.peer_stats?.live ?? 0;
+    case "state":
+      return t.stats?.state ?? "";
+    case "ratio": {
+      const uploaded = t.stats?.live?.snapshot.uploaded_bytes ?? 0;
+      const total = t.stats?.total_bytes ?? 1;
+      return total > 0 ? uploaded / total : 0;
+    }
   }
+}
+
+/** Generate a <colgroup> from visible columns with their widths */
+function TableColGroup({ columns }: { columns: ColumnDef[] }) {
+  const getWidth = useColumnStore((s) => s.getWidth);
+  return (
+    <colgroup>
+      {columns.map((col) => {
+        const w = getWidth(col.id);
+        return (
+          <col key={col.id} style={w > 0 ? { width: `${w}px` } : undefined} />
+        );
+      })}
+    </colgroup>
+  );
 }
 
 interface TorrentTableProps {
@@ -78,6 +104,10 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
   const searchQuery = useUIStore((state) => state.searchQuery);
   const statusFilter = useUIStore((state) => state.statusFilter);
 
+  const visibleColumns = useColumnStore((s) => s.getVisibleColumns)();
+  const getWidth = useColumnStore((s) => s.getWidth);
+  const setColumnWidth = useColumnStore((s) => s.setColumnWidth);
+
   const normalizedQuery = searchQuery.toLowerCase().trim();
 
   // Local sorting state
@@ -86,6 +116,19 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
   const [sortDirection, setSortDirectionState] = useState<SortDirection>(
     DEFAULT_SORT_DIRECTION,
   );
+
+  // Resize state
+  const [resizing, setResizing] = useState<{
+    colId: ColumnId;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // Column context menu
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const setSortColumn = useCallback((column: TableSortColumn) => {
     setSortColumnState((prevColumn) => {
@@ -142,14 +185,12 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
   };
 
   // Store orderedIds in a ref so handleRowClick doesn't need it as a dependency
-  // Use visibleTorrentIds for navigation (skips hidden rows)
   const orderedIdsRef = useRef<number[]>([]);
   orderedIdsRef.current = visibleTorrentIds;
 
   // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if no input is focused
       const activeElement = document.activeElement;
       if (
         activeElement &&
@@ -173,7 +214,7 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectRelative]);
 
-  // Row click handler - stable because it reads from ref
+  // Row click handler
   const handleRowClick = useCallback(
     (id: number, e: React.MouseEvent) => {
       if (e.shiftKey) {
@@ -186,6 +227,48 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     [selectRange, selectTorrent],
   );
 
+  // Column resize handlers
+  useEffect(() => {
+    if (!resizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizing.startX;
+      setColumnWidth(resizing.colId, resizing.startWidth + delta);
+    };
+
+    const handleMouseUp = () => {
+      setResizing(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    // Prevent text selection while resizing
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [resizing, setColumnWidth]);
+
+  const handleResizeStart = useCallback(
+    (colId: ColumnId, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentWidth = getWidth(colId);
+      setResizing({ colId, startX: e.clientX, startWidth: currentWidth });
+    },
+    [getWidth],
+  );
+
+  const handleHeaderContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
   // Item renderer for react-virtuoso
   const itemContent = useCallback(
     (index: number) => {
@@ -197,10 +280,17 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
           isSelected={selectedTorrentIds.has(torrent.id)}
           onRowClick={handleRowClick}
           onCheckboxChange={toggleSelection}
+          visibleColumns={visibleColumns}
         />
       );
     },
-    [filteredTorrents, selectedTorrentIds, handleRowClick, toggleSelection],
+    [
+      filteredTorrents,
+      selectedTorrentIds,
+      handleRowClick,
+      toggleSelection,
+      visibleColumns,
+    ],
   );
 
   if (loading) {
@@ -224,109 +314,79 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     <div className="flex flex-col h-full">
       {/* Header */}
       <table className="w-full table-fixed">
+        <TableColGroup columns={visibleColumns} />
         <thead className="bg-surface-raised text-sm">
-          <tr className="border-b border-divider">
-            <th className="w-8 px-2 py-3">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) el.indeterminate = someSelected && !allSelected;
-                }}
-                onChange={handleHeaderCheckbox}
-                className="w-4 h-4 rounded border-divider-strong bg-surface text-primary focus:ring-primary"
-              />
-            </th>
-            <th className="w-8 px-1 py-3"></th>
-            <TableHeader
-              column="id"
-              label="ID"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-12"
-              align="center"
-            />
-            <TableHeader
-              column="name"
-              label="Name"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              align="left"
-            />
-            <TableHeader
-              column="size"
-              label="Size"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="right"
-            />
-            <TableHeader
-              column="progress"
-              label="Progress"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-24"
-              align="center"
-            />
-            <TableHeader
-              column="downloadedBytes"
-              label="Recv"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="right"
-            />
-            <TableHeader
-              column="downSpeed"
-              label="↓ Speed"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="right"
-            />
-            <TableHeader
-              column="upSpeed"
-              label="↑ Speed"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="right"
-            />
-            <TableHeader
-              column="uploadedBytes"
-              label="Sent"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="right"
-            />
-            <TableHeader
-              column="eta"
-              label="ETA"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-20"
-              align="center"
-            />
-            <TableHeader
-              column="peers"
-              label="Peers"
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              className="w-16"
-              align="center"
-            />
+          <tr
+            className="border-b border-divider"
+            onContextMenu={handleHeaderContextMenu}
+          >
+            {visibleColumns.map((col) => {
+              if (col.id === "checkbox") {
+                return (
+                  <th
+                    key="checkbox"
+                    className="px-2 py-3 border-r border-divider/40"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected && !allSelected;
+                      }}
+                      onChange={handleHeaderCheckbox}
+                      className="w-4 h-4 rounded border-divider-strong bg-surface text-primary focus:ring-primary"
+                    />
+                  </th>
+                );
+              }
+              if (col.id === "status_icon") {
+                return (
+                  <th
+                    key="status_icon"
+                    className="px-1 py-3 border-r border-divider/40"
+                  />
+                );
+              }
+
+              const alignClass =
+                col.align === "center"
+                  ? "text-center"
+                  : col.align === "right"
+                    ? "text-right"
+                    : "text-left";
+              const isSortable = col.sortable;
+              const w = getWidth(col.id);
+              const canResize = w > 0; // flex column (name) has width 0
+
+              return (
+                <th
+                  key={col.id}
+                  className={`relative px-2 py-2 text-secondary select-none whitespace-nowrap border-r border-divider/40 ${alignClass} ${isSortable ? "cursor-pointer hover:text-text" : ""}`}
+                  onClick={
+                    isSortable
+                      ? () => handleSort(col.id as TableSortColumn)
+                      : undefined
+                  }
+                >
+                  {col.label}
+                  {isSortable && (
+                    <SortIcon
+                      column={col.id}
+                      sortColumn={sortColumn}
+                      sortDirection={sortDirection}
+                    />
+                  )}
+                  {canResize && (
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-10"
+                      onMouseDown={(e) =>
+                        handleResizeStart(col.id as ColumnId, e)
+                      }
+                    />
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
       </table>
@@ -337,6 +397,15 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
           itemContent={itemContent}
         />
       </div>
+
+      {/* Column visibility context menu */}
+      {contextMenu && (
+        <ColumnMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 };
