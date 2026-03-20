@@ -1,0 +1,158 @@
+# benchv2: Rust-native BitTorrent benchmark
+#
+# All Python components replaced with a single Rust binary:
+#   benchv2 tracker    — HTTP BT tracker
+#   benchv2 mock-seed  — async mock seeder (100-1000 peers)
+#   benchv2 run        — orchestrator
+
+services:
+  tracker:
+    build: .
+    command: ["tracker", "--port", "6969"]
+    networks: [bench]
+    restart: unless-stopped
+
+  seeder:
+    build: ../bench/seeder
+    deploy:
+      replicas: ${MAX_SEEDERS:-10}
+    volumes:
+      - testdata:/data/testdata
+      - torrents:/data/torrents
+    networks: [bench]
+    depends_on: [tracker]
+    restart: unless-stopped
+
+  mock-seeder:
+    build: .
+    command:
+      - mock-seed
+      - --peers=${MOCK_PEERS:-100}
+      - --base-port=6900
+      - --tracker=http://tracker:6969/announce
+    volumes:
+      - testdata:/data/testdata
+      - torrents:/data/torrents
+    networks: [bench]
+    depends_on: [tracker]
+    restart: unless-stopped
+
+  rqbit:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command:
+      - --disable-dht
+      - --disable-dht-persistence
+      - --disable-upnp-port-forward
+      - --disable-lsd
+      - --tracker-refresh-interval
+      - "5s"
+      - --peer-connect-timeout
+      - "1s"
+      - server
+      - start
+      - /home/rqbit/downloads
+    environment:
+      - RQBIT_HTTP_API_LISTEN_ADDR=0.0.0.0:3030
+      - RQBIT_LISTEN_PORT=4240
+    volumes:
+      - downloads-rqbit:/home/rqbit/downloads
+      - rqbit-db:/home/rqbit/db
+      - rqbit-cache:/home/rqbit/cache
+    networks: [bench]
+    depends_on: [tracker]
+    restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - WEBUI_PORT=8080
+      - DOCKER_MODS=
+    volumes:
+      - downloads-qbt:/downloads
+      - qbt-config:/config
+    networks: [bench]
+    depends_on: [tracker]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks: [bench]
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.disable-defaults"
+      - "--collector.cpu"
+      - "--collector.diskstats"
+      - "--collector.filesystem"
+      - "--collector.meminfo"
+      - "--collector.netdev"
+    networks: [bench]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.53.3
+    volumes:
+      - ../bench/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1d"
+    networks: [bench]
+    depends_on: [cadvisor, node-exporter]
+    restart: unless-stopped
+
+  orchestrator:
+    build: .
+    command:
+      - run
+      - --scenarios=${SCENARIOS:-quick}
+    volumes:
+      - testdata:/data/testdata
+      - torrents:/data/torrents
+      - ./results:/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [bench]
+    depends_on:
+      - tracker
+      - seeder
+      - mock-seeder
+      - rqbit
+      - qbittorrent
+      - prometheus
+      - cadvisor
+      - node-exporter
+
+networks:
+  bench:
+    driver: bridge
+
+volumes:
+  testdata:
+  torrents:
+  downloads-rqbit:
+  downloads-qbt:
+  qbt-config:
+  rqbit-db:
+  rqbit-cache:
+  prometheus-data:

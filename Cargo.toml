@@ -16,6 +16,7 @@ members = [
     "crates/upnp-serve",
     "desktop/src-tauri",
 ]
+exclude = ["benchv2"]
 
 # Everything except desktop
 default-members = [
