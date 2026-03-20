@@ -10,6 +10,8 @@ const PANEL_BG: &str = "#16213e";
 const TEXT_COLOR: &str = "#ddd";
 const GRID_COLOR: &str = "#333";
 const MUTED_TEXT: &str = "#888";
+const GREEN: &str = "#4CAF50";
+const RED: &str = "#FF5722";
 
 /// Generate all charts as SVGs.
 pub fn generate_all(results: &[(ClientResult, ClientResult)], dir: &Path) -> Result<()> {
@@ -319,8 +321,8 @@ fn write_cross_scenario(results: &[(ClientResult, ClientResult)], dir: &Path) ->
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
 <text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Cross-Scenario: Speed Ratio (qBittorrent duration / rqbit duration)</text>
-<text x="{}" y="50" fill="#4CAF50" font-size="10" font-family="monospace">Green = rqbit faster</text>
-<text x="{}" y="50" fill="#FF5722" font-size="10" font-family="monospace">Red = qBittorrent faster</text>
+<text x="{}" y="50" fill="{GREEN}" font-size="10" font-family="monospace">Green = rqbit faster</text>
+<text x="{}" y="50" fill="{RED}" font-size="10" font-family="monospace">Red = qBittorrent faster</text>
 <line x1="500" y1="60" x2="500" y2="{}" stroke="{MUTED_TEXT}" stroke-dasharray="4" stroke-width="1"/>
 <text x="500" y="72" fill="{MUTED_TEXT}" font-size="8" text-anchor="middle" font-family="monospace">1.0x (equal)</text>"#,
         w / 2,
@@ -351,7 +353,7 @@ fn write_cross_scenario(results: &[(ClientResult, ClientResult)], dir: &Path) ->
             1.0
         };
         let bar_w = (ratio / max_ratio * max_bar).min(max_bar);
-        let color = if ratio >= 1.0 { "#4CAF50" } else { "#FF5722" };
+        let color = if ratio >= 1.0 { GREEN } else { RED };
         let desc = xml_escape(&rq.scenario_description);
 
         // Scenario description
