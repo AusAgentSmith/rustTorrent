@@ -55,11 +55,30 @@ pub(crate) fn torrent_from_bytes(bytes: Bytes) -> anyhow::Result<ParsedTorrentFi
 #[derive(Default)]
 pub struct SessionDatabase {
     pub(crate) torrents: HashMap<TorrentId, ManagedTorrentHandle>,
+    /// Reverse index for O(1) lookup by info_hash (used in incoming peer handshakes).
+    pub(crate) info_hash_to_id: HashMap<Id20, TorrentId>,
 }
 
 impl SessionDatabase {
     pub(crate) fn add_torrent(&mut self, torrent: ManagedTorrentHandle, id: TorrentId) {
+        let info_hash = torrent.info_hash();
+        self.info_hash_to_id.insert(info_hash, id);
         self.torrents.insert(id, torrent);
+    }
+
+    pub(crate) fn remove_torrent(&mut self, id: &TorrentId) -> Option<ManagedTorrentHandle> {
+        let removed = self.torrents.remove(id);
+        if let Some(ref handle) = removed {
+            self.info_hash_to_id.remove(&handle.info_hash());
+        }
+        removed
+    }
+
+    /// O(1) lookup by info_hash.
+    pub(crate) fn get_by_info_hash(&self, info_hash: Id20) -> Option<(TorrentId, &ManagedTorrentHandle)> {
+        let id = self.info_hash_to_id.get(&info_hash)?;
+        let handle = self.torrents.get(id)?;
+        Some((*id, handle))
     }
 }
 

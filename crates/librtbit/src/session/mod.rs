@@ -794,13 +794,10 @@ impl Session {
 
         let (managed_torrent, metadata) = {
             let mut g = self.db.write();
-            if let Some((id, handle)) = g.torrents.iter().find_map(|(eid, t)| {
-                if t.info_hash() == info_hash || *eid == id {
-                    Some((*eid, t.clone()))
-                } else {
-                    None
-                }
-            }) {
+            // Check for duplicate by ID or info_hash using the index
+            let existing = g.torrents.get(&id).map(|t| (id, t.clone()))
+                .or_else(|| g.get_by_info_hash(info_hash).map(|(eid, t)| (eid, t.clone())));
+            if let Some((id, handle)) = existing {
                 return Ok(AddTorrentResponse::AlreadyManaged(id, handle));
             }
 
@@ -862,7 +859,7 @@ impl Session {
         if let Some(p) = self.persistence.as_ref()
             && let Err(e) = p.store(id, &managed_torrent).await
         {
-            self.db.write().torrents.remove(&id);
+            self.db.write().remove_torrent(&id);
             return Err(e);
         }
 
@@ -885,15 +882,12 @@ impl Session {
     }
 
     pub fn get(&self, id: TorrentIdOrHash) -> Option<ManagedTorrentHandle> {
+        let db = self.db.read();
         match id {
-            TorrentIdOrHash::Id(id) => self.db.read().torrents.get(&id).cloned(),
-            TorrentIdOrHash::Hash(id) => self.db.read().torrents.iter().find_map(|(_, v)| {
-                if v.info_hash() == id {
-                    Some(v.clone())
-                } else {
-                    None
-                }
-            }),
+            TorrentIdOrHash::Id(id) => db.torrents.get(&id).cloned(),
+            TorrentIdOrHash::Hash(info_hash) => {
+                db.get_by_info_hash(info_hash).map(|(_, v)| v.clone())
+            }
         }
     }
 
@@ -903,22 +897,14 @@ impl Session {
             TorrentIdOrHash::Hash(h) => self
                 .db
                 .read()
-                .torrents
-                .values()
-                .find_map(|v| {
-                    if v.info_hash() == h {
-                        Some(v.id())
-                    } else {
-                        None
-                    }
-                })
+                .get_by_info_hash(h)
+                .map(|(id, _)| id)
                 .context("no such torrent in db")?,
         };
         let removed = self
             .db
             .write()
-            .torrents
-            .remove(&id)
+            .remove_torrent(&id)
             .with_context(|| format!("torrent with id {id} did not exist"))?;
 
         // Cancel the per-torrent token to stop any running init/check tasks.

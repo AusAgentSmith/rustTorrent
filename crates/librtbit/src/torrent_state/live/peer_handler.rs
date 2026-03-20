@@ -424,11 +424,8 @@ impl PeerHandler {
                     })
                     .unwrap_or(false);
                 if should_requeue {
-                    self.state
-                        .peer_queue_tx
-                        .send(handle)
-                        .ok()
-                        .ok_or(Error::TorrentIsNotLive)?;
+                    // try_send: drop the peer if queue is full
+                    let _ = self.state.peer_queue_tx.try_send(handle);
                 }
                 Ok::<_, Error>(())
             },
@@ -737,15 +734,23 @@ impl PeerHandler {
                     None => return Ok(()),
                 };
 
+                let Some(request_length) = NonZeroU32::new(request.length) else {
+                    warn!(
+                        addr = ?self.addr,
+                        "peer sent request with zero length, ignoring"
+                    );
+                    continue;
+                };
+
                 self.state
                     .ratelimits
-                    .prepare_for_download(NonZeroU32::new(request.length).unwrap())
+                    .prepare_for_download(request_length)
                     .await?;
 
                 if let Some(session) = self.state.torrent().session.upgrade() {
                     session
                         .ratelimits
-                        .prepare_for_download(NonZeroU32::new(request.length).unwrap())
+                        .prepare_for_download(request_length)
                         .await?;
                 }
 

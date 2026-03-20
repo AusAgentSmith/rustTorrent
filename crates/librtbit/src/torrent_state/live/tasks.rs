@@ -11,7 +11,7 @@ use std::{
 
 use parking_lot::RwLock;
 use peer_binary_protocol::extended;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc::UnboundedReceiver};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc::Receiver};
 use tracing::{Instrument, debug, debug_span, trace};
 
 use crate::{
@@ -202,7 +202,7 @@ impl TorrentStateLive {
 
     pub(crate) async fn task_peer_adder(
         self: Arc<Self>,
-        mut peer_queue_rx: UnboundedReceiver<SocketAddr>,
+        mut peer_queue_rx: Receiver<SocketAddr>,
     ) -> crate::Result<()> {
         let state = self;
         loop {

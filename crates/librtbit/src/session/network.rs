@@ -64,10 +64,8 @@ impl Session {
         let (id, torrent) = self
             .db
             .read()
-            .torrents
-            .iter()
-            .find(|(_, t)| t.info_hash() == h.info_hash)
-            .map(|(id, t)| (*id, t.clone()))
+            .get_by_info_hash(h.info_hash)
+            .map(|(id, t)| (id, t.clone()))
             .with_context(|| format!("didn't find a matching torrent {:?}", h.info_hash))?;
 
         let live = torrent

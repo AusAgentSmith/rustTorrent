@@ -480,9 +480,10 @@ async fn h_torrents_info(
             let eta = if dl_speed > 0 {
                 let remaining = stats.total_bytes.saturating_sub(stats.progress_bytes);
                 let eta_secs = remaining / dl_speed;
-                i64::try_from(eta_secs).unwrap_or(8640000i64)
+                // Cap at 100 days to avoid overflow; i64::try_from handles u64 > i64::MAX
+                i64::try_from(eta_secs.min(8_640_000)).unwrap_or(8_640_000i64)
             } else {
-                8640000i64
+                8_640_000i64
             };
 
             let num_seeds = stats
@@ -773,13 +774,16 @@ async fn h_torrents_add(
                 if let Ok(text) = field.text().await {
                     for line in text.lines() {
                         let trimmed = line.trim();
-                        if !trimmed.is_empty() {
+                        if !trimmed.is_empty() && urls.len() < 100 {
                             urls.push(trimmed.to_string());
                         }
                     }
                 }
             }
             "torrents" => {
+                if torrent_bytes.len() >= 100 {
+                    continue;
+                }
                 if let Ok(data) = field.bytes().await
                     && !data.is_empty()
                 {

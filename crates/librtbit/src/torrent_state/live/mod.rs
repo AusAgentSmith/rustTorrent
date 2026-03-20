@@ -69,10 +69,10 @@ use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use peer_binary_protocol::Handshake;
 use tokio::sync::{
     Notify, Semaphore,
-    mpsc::{UnboundedSender, unbounded_channel},
+    mpsc::{Sender, unbounded_channel},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, debug_span, info, trace, warn};
+use tracing::{debug, debug_span, error, info, trace, warn};
 
 use crate::{
     Error,
@@ -149,6 +149,7 @@ impl TorrentStateLocked {
             .map(|pt| pt.flush_have_pieces(flush_async))
         {
             warn!(id=?shared.id, info_hash = ?shared.info_hash, "error flushing bitfield: {e:#}");
+            // Don't reset unflushed_bitv_bytes on error — retry on next flush attempt
         } else {
             trace!("flushed bitfield");
             self.unflushed_bitv_bytes = 0;
@@ -199,7 +200,8 @@ pub struct TorrentStateLive {
     pub(crate) peer_semaphore: Arc<Semaphore>,
 
     // The queue for peer manager to connect to them.
-    pub(crate) peer_queue_tx: UnboundedSender<SocketAddr>,
+    // Bounded to prevent memory exhaustion from DHT/PEX flooding.
+    pub(crate) peer_queue_tx: Sender<SocketAddr>,
 
     pub(crate) finished_notify: Notify,
     pub(crate) new_pieces_notify: Notify,
@@ -230,7 +232,9 @@ impl TorrentStateLive {
         fatal_errors_tx: tokio::sync::oneshot::Sender<anyhow::Error>,
         cancellation_token: CancellationToken,
     ) -> anyhow::Result<Arc<Self>> {
-        let (peer_queue_tx, peer_queue_rx) = unbounded_channel();
+        // Bound peer queue to prevent memory exhaustion from DHT/PEX peer flooding.
+        // 10000 is generous — the peer_adder task drains this quickly.
+        let (peer_queue_tx, peer_queue_rx) = tokio::sync::mpsc::channel(10000);
         let session = paused
             .shared
             .session
@@ -532,10 +536,8 @@ impl TorrentStateLive {
             None => return Ok(false),
         };
 
-        self.peer_queue_tx
-            .send(addr)
-            .ok()
-            .ok_or(Error::TorrentIsNotLive)?;
+        // try_send: drop the peer if queue is full (backpressure)
+        let _ = self.peer_queue_tx.try_send(addr);
         Ok(true)
     }
 
@@ -603,7 +605,8 @@ impl TorrentStateLive {
             .context("fatal_errors_tx already taken")?;
         let res = anyhow::anyhow!("fatal error: {:?}", e);
         if tx.send(e).is_err() {
-            warn!(id=self.shared.id, info_hash=?self.shared.info_hash, "there's nowhere to send fatal error, receiver is dead");
+            error!(id=self.shared.id, info_hash=?self.shared.info_hash, "fatal error receiver is dead, cancelling torrent");
+            self.cancellation_token.cancel();
         }
         Err(res)
     }
@@ -709,7 +712,7 @@ impl TorrentStateLive {
             .states
             .iter_mut()
             .filter_map(|mut p| p.value_mut().reconnect_not_needed_peer(&self.peers))
-            .map(|socket_addr| self.peer_queue_tx.send(socket_addr))
+            .map(|socket_addr| self.peer_queue_tx.try_send(socket_addr))
             .take_while(|r| r.is_ok())
             .last();
     }
@@ -732,7 +735,7 @@ impl TorrentStateLive {
                 let addr = peer.addr;
                 // Don't hold the lock while sending
                 drop(entry);
-                if self.peer_queue_tx.send(addr).is_err() {
+                if self.peer_queue_tx.try_send(addr).is_err() {
                     break;
                 }
                 requeued += 1;

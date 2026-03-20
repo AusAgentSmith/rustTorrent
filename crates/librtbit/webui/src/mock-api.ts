@@ -440,7 +440,7 @@ export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
       torrents.push(generateTorrentListItem(id, opts?.withStats ?? false));
     }
 
-    return { torrents };
+    return { torrents, total: torrents.length };
   },
 
   getTorrentDetails: async (index: number): Promise<TorrentDetails> => {

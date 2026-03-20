@@ -306,7 +306,7 @@ impl RecursiveRequest<RecursiveRequestCallbacksFindNodes> {
                 biased;
 
                 r = node_rx.recv() => {
-                    let (id, addr, depth) = r.unwrap();
+                    let Some((id, addr, depth)) = r else { break };
                     futs.push(request_one(id, addr, depth))
                 },
                 f = futs.next() => {
@@ -373,7 +373,7 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                 loop {
                     tokio::select! {
                         addr = node_rx.recv() => {
-                            let (id, addr, depth) = addr.unwrap();
+                            let Some((id, addr, depth)) = addr else { break Ok(()) };
                             futs.push(
                                 this.request_one(id, addr, depth)
                                     .map_err(|e| debug!("error: {e:#}"))
@@ -1060,7 +1060,9 @@ impl DhtWorker {
                     }
                     found += 1;
                     let random_id = bucket.random_within();
-                    tx.send(random_id).unwrap();
+                    if tx.send(random_id).is_err() {
+                        return;
+                    }
                 }
                 trace!("iteration {}, refreshing {} buckets", iteration, found);
                 iteration += 1;
@@ -1073,7 +1075,7 @@ impl DhtWorker {
             tokio::select! {
                 _ = &mut filler => {},
                 random_id = rx.recv() => {
-                    let random_id = random_id.unwrap();
+                    let Some(random_id) = random_id else { break };
                     let addrs = table
                         .read()
                         .sorted_by_distance_from(random_id, now())
@@ -1089,6 +1091,7 @@ impl DhtWorker {
                 _ = futs.next(), if !futs.is_empty() => {},
             }
         }
+        Ok(())
     }
 
     async fn pinger(&self, is_v4: bool) -> crate::Result<()> {
@@ -1112,7 +1115,9 @@ impl DhtWorker {
                         NodeStatus::Questionable | NodeStatus::Unknown
                     ) {
                         found += 1;
-                        tx.send((node.id(), node.addr())).unwrap();
+                        if tx.send((node.id(), node.addr())).is_err() {
+                            return;
+                        }
                     }
                 }
                 trace!("iteration {}, pinging {} nodes", iteration, found);
@@ -1126,7 +1131,7 @@ impl DhtWorker {
             tokio::select! {
                 _ = &mut looper => {},
                 r = rx.recv() => {
-                    let (id, addr) = r.unwrap();
+                    let Some((id, addr)) = r else { break };
                     futs.push(async move {
                         table.write().mark_outgoing_request(&id, now());
                         match self.dht.request(Request::Ping, addr).await {
@@ -1143,6 +1148,7 @@ impl DhtWorker {
                 _ = futs.next(), if !futs.is_empty() => {},
             }
         }
+        Ok(())
     }
 
     async fn framer(

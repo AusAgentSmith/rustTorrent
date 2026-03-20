@@ -85,6 +85,17 @@ pub struct HttpApiOptions {
     pub prometheus_handle: Option<metrics_exporter_prometheus::PrometheusHandle>,
 }
 
+/// Constant-time byte comparison to prevent timing attacks on auth credentials.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
 async fn simple_basic_auth(
     expected_username: Option<&str>,
     expected_password: Option<&str>,
@@ -112,9 +123,14 @@ async fn simple_basic_auth(
                 .into_response());
         }
     };
-    // TODO: constant time compare
+    // Use constant-time comparison to prevent timing attacks
     match user_pass.split_once(':') {
-        Some((u, p)) if u == expected_user && p == expected_pass => Ok(next.run(request).await),
+        Some((u, p))
+            if constant_time_eq(u.as_bytes(), expected_user.as_bytes())
+                && constant_time_eq(p.as_bytes(), expected_pass.as_bytes()) =>
+        {
+            Ok(next.run(request).await)
+        }
         _ => Err(ApiError::unauthorized()),
     }
 }
@@ -228,6 +244,7 @@ impl HttpApi {
         }
 
         let app = main_router
+            .layer(axum::extract::DefaultBodyLimit::max(100 * 1024 * 1024)) // 100 MB max request body
             .layer(cors_layer)
             .layer(
                 tower_http::trace::TraceLayer::new_for_http()

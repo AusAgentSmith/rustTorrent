@@ -178,22 +178,22 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
     (text: string) => {
       setLogLines((logLines: Line[]) => {
         const nextLineId = logLines.length == 0 ? 0 : logLines[0].id + 1;
+        // Read filterRegex.current inside the state updater to avoid stale closure
+        const currentFilter = filterRegex.current;
 
         const newLogLines = [
           {
             id: nextLineId,
             content: text,
             parsed: JSON.parse(text) as JSONLogLine,
-            show: filterRegex.current
-              ? !!text.match(filterRegex.current)
-              : true,
+            show: currentFilter ? !!text.match(currentFilter) : true,
           },
           ...logLines.slice(0, maxL - 1),
         ];
         return newLogLines;
       });
     },
-    [filterRegex.current, maxLines],
+    [maxLines],
   );
 
   const addLineRef = useRef(addLine);

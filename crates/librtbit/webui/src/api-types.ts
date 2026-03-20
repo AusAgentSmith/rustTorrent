@@ -50,6 +50,7 @@ export interface AddTorrentResponse {
 
 export interface ListTorrentsResponse {
   torrents: Array<TorrentListItem>;
+  total: number;
 }
 
 export interface Speed {

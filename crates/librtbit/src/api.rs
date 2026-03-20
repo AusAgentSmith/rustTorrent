@@ -182,6 +182,10 @@ impl TorrentIdOrHash {
 pub struct ApiTorrentListOpts {
     #[serde(default)]
     pub with_stats: bool,
+    /// Offset for pagination (skip this many torrents). Default: 0.
+    pub offset: Option<usize>,
+    /// Maximum number of torrents to return. Default: all.
+    pub limit: Option<usize>,
 }
 
 impl Api {
@@ -209,12 +213,24 @@ impl Api {
     }
 
     pub fn api_torrent_list(&self) -> TorrentListResponse {
-        self.api_torrent_list_ext(ApiTorrentListOpts { with_stats: false })
+        self.api_torrent_list_ext(ApiTorrentListOpts {
+            with_stats: false,
+            ..Default::default()
+        })
     }
 
     pub fn api_torrent_list_ext(&self, opts: ApiTorrentListOpts) -> TorrentListResponse {
-        let items = self.session.with_torrents(|torrents| {
-            torrents
+        let offset = opts.offset.unwrap_or(0);
+        let limit = opts.limit;
+        self.session.with_torrents(|torrents| {
+            let all: Vec<_> = torrents.collect();
+            let total = all.len();
+            let iter = all.into_iter().skip(offset);
+            let iter: Box<dyn Iterator<Item = _>> = match limit {
+                Some(limit) => Box::new(iter.take(limit)),
+                None => Box::new(iter),
+            };
+            let items = iter
                 .map(|(id, mgr)| {
                     let total_pieces = mgr
                         .metadata
@@ -244,9 +260,9 @@ impl Api {
                     }
                     r
                 })
-                .collect()
-        });
-        TorrentListResponse { torrents: items }
+                .collect();
+            TorrentListResponse { torrents: items, total }
+        })
     }
 
     pub fn api_torrent_details(&self, idx: TorrentIdOrHash) -> Result<TorrentDetailsResponse> {
@@ -590,6 +606,8 @@ impl Api {
 #[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct TorrentListResponse {
     pub torrents: Vec<TorrentDetailsResponse>,
+    /// Total number of torrents (before pagination).
+    pub total: usize,
 }
 
 #[derive(Serialize, Deserialize)]

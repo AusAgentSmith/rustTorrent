@@ -113,11 +113,15 @@ impl TorrentStorage for FilesystemStorage {
         if !path.is_dir() {
             anyhow::bail!("cannot remove dir: {path:?} is not a directory")
         }
-        if std::fs::read_dir(&path)?.count() == 0 {
-            std::fs::remove_dir(&path).with_context(|| format!("error removing {path:?}"))
-        } else {
-            warn!("did not remove {path:?} as it was not empty");
-            Ok(())
+        // Attempt removal directly to avoid TOCTOU race between empty check and remove.
+        // std::fs::remove_dir only removes empty directories; if non-empty it errors.
+        match std::fs::remove_dir(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::DirectoryNotEmpty) => {
+                warn!("did not remove {path:?} as it was not empty");
+                Ok(())
+            }
+            Err(e) => Err(e).with_context(|| format!("error removing {path:?}")),
         }
     }
 

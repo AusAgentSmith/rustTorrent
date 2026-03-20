@@ -114,7 +114,10 @@ where
             {
                 let mut addrs = Vec::new();
                 while let Some(peer) = seq.next_element::<DictPeer>()? {
-                    addrs.push(SocketAddr::from((peer.ip, peer.port)))
+                    addrs.push(SocketAddr::from((peer.ip, peer.port)));
+                    if addrs.len() >= 10_000 {
+                        break;
+                    }
                 }
                 Ok(Peers::DictPeers(addrs))
             }
