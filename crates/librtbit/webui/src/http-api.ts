@@ -138,6 +138,9 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
     if (opts?.peer_opts?.read_write_timeout) {
       url += `&peer_read_write_timeout=${opts.peer_opts.read_write_timeout}`;
     }
+    if (opts?.paused) {
+      url += "&paused=true";
+    }
     if (opts?.initial_peers) {
       url += `&initial_peers=${opts.initial_peers.join(",")}`;
     }

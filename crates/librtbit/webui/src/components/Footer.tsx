@@ -19,6 +19,15 @@ export const Footer: React.FC = () => {
         {formatBytes(stats.counters.uploaded_bytes)})
       </FooterPiece>
       <FooterPiece>up {formatSecondsToTime(stats.uptime_seconds)}</FooterPiece>
+      <FooterPiece>
+        <a
+          href="openapi.json"
+          target="_blank"
+          className="text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          API
+        </a>
+      </FooterPiece>
     </div>
   );
 };

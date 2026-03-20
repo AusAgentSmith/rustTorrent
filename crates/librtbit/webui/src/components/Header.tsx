@@ -8,10 +8,12 @@ export const Header = ({
   title,
   version,
   settingsSlot,
+  onMultiFileSelect,
 }: {
   title: string;
   version: string;
   settingsSlot?: React.ReactNode;
+  onMultiFileSelect?: (files: File[]) => void;
 }) => {
   return (
     <header className="bg-surface-raised drop-shadow-lg flex flex-wrap justify-center lg:justify-between items-center">
@@ -26,7 +28,10 @@ export const Header = ({
       </div>
       <div className="flex flex-wrap items-center gap-1 m-2">
         <MagnetInput className="grow justify-center" />
-        <FileInput className="grow justify-center" />
+        <FileInput
+          className="grow justify-center"
+          onMultiFileSelect={onMultiFileSelect}
+        />
         {settingsSlot && (
           <>
             <div className="hidden lg:block w-px h-6 bg-divider mx-2" />

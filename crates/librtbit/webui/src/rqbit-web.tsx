@@ -1,5 +1,15 @@
-import { JSX, useContext, useEffect, useState } from "react";
-import { ErrorDetails as ApiErrorDetails } from "./api-types";
+import {
+  JSX,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  AddTorrentResponse,
+  ErrorDetails as ApiErrorDetails,
+} from "./api-types";
 import { APIContext } from "./context";
 import { RootContent } from "./components/RootContent";
 import { customSetInterval } from "./helper/customSetInterval";
@@ -11,6 +21,8 @@ import { AlertModal } from "./components/modal/AlertModal";
 import { useStatsStore } from "./stores/statsStore";
 import { Footer } from "./components/Footer";
 import { SettingsButtons } from "./components/SettingsButtons";
+import { FileSelectionModal } from "./components/modal/FileSelectionModal";
+import { MultiTorrentUploadModal } from "./components/modal/MultiTorrentUploadModal";
 
 export interface ErrorWithLabel {
   text: string;
@@ -21,6 +33,11 @@ export interface ContextType {
   setCloseableError: (error: ErrorWithLabel | null) => void;
   refreshTorrents: () => void;
 }
+
+type PendingUpload =
+  | { type: "single"; file: File }
+  | { type: "multi"; files: File[] }
+  | null;
 
 export const RqbitWebUI = (props: {
   title: string;
@@ -90,11 +107,114 @@ export const RqbitWebUI = (props: {
     );
   }, []);
 
+  // --- Drag and drop ---
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload>(null);
+
+  // Single-file upload state (mirrors UploadButton logic)
+  const [listTorrentResponse, setListTorrentResponse] =
+    useState<AddTorrentResponse | null>(null);
+  const [listTorrentLoading, setListTorrentLoading] = useState(false);
+  const [listTorrentError, setListTorrentError] =
+    useState<ErrorWithLabel | null>(null);
+
+  // When a single file is pending, call list_only API
+  useEffect(() => {
+    if (pendingUpload?.type !== "single") return;
+
+    const file = pendingUpload.file;
+    setListTorrentLoading(true);
+    setListTorrentResponse(null);
+    setListTorrentError(null);
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const response = await API.uploadTorrent(file, { list_only: true });
+        if (!cancelled) setListTorrentResponse(response);
+      } catch (e) {
+        if (!cancelled)
+          setListTorrentError({
+            text: "Error listing torrent files",
+            details: e as ApiErrorDetails,
+          });
+      } finally {
+        if (!cancelled) setListTorrentLoading(false);
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [pendingUpload]);
+
+  const clearSingleUpload = () => {
+    setPendingUpload(null);
+    setListTorrentResponse(null);
+    setListTorrentError(null);
+    setListTorrentLoading(false);
+  };
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files).filter((f) =>
+      f.name.endsWith(".torrent"),
+    );
+
+    if (files.length === 0) return;
+
+    if (files.length === 1) {
+      setPendingUpload({ type: "single", file: files[0] });
+    } else {
+      setPendingUpload({ type: "multi", files });
+    }
+  }, []);
+
+  // Handler for FileInput multi-file selection (via Header)
+  const handleMultiFileSelect = useCallback((files: File[]) => {
+    if (files.length === 1) {
+      setPendingUpload({ type: "single", file: files[0] });
+    } else if (files.length > 1) {
+      setPendingUpload({ type: "multi", files });
+    }
+  }, []);
+
   return (
     <div className="bg-surface h-dvh flex flex-col overflow-hidden">
       <Header
         title={props.title}
         version={props.version}
+        onMultiFileSelect={handleMultiFileSelect}
         settingsSlot={
           <SettingsButtons
             onLogsClick={() => setLogsOpened(true)}
@@ -103,14 +223,46 @@ export const RqbitWebUI = (props: {
         }
       />
 
-      <div className="grow min-h-0">
+      <div
+        className="grow min-h-0 relative"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         <RootContent />
+        {isDragging && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm">
+            <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center">
+              <p className="text-lg font-semibold text-primary">
+                Drop .torrent files here
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <Footer />
 
       <LogStreamModal show={logsOpened} onClose={() => setLogsOpened(false)} />
       <AlertModal />
+
+      {pendingUpload?.type === "single" && (
+        <FileSelectionModal
+          onHide={clearSingleUpload}
+          listTorrentResponse={listTorrentResponse}
+          listTorrentError={listTorrentError}
+          listTorrentLoading={listTorrentLoading}
+          data={pendingUpload.file}
+        />
+      )}
+
+      {pendingUpload?.type === "multi" && (
+        <MultiTorrentUploadModal
+          files={pendingUpload.files}
+          onHide={() => setPendingUpload(null)}
+        />
+      )}
     </div>
   );
 };

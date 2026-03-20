@@ -20,6 +20,7 @@ pub struct TorrentAddQueryParams {
     pub peer_connect_timeout: Option<u64>,
     pub peer_read_write_timeout: Option<u64>,
     pub initial_peers: Option<InitialPeers>,
+    pub paused: Option<bool>,
     // Will force interpreting the content as a URL.
     pub is_url: Option<bool>,
     pub list_only: Option<bool>,
@@ -95,6 +96,7 @@ impl TorrentAddQueryParams {
     pub fn into_add_torrent_options(self) -> AddTorrentOptions {
         AddTorrentOptions {
             overwrite: self.overwrite.unwrap_or(false),
+            paused: self.paused.unwrap_or(false),
             only_files_regex: self.only_files_regex,
             only_files: self.only_files.map(|o| o.0),
             output_folder: self.output_folder,
