@@ -3,6 +3,7 @@
 
 import {
   AddTorrentResponse,
+  CategoryInfo,
   DhtStats,
   LimitsConfig,
   ListTorrentsResponse,
@@ -316,6 +317,11 @@ function generateTorrentListItem(
     total_pieces: totalPieces,
   };
 
+  const category = torrentCategories.get(id);
+  if (category) {
+    item.category = category;
+  }
+
   if (withStats) {
     item.stats = generateTorrentStats(id);
   }
@@ -391,6 +397,32 @@ function updatePeerCounters(torrentId: number): void {
 }
 
 const TOTAL_TORRENTS = 1000;
+
+// Mock category data
+const MOCK_CATEGORY_NAMES = ["Linux ISOs", "Software", "Documents", "Media"];
+
+const mockCategories: Record<string, CategoryInfo> = {
+  "Linux ISOs": { name: "Linux ISOs", save_path: "/downloads/linux" },
+  Software: { name: "Software", save_path: "/downloads/software" },
+  Documents: { name: "Documents", save_path: "/downloads/docs" },
+  Media: { name: "Media", save_path: "/downloads/media" },
+};
+
+// Track torrent category assignments
+const torrentCategories = new Map<number, string>();
+
+// Assign initial categories to some torrents
+for (let i = 0; i < TOTAL_TORRENTS; i++) {
+  const rand = seededRandom(i * 3571);
+  const r = rand();
+  if (r < 0.6) {
+    // 60% have a category
+    torrentCategories.set(
+      i,
+      MOCK_CATEGORY_NAMES[Math.floor(rand() * MOCK_CATEGORY_NAMES.length)],
+    );
+  }
+}
 
 // Mock API implementation
 export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
@@ -615,5 +647,36 @@ export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
     const mockTorrent =
       "d8:announce35:udp://tracker.example.com:6969/announce13:announce-listll35:udp://tracker.example.com:6969/announceel38:https://tracker2.example.org:443/announceee4:infod6:lengthi1024ee8:url-list0:e";
     return new TextEncoder().encode(mockTorrent);
+  },
+
+  getCategories: async (): Promise<Record<string, CategoryInfo>> => {
+    await new Promise((r) => setTimeout(r, 30));
+    return { ...mockCategories };
+  },
+
+  createCategory: async (name: string, savePath?: string): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 50));
+    mockCategories[name] = { name, save_path: savePath };
+  },
+
+  deleteCategory: async (name: string): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 50));
+    delete mockCategories[name];
+    // Remove category from all torrents
+    for (const [id, cat] of torrentCategories.entries()) {
+      if (cat === name) torrentCategories.delete(id);
+    }
+  },
+
+  setTorrentCategory: async (
+    torrentId: number,
+    category: string | null,
+  ): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 50));
+    if (category) {
+      torrentCategories.set(torrentId, category);
+    } else {
+      torrentCategories.delete(torrentId);
+    }
   },
 };

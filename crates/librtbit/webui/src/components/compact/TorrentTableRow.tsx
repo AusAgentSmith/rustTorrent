@@ -240,6 +240,15 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
           </td>
         );
       }
+      case "category":
+        return (
+          <td
+            key="category"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            <span className="truncate">{torrent.category || "\u2014"}</span>
+          </td>
+        );
       default:
         return <td key={col.id} className={baseCls} />;
     }

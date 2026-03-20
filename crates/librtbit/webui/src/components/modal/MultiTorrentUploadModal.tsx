@@ -1,6 +1,8 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { APIContext } from "../../context";
 import { useTorrentStore } from "../../stores/torrentStore";
+import { useUIStore } from "../../stores/uiStore";
+import { CategoryInfo } from "../../api-types";
 import { Modal } from "./Modal";
 import { ModalBody } from "./ModalBody";
 import { ModalFooter } from "./ModalFooter";
@@ -29,13 +31,28 @@ export const MultiTorrentUploadModal = ({
   const API = useContext(APIContext);
   const refreshTorrents = useTorrentStore((state) => state.refreshTorrents);
 
+  const categories = useUIStore((state) => state.categories);
+  const setCategories = useUIStore((state) => state.setCategories);
+
   const [outputFolder, setOutputFolder] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [startTorrent, setStartTorrent] = useState(true);
   const [entries, setEntries] = useState<FileEntry[]>(
     files.map((file) => ({ file, status: "pending" })),
   );
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+
+  // Fetch categories when modal opens
+  useEffect(() => {
+    API.getCategories()
+      .then((cats) => setCategories(cats))
+      .catch(() => {});
+  }, [API, setCategories]);
+
+  const categoryNames = Object.keys(categories).sort((a, b) =>
+    a.localeCompare(b),
+  );
 
   const handleUploadAll = async () => {
     setUploading(true);
@@ -50,6 +67,7 @@ export const MultiTorrentUploadModal = ({
           overwrite: true,
           output_folder: outputFolder,
           paused: !startTorrent,
+          category: selectedCategory || undefined,
         });
         updated[i] = { ...updated[i], status: "success" };
       } catch (e: any) {
@@ -92,6 +110,29 @@ export const MultiTorrentUploadModal = ({
             value={outputFolder}
             onChange={(e) => setOutputFolder(e.target.value)}
           />
+          {categoryNames.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="multi_category"
+                className="text-sm font-medium text-secondary"
+              >
+                Category
+              </label>
+              <select
+                id="multi_category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-2 py-1.5 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary"
+              >
+                <option value="">None</option>
+                {categoryNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <FormCheckbox
             label="Start torrents after adding"
             checked={startTorrent}

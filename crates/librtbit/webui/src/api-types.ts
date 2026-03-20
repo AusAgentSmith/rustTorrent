@@ -26,6 +26,7 @@ export interface TorrentDetails {
   files: Array<TorrentFile>;
   total_pieces?: number;
   output_folder: string;
+  category?: string;
 }
 
 // Interface for torrent list item (from bulk /torrents?with_stats=true endpoint)
@@ -37,6 +38,7 @@ export interface TorrentListItem {
   output_folder: string;
   total_pieces: number;
   stats?: TorrentStats;
+  category?: string;
 }
 
 export interface AddTorrentResponse {
@@ -213,6 +215,12 @@ export interface AddTorrentOptions {
   force_tracker_interval?: Duration | null;
   initial_peers?: string[] | null; // Assuming SocketAddr is equivalent to a string in TypeScript
   preferred_id?: number | null;
+  category?: string;
+}
+
+export interface CategoryInfo {
+  name: string;
+  save_path?: string;
 }
 
 export type Value = string | number | boolean;
@@ -288,4 +296,13 @@ export interface RqbitAPI {
   getDhtStats: () => Promise<DhtStats>;
   setRustLog: (value: string) => Promise<void>;
   getMetadata: (index: number) => Promise<Uint8Array>;
+
+  // Category management
+  getCategories: () => Promise<Record<string, CategoryInfo>>;
+  createCategory: (name: string, savePath?: string) => Promise<void>;
+  deleteCategory: (name: string) => Promise<void>;
+  setTorrentCategory: (
+    torrentId: number,
+    category: string | null,
+  ) => Promise<void>;
 }
