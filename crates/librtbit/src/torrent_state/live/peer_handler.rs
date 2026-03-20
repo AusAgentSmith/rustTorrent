@@ -11,11 +11,7 @@ use std::{
 use anyhow::{Context, bail};
 use buffers::{ByteBuf, ByteBufOwned};
 use clone_to_owned::CloneToOwned;
-use librqbit_core::{
-    constants::CHUNK_SIZE,
-    lengths::ChunkInfo,
-    spawn_utils::spawn_with_cancel,
-};
+use librqbit_core::{constants::CHUNK_SIZE, lengths::ChunkInfo, spawn_utils::spawn_with_cancel};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use peer_binary_protocol::{
     Handshake, Message, Piece, Request,
@@ -42,10 +38,7 @@ use crate::{
 
 use super::{
     TorrentStateLive, TorrentStateLocked, make_piece_bitfield,
-    peer::{
-        PeerState, PeerTx,
-        stats::atomic::PeerCountersAtomic as AtomicPeerCounters,
-    },
+    peer::{PeerState, PeerTx, stats::atomic::PeerCountersAtomic as AtomicPeerCounters},
 };
 
 pub(crate) struct PeerHandlerLocked {
@@ -370,61 +363,76 @@ impl PeerHandler {
         // Prevent deadlocks.
         drop(pe);
 
-        if let Some(dur) = backoff {
-            if cfg!(feature = "_disable_reconnect_test") {
-                return Ok(());
+        // When backoff is exhausted, instead of permanently dropping the peer,
+        // reset its backoff and schedule a long retry. This ensures peers can be
+        // retried when re-discovery triggers (e.g., after a network disruption).
+        let dur = match backoff {
+            Some(dur) => dur,
+            None => {
+                debug!(
+                    "backoff exhausted, resetting with long retry interval ({}s)",
+                    super::FROZEN_PEER_RETRY_INTERVAL.as_secs()
+                );
+                let reset_ok = peers
+                    .with_peer_mut(handle, "reset_backoff", |peer| {
+                        peer.stats.reset_backoff();
+                    })
+                    .is_some();
+                if !reset_ok {
+                    return Ok(());
+                }
+                super::FROZEN_PEER_RETRY_INTERVAL
             }
-            self.state.clone().spawn(
-                debug_span!(
-                    parent: self.state.shared.span.clone(),
-                    "wait_for_peer",
-                    peer = ?handle,
-                    duration = format!("{dur:?}")
-                ),
-                format!("[{}][addr={}]wait_for_peer", self.state.shared.id, handle),
-                async move {
-                    trace!("waiting to reconnect again");
-                    tokio::time::sleep(dur).await;
-                    trace!("finished waiting");
-                    let should_requeue = self
-                        .state
-                        .peers
-                        .with_peer_mut(handle, "dead_to_queued", |peer| {
-                            match peer.get_state() {
-                                PeerState::Dead => {
-                                    peer.set_state(PeerState::Queued, &self.state.peers);
-                                    true
-                                }
-                                // Peer reconnected (e.g. via incoming connection) while we were
-                                // waiting. No need to queue - it's already connected or queued.
-                                PeerState::Live(_)
-                                | PeerState::Connecting(_)
-                                | PeerState::Queued => {
-                                    trace!(
-                                        state = peer.get_state().name(),
-                                        "peer is no longer dead, skipping requeue"
-                                    );
-                                    false
-                                }
-                                // Don't need this peer anymore.
-                                PeerState::NotNeeded => false,
-                            }
-                        })
-                        .unwrap_or(false);
-                    if should_requeue {
-                        self.state
-                            .peer_queue_tx
-                            .send(handle)
-                            .ok()
-                            .ok_or(Error::TorrentIsNotLive)?;
-                    }
-                    Ok::<_, Error>(())
-                },
-            );
-        } else {
-            debug!("dropping peer, backoff exhausted");
-            self.state.peers.drop_peer(handle);
         };
+
+        if cfg!(feature = "_disable_reconnect_test") {
+            return Ok(());
+        }
+        self.state.clone().spawn(
+            debug_span!(
+                parent: self.state.shared.span.clone(),
+                "wait_for_peer",
+                peer = ?handle,
+                duration = format!("{dur:?}")
+            ),
+            format!("[{}][addr={}]wait_for_peer", self.state.shared.id, handle),
+            async move {
+                trace!("waiting to reconnect again");
+                tokio::time::sleep(dur).await;
+                trace!("finished waiting");
+                let should_requeue = self
+                    .state
+                    .peers
+                    .with_peer_mut(handle, "dead_to_queued", |peer| {
+                        match peer.get_state() {
+                            PeerState::Dead => {
+                                peer.set_state(PeerState::Queued, &self.state.peers);
+                                true
+                            }
+                            // Peer reconnected (e.g. via incoming connection) while we were
+                            // waiting. No need to queue - it's already connected or queued.
+                            PeerState::Live(_) | PeerState::Connecting(_) | PeerState::Queued => {
+                                trace!(
+                                    state = peer.get_state().name(),
+                                    "peer is no longer dead, skipping requeue"
+                                );
+                                false
+                            }
+                            // Don't need this peer anymore.
+                            PeerState::NotNeeded => false,
+                        }
+                    })
+                    .unwrap_or(false);
+                if should_requeue {
+                    self.state
+                        .peer_queue_tx
+                        .send(handle)
+                        .ok()
+                        .ok_or(Error::TorrentIsNotLive)?;
+                }
+                Ok::<_, Error>(())
+            },
+        );
         Ok(())
     }
 
