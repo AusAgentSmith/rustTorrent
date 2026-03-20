@@ -1,7 +1,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Instant,
 };
@@ -30,6 +30,8 @@ pub struct TorrentStateInitializing {
     pub(crate) metadata: Arc<TorrentMetadata>,
     pub(crate) only_files: Option<Vec<usize>>,
     pub(crate) checked_bytes: AtomicU64,
+    /// True while the torrent is waiting for a concurrent init semaphore slot.
+    pub(crate) queued_for_init: AtomicBool,
     previously_errored: bool,
 }
 
@@ -47,6 +49,7 @@ impl TorrentStateInitializing {
             only_files,
             files,
             checked_bytes: AtomicU64::new(0),
+            queued_for_init: AtomicBool::new(false),
             previously_errored,
         }
     }
@@ -54,6 +57,11 @@ impl TorrentStateInitializing {
     pub fn get_checked_bytes(&self) -> u64 {
         self.checked_bytes
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Returns true if this torrent is waiting for a concurrent init slot.
+    pub fn is_queued_for_init(&self) -> bool {
+        self.queued_for_init.load(Ordering::Relaxed)
     }
 
     async fn validate_fastresume(
