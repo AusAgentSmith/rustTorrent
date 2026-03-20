@@ -95,14 +95,32 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port)).await?;
     tracing::info!("Tracker listening on 0.0.0.0:{port}");
 
+    // Handle SIGTERM gracefully — keep running until explicitly killed
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
     loop {
-        let (stream, addr) = listener.accept().await?;
-        let state = state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, addr, &state).await {
-                tracing::debug!("tracker conn error: {e}");
+        tokio::select! {
+            result = listener.accept() => {
+                match result {
+                    Ok((stream, addr)) => {
+                        let state = state.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_connection(stream, addr, &state).await {
+                                tracing::debug!("tracker conn error: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!("tracker accept error: {e}");
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                }
             }
-        });
+            _ = sigterm.recv() => {
+                tracing::info!("Tracker shutting down (SIGTERM)");
+                return Ok(());
+            }
+        }
     }
 }
 

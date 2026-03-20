@@ -67,9 +67,17 @@ pub async fn run(
     tracing::info!("============================================================");
     tracing::info!("  BitTorrent Client Benchmark: rqbit vs qBittorrent (Rust)");
     tracing::info!("============================================================");
+    tracing::info!("Scenarios: {scenario_selector}");
+    tracing::info!("Data dir: {}", data_dir.display());
 
     // Connect to Docker
-    let docker_client = docker::connect()?;
+    tracing::info!("Connecting to Docker...");
+    let docker_client = docker::connect().map_err(|e| {
+        tracing::error!("Failed to connect to Docker: {e}");
+        tracing::error!("Make sure /var/run/docker.sock is mounted");
+        e
+    })?;
+    tracing::info!("Docker connected.");
 
     // Init clients
     let rqbit = RqbitClient::new(config::RQBIT_API);
