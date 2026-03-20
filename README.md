@@ -1,282 +1,168 @@
-[![crates.io](https://img.shields.io/crates/v/rqbit.svg)](https://crates.io/crates/rqbit)
-[![crates.io](https://img.shields.io/crates/v/librqbit.svg)](https://crates.io/crates/librqbit)
-[![docs.rs](https://img.shields.io/docsrs/librqbit.svg)](https://docs.rs/librqbit/latest/librqbit/)
+# rqbit
 
-# rqbit - bittorrent client in Rust
+A modern BitTorrent client written in Rust, targeting full **BitTorrent V2 (BEP 52)** compliance. Fast, lightweight, and built for both humans and automation.
 
-**rqbit** is a bittorrent client written in Rust. Has HTTP API and Web UI, and can be used as a library.
+**Website:** [rusttorrent.dev](https://rusttorrent.dev/)
 
-Also has a desktop app built with [Tauri](https://tauri.app/).
+## Quick Start
 
-## Usage quick start
+### Download a torrent
 
-### Optional - start the server
-
-Assuming you are downloading to ~/Downloads.
-
-    rqbit server start ~/Downloads
-
-### Download torrents
-
-Assuming you are downloading to ~/Downloads. By default it'll download to current directory.
-
-    rqbit download [-o ~/Downloads] 'magnet:?....' [https?://url/to/.torrent] [/path/to/local/file.torrent]
-
-## Web UI
-
-Access at http://localhost:3030/web/. See screenshot below (torrent names and speeds are simulated).
-
-<img width="1000" src="https://github.com/user-attachments/assets/d916b3d9-ebbd-462a-889d-df3916cc2681" />
-
-## Desktop app
-
-The desktop app is a [thin wrapper](https://github.com/ikatson/rqbit/blob/main/desktop/src-tauri/src/main.rs) on top of the Web UI frontend.
-
-Download it in [Releases](https://github.com/ikatson/rqbit/releases) for OSX and Windows. For Linux, build manually with
-
-    cargo tauri build
-
-It looks similar to the Web UI (screenshot above).
-
-## Streaming support
-
-rqbit can stream torrent files and smartly block the stream until the pieces are available. The pieces getting streamed are prioritized. All of this allows you to seek and live stream videos for example.
-
-You can also stream to e.g. VLC or other players with HTTP URLs. Supports seeking too (through various range headers).
-The streaming URLs look like http://IP:3030/torrents/<torrent_id>/stream/<file_id>
-
-## Integrated UPnP Media Server
-
-rqbit can advertise managed torrents to LAN, e.g. your TVs and stream torrents there (without transcoding). Seeking to arbitrary points in the videos is supported too.
-
-Usage from CLI
-
-```
-rqbit --enable-upnp-server server start ...
+```bash
+rqbit download 'magnet:?...'
 ```
 
-## IPv6
+### Run as a server
 
-rqbit supports IPv6. By default it listens on all interfaces in dualstack mode. It can work even if there's no IPv6 enabled.
-
-## Shell completions
-
-Assuming bash, add this to your `~/.bashrc`. Modify for your shell of choice.
-
-```
-eval "$(rqbit completions bash)"
+```bash
+rqbit server start ~/Downloads
 ```
 
-## Socks proxy support
+The Web UI is available at [http://localhost:3030/web/](http://localhost:3030/web/) and the API at [http://localhost:3030/](http://localhost:3030/).
 
+### Docker
+
+```bash
+docker run -d --name rqbit \
+  -p 3030:3030 -p 4240:4240/tcp -p 4240:4240/udp \
+  -v rqbit-db:/home/rqbit/db \
+  -v rqbit-cache:/home/rqbit/cache \
+  -v ~/Downloads:/home/rqbit/downloads \
+  ikatson/rqbit \
+  server start /home/rqbit/downloads
 ```
-rqbit --socks-url socks5://[username:password]@host:port ...
+
+Or with Docker Compose:
+
+```yaml
+services:
+  rqbit:
+    image: ikatson/rqbit
+    ports:
+      - "3030:3030"
+      - "4240:4240/tcp"
+      - "4240:4240/udp"
+    volumes:
+      - rqbit-db:/home/rqbit/db
+      - rqbit-cache:/home/rqbit/cache
+      - ./downloads:/home/rqbit/downloads
+    environment:
+      RQBIT_HTTP_API_LISTEN_ADDR: "0.0.0.0:3030"
+      RQBIT_FASTRESUME: "true"
+
+volumes:
+  rqbit-db:
+  rqbit-cache:
 ```
 
-## Watching a directory for .torrents
+### Install
 
-```
-rqbit server start --watch-folder [path] /download/path
-```
-
-## Systemd socket activation
-
-rqbit can be started on-demand via [systemd socket activation](https://0pointer.de/blog/projects/socket-activation.html) by installing the [service and socket systemd units](systemd) into `$XDG_CONFIG_HOME/systemd/user/` (`~/.config/systemd/user`) and customizing them to your needs. If the associated [`rqbit.conf`](systemd/rqbit.conf) file is installed in `$XDG_CONFIG_HOME/rqbit/rqbit.conf` (`~/.config/rqbit/rqbit.conf`), it will be used to configure `rqbit` when started via the provided systemd unit.
-
-## Performance
-
-Anecdotally from a few reports, rqbit is faster than other clients they've tried, at least with their default settings.
-
-Memory usage for the server is usually within a few tens of megabytes, which makes it great for e.g. RaspberryPI.
-
-I've got a report that rqbit can saturate a 20Gbps link, although I don't have the hardware to confirm.
-
-## Installation
-
-There are pre-built binaries in [Releases](https://github.com/ikatson/rqbit/releases).
-
-[![](https://repology.org/badge/vertical-allrepos/rqbit.svg)](https://repology.org/project/rqbit/versions)
-
-### Homebrew
-
-**rqbit** can be installed using Homebrew.
-```sh
+```bash
+# Homebrew
 brew install rqbit
-```
 
-### Cargo
-
-If you have the Rust toolchain installed then you can use the following.
-```sh
+# Cargo
 cargo install rqbit
+
+# Pre-built binaries
+# https://github.com/ikatson/rqbit/releases
 ```
 
-## Docker
+## Features
 
-Docker images are published at [ikatson/rqbit](https://hub.docker.com/r/ikatson/rqbit)
+- **BitTorrent V2** — Working toward full BEP 52 compliance
+- **IPv6** — Dual-stack by default, works even without IPv6 connectivity
+- **HTTP API** — Full REST API with Swagger docs at `/swagger` ([see API reference](#api))
+- **Arr stack compatible** — Works with Sonarr, Radarr, Prowlarr, and other *arr applications
+- **Web UI** — Built-in React frontend for torrent management
+- **Desktop app** — Cross-platform native app via [Tauri](https://tauri.app/)
+- **Streaming** — Stream media files directly with seek support; compatible with VLC and other players via HTTP range requests
+- **UPnP Media Server** — Advertise torrents to LAN devices (smart TVs, etc.)
+- **DHT** — Full distributed hash table support (BEP 5) for trackerless operation
+- **Fast resume** — No rehashing on restart
+- **SOCKS proxy** — Route traffic through SOCKS5 proxies
+- **UPnP port forwarding** — Automatic router configuration
+- **Prometheus metrics** — Available at `/metrics`
+- **Watch folder** — Automatically pick up `.torrent` files from a directory
+- **Systemd socket activation** — On-demand startup support
+- **Shell completions** — Bash, Zsh, Fish
 
-## Build
+### Performance
 
-Just a regular Rust binary build process.
-
-    cargo build --release
-
-The "webui" feature requires npm installed.
-
-## Some useful options
-
-Run ```rqbit --help``` to see all available CLI options.
-
-### -v <log-level>
-
-Increase verbosity. Possible values: trace, debug, info, warn, error.
-
-### --list
-
-Will print the contents of the torrent file or the magnet link.
-
-### --overwrite
-
-If you want to resume downloading a file that already exists, you'll need to add this option.
-
-### -r / --filename-re
-
-Use a regex here to select files by their names.
-
-## Features (not exhaustive)
+rqbit is designed to be lightweight and fast. The server typically runs within a few tens of megabytes of RAM, making it suitable for Raspberry Pi and other constrained environments. Users have reported saturating 20 Gbps links.
 
 ### Supported BEPs
 
-- [BEP-3: The BitTorrent Protocol Specification](https://www.bittorrent.org/beps/bep_0003.html)
-- [BEP-5: DHT Protocol](https://www.bittorrent.org/beps/bep_0005.html)
-- [BEP-7: IPv6 Tracker Extension](https://www.bittorrent.org/beps/bep_0007.html)
-- [BEP-9: Extension for Peers to Send Metadata Files](https://www.bittorrent.org/beps/bep_0009.html)
-- [BEP-10: Extension Protocol](https://www.bittorrent.org/beps/bep_0010.html)
-- [BEP-11: Peer Exchange (PEX)](https://www.bittorrent.org/beps/bep_0011.html)
-- [BEP-12: Multitracker Metadata Extension](https://www.bittorrent.org/beps/bep_0012.html)
-- [BEP-14: Local service discovery](https://www.bittorrent.org/beps/bep_0014.html)
-- [BEP-15: UDP Tracker Protocol](https://www.bittorrent.org/beps/bep_0015.html)
-- [BEP-20: Peer ID Conventions](https://www.bittorrent.org/beps/bep_0020.html)
-- [BEP-23: Tracker Returns Compact Peer Lists](https://www.bittorrent.org/beps/bep_0023.html)
-- [BEP-27: Private Torrents](https://www.bittorrent.org/beps/bep_0027.html)
-- [BEP-29: uTorrent Transport Protocol](https://www.bittorrent.org/beps/bep_0029.html)
-- [BEP-32: IPv6 extension for DHT](https://www.bittorrent.org/beps/bep_0032.html)
-- [BEP-47: Padding files and extended file attributes](https://www.bittorrent.org/beps/bep_0047.html)
-- [BEP-53: Magnet URI extension - Select specific file indices for download](https://www.bittorrent.org/beps/bep_0053.html)
+| BEP | Description |
+|-----|-------------|
+| 3 | The BitTorrent Protocol Specification |
+| 5 | DHT Protocol |
+| 7 | IPv6 Tracker Extension |
+| 9 | Extension for Peers to Send Metadata Files |
+| 10 | Extension Protocol |
+| 11 | Peer Exchange (PEX) |
+| 12 | Multitracker Metadata Extension |
+| 14 | Local Service Discovery |
+| 15 | UDP Tracker Protocol |
+| 20 | Peer ID Conventions |
+| 23 | Tracker Returns Compact Peer Lists |
+| 27 | Private Torrents |
+| 29 | uTorrent Transport Protocol (uTP) |
+| 32 | IPv6 Extension for DHT |
+| 47 | Padding Files and Extended File Attributes |
+| 52 | BitTorrent V2 *(in progress)* |
+| 53 | Magnet URI Extension — Select Specific File Indices |
 
-### Some supported features
+## API
 
-- Sequential downloading (the default and only option)
-- Resume downloading file(s) if they already exist on disk
-- Selective downloading using a regular expression for filename
-- DHT support. Allows magnet links to work, and makes more peers available.
-- HTTP API
-- Pausing / unpausing / deleting (with files or not) APIs
-- Stateful server
-- Web UI
-- Streaming, with seeking
-- UPNP port forwarding to your router
-- UPNP Media Server
-- Fastresume (no rehashing)
-- Download / upload rate limiting
-- Prometheus metrics at ```/metrics``` and ```/torrents/<id_or_infohash>/peer_stats/prometheus```
+rqbit exposes a full HTTP API at `http://localhost:3030/`. Interactive Swagger documentation is available at `/swagger` when the server is running.
 
-## HTTP API
+Key endpoints:
 
-By default it listens on http://127.0.0.1:3030.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/torrents` | List all torrents |
+| `POST` | `/torrents` | Add a torrent (magnet link, URL, or .torrent file) |
+| `GET` | `/torrents/{id}/stats/v1` | Torrent stats |
+| `GET` | `/torrents/{id}/stream/{file_idx}` | Stream a file (supports Range headers) |
+| `POST` | `/torrents/{id}/pause` | Pause a torrent |
+| `POST` | `/torrents/{id}/start` | Resume a torrent |
+| `POST` | `/torrents/{id}/delete` | Delete torrent and files |
+| `POST` | `/torrents/{id}/forget` | Remove torrent, keep files |
+| `GET` | `/dht/stats` | DHT statistics |
+| `GET` | `/metrics` | Prometheus metrics |
 
-```
-curl -s 'http://127.0.0.1:3030/'
+### Authentication
 
-{
-  "apis": {
-    "GET /": "list all available APIs",
-    "GET /dht/stats": "DHT stats",
-    "GET /dht/table": "DHT routing table",
-    "GET /metrics": "Prometheus metrics",
-    "GET /stats": "Global session stats",
-    "GET /stream_logs": "Continuously stream logs",
-    "GET /torrents": "List torrents",
-    "GET /torrents/playlist": "Playlist for supported players",
-    "GET /torrents/{id_or_infohash}": "Torrent details",
-    "GET /torrents/{id_or_infohash}/haves": "The bitfield of have pieces",
-    "GET /torrents/{id_or_infohash}/metadata": "Download the corresponding torrent file",
-    "GET /torrents/{id_or_infohash}/peer_stats": "Per peer stats",
-    "GET /torrents/{id_or_infohash}/peer_stats/prometheus": "Per peer stats in prometheus format",
-    "GET /torrents/{id_or_infohash}/playlist": "Playlist for supported players",
-    "GET /torrents/{id_or_infohash}/stats/v1": "Torrent stats",
-    "GET /torrents/{id_or_infohash}/stream/{file_idx}": "Stream a file. Accepts Range header to seek.",
-    "GET /web/": "Web UI",
-    "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
-    "POST /torrents": "Add a torrent here. magnet: or http:// or a local file.",
-    "POST /torrents/create": "Create a torrent and start seeding. Body should be a local folder",
-    "POST /torrents/resolve_magnet": "Resolve a magnet to torrent file bytes",
-    "POST /torrents/{id_or_infohash}/add_peers": "Add peers (newline-delimited)",
-    "POST /torrents/{id_or_infohash}/delete": "Forget about the torrent, remove the files",
-    "POST /torrents/{id_or_infohash}/forget": "Forget about the torrent, keep the files",
-    "POST /torrents/{id_or_infohash}/pause": "Pause torrent",
-    "POST /torrents/{id_or_infohash}/start": "Resume torrent",
-    "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}"
-  },
-  "server": "rqbit",
-  "version": "9.0.0-beta.1"
-}
+Set basic auth via environment variable:
+
+```bash
+RQBIT_HTTP_BASIC_AUTH_USERPASS=username:password rqbit server start ~/Downloads
 ```
 
-### Basic auth
+### Adding torrents via API
 
-For HTTP API basic authentication set RQBIT_HTTP_BASIC_AUTH_USERPASS environment variable.
+```bash
+# Magnet link
+curl -d 'magnet:?...' http://localhost:3030/torrents
 
+# URL to .torrent file
+curl -d 'http://example.com/file.torrent' http://localhost:3030/torrents
+
+# Local .torrent file
+curl --data-binary @file.torrent http://localhost:3030/torrents
 ```
-RQBIT_HTTP_BASIC_AUTH_USERPASS=username:password rqbit server start ...
+
+Query parameters: `overwrite`, `only_files_regex`, `output_folder`, `list_only`.
+
+## Build from Source
+
+Requires the Rust toolchain. The `webui` feature additionally requires npm.
+
+```bash
+cargo build --release
 ```
 
-### Add torrent through HTTP API
+## License
 
-`curl -d 'magnet:?...' http://127.0.0.1:3030/torrents`
-
-OR
-
-`curl -d 'http://.../file.torrent' http://127.0.0.1:3030/torrents`
-
-OR
-
-`curl --data-binary @/tmp/xubuntu-23.04-minimal-amd64.iso.torrent http://127.0.0.1:3030/torrents`
-
-Supported query parameters, all optional:
-
-- overwrite=true|false
-- only_files_regex - the regular expression string to match filenames
-- output_folder - the folder to download to. If not specified, defaults to the one that rqbit server started with
-- list_only=true|false - if you want to just list the files in the torrent instead of downloading
-
-## Code organization
-
-- crates/rqbit - main binary
-- crates/librqbit - main library
-- crates/librqbit-core - torrent utils
-- crates/bencode - bencode serializing/deserializing
-- crates/buffers - wrappers around binary buffers
-- crates/clone_to_owned - a trait to make something owned
-- crates/sha1w - wrappers around sha1 libraries
-- crates/peer_binary_protocol - the protocol to talk to peers
-- crates/dht - Distributed Hash Table implementation
-- crates/upnp - upnp port forwarding
-- crates/upnp_serve - upnp MediaServer
-- desktop - desktop app built with [Tauri](https://tauri.app/)
-- [librqbit-utp](https://github.com/ikatson/librqbit-utp/) - uTP protocol
-- [librqbit-dualstack-sockets](https://github.com/ikatson/librqbit-dualstack-sockets) - cross-platform IPv6+IPv4 listeners with canonical IPs
-
-## Motivation
-
-This project began purely out of my enjoyment of writing code in Rust. I wasn’t satisfied with my regular BitTorrent client and wanted to see how much effort it would take to build one from scratch. Starting with the bencode protocol, then the peer protocol, it gradually evolved into what it is today.
-
-## Donations and sponsorship
-
-If you love rqbit, please consider donating through one of these methods. With enough support, I might be able to make this my full-time job one day — which would be amazing!
-
-- [Github Sponsors](https://github.com/sponsors/ikatson)
-- Crypto
-  - ETH (Ethereum) 0x68c54b26b5372d5f091b6c08cc62883686c63527
-  - XMR (Monero) 49LcgFreJuedrP8FgnUVB8GkAyoPX7A9PjWfKZA1hNYz5vPCEcYQ9HzKr3pccGR6Lc3V3hn52bukwZShLDhZsk57V41c2ea
-  - XNO (Nano) nano_1ghid3z6x41x8cuoffb6bbrt4e14wsqdbyqwp5d8rk166meo3h77q7mkjusr
+See [LICENSE](LICENSE).
