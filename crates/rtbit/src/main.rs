@@ -481,6 +481,11 @@ fn api_socket_from_systemd() -> anyhow::Result<Option<TcpListener>> {
 }
 
 fn main() -> anyhow::Result<()> {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        // SAFETY: called at program startup before any other threads are spawned.
+        unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
+    }
+
     let opts = Opts::parse();
 
     if let SubCommand::Completions(completions_opts) = &opts.subcommand {
@@ -680,18 +685,29 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         completed_folder: None,
     };
 
+    let basic_auth = if let Ok(up) = std::env::var("RQBIT_HTTP_BASIC_AUTH_USERPASS") {
+        let (u, p) = up
+            .split_once(":")
+            .context("basic auth credentials should be in format username:password")?;
+        Some((u.to_owned(), p.to_owned()))
+    } else {
+        None
+    };
+
+    let token_store = if basic_auth.is_some() {
+        Some(std::sync::Arc::new(
+            librqbit::http_api::auth::TokenStore::new(),
+        ))
+    } else {
+        None
+    };
+
     #[allow(clippy::needless_update)]
     let mut http_api_opts = HttpApiOptions {
         read_only: true,
-        basic_auth: if let Ok(up) = std::env::var("RQBIT_HTTP_BASIC_AUTH_USERPASS") {
-            let (u, p) = up
-                .split_once(":")
-                .context("basic auth credentials should be in format username:password")?;
-            Some((u.to_owned(), p.to_owned()))
-        } else {
-            None
-        },
+        basic_auth,
         allow_create: opts.http_api_allow_create,
+        token_store,
 
         // We need to install prometheus recorder early before we registered any metrics.
         #[cfg(feature = "prometheus")]

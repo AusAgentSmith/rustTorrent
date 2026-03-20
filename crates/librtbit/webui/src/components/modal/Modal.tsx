@@ -40,7 +40,7 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   const renderBackdrop = () => {
     return (
-      <div className="fixed inset-0 bg-black/30 z-300 dark:bg-black/60 backdrop-blur"></div>
+      <div className="fixed inset-0 bg-black/50 z-300 dark:bg-black/70"></div>
     );
   };
   return (

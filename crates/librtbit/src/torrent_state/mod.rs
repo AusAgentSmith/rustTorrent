@@ -439,6 +439,10 @@ impl ManagedTorrent {
                         .metadata
                         .load_full()
                         .context("torrent metadata was not loaded")?;
+                    // Use false: fast resume validation already checks bitfield size,
+                    // validates at least 1 piece per file, and probabilistically checks
+                    // remaining pieces. Passing true would force a full disk recheck
+                    // even for transient errors (network, tracker timeouts).
                     let initializing = Arc::new(TorrentStateInitializing::new(
                         t.shared.clone(),
                         metadata.clone(),
@@ -446,7 +450,7 @@ impl ManagedTorrent {
                         t.shared
                             .storage_factory
                             .create_and_init(t.shared(), &metadata)?,
-                        true,
+                        false,
                     ));
                     g.state = ManagedTorrentState::Initializing(initializing.clone());
                     t.state_change_notify.notify_waiters();

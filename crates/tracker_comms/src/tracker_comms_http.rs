@@ -16,9 +16,7 @@ use librqbit_core::{
 #[derive(Clone, Copy)]
 pub enum TrackerRequestEvent {
     Started,
-    #[allow(dead_code)]
     Stopped,
-    #[allow(dead_code)]
     Completed,
 }
 

@@ -152,5 +152,13 @@ pub fn make_api_router(state: ApiState) -> Router {
             );
     }
 
+    // Auth endpoints (no auth middleware applied — they're public)
+    if state.opts.token_store.is_some() {
+        api_router = api_router
+            .route("/auth/login", post(super::auth::h_auth_login))
+            .route("/auth/refresh", post(super::auth::h_auth_refresh))
+            .route("/auth/logout", post(super::auth::h_auth_logout));
+    }
+
     api_router.with_state(state)
 }

@@ -20,6 +20,7 @@ use crate::api::Api;
 use crate::ApiError;
 use crate::api::Result;
 
+pub mod auth;
 mod handlers;
 mod timeout;
 #[cfg(feature = "webui")]
@@ -75,12 +76,13 @@ pub struct HttpApi {
     opts: HttpApiOptions,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct HttpApiOptions {
     pub read_only: bool,
     pub basic_auth: Option<(String, String)>,
     // Allow creating torrents via API.
     pub allow_create: bool,
+    pub token_store: Option<Arc<auth::TokenStore>>,
     #[cfg(feature = "prometheus")]
     pub prometheus_handle: Option<metrics_exporter_prometheus::PrometheusHandle>,
 }
@@ -218,14 +220,39 @@ impl HttpApi {
                 .allow_headers(AllowHeaders::any())
         };
 
-        // Simple one-user basic auth
-        if let Some((user, pass)) = state.opts.basic_auth.clone() {
-            info!("Enabling simple basic authentication in HTTP API");
+        // Unified auth: supports Bearer token and Basic auth
+        if state.opts.basic_auth.is_some() {
+            let token_store = state.opts.token_store.clone();
+            let user = state.opts.basic_auth.as_ref().unwrap().0.clone();
+            let pass = state.opts.basic_auth.as_ref().unwrap().1.clone();
+            info!("Enabling authentication in HTTP API");
             main_router = main_router.route_layer(axum::middleware::from_fn(
-                move |headers, request, next| {
+                move |headers: HeaderMap, request: axum::extract::Request, next: Next| {
+                    let token_store = token_store.clone();
                     let user = user.clone();
                     let pass = pass.clone();
                     async move {
+                        // Skip auth for login/refresh endpoints
+                        let path = request.uri().path();
+                        if path == "/auth/login" || path == "/auth/refresh" {
+                            return Ok(next.run(request).await);
+                        }
+
+                        // Try Bearer token first
+                        if let Some(ts) = &token_store {
+                            if let Some(token) = headers
+                                .get("Authorization")
+                                .and_then(|h| h.to_str().ok())
+                                .and_then(|h| h.strip_prefix("Bearer "))
+                            {
+                                if ts.validate_access_token(token) {
+                                    return Ok(next.run(request).await);
+                                }
+                                return Err(ApiError::unauthorized());
+                            }
+                        }
+
+                        // Fall back to Basic auth
                         simple_basic_auth(Some(&user), Some(&pass), headers, request, next).await
                     }
                 },
@@ -233,7 +260,7 @@ impl HttpApi {
         }
 
         // qBittorrent WebUI API v2 compatibility layer.
-        // Mounted after basic auth so it handles its own cookie-based auth.
+        // Mounted after auth so it handles its own cookie-based auth.
         {
             let qbit_router = handlers::qbit_compat::make_qbit_router(state.clone());
             main_router = main_router.nest("/api/v2", qbit_router);

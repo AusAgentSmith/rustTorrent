@@ -239,7 +239,7 @@ export const RqbitWebUI = (props: {
         >
           <RootContent />
           {isDragging && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm">
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/90">
               <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center">
                 <p className="text-lg font-semibold text-primary">
                   Drop .torrent files here

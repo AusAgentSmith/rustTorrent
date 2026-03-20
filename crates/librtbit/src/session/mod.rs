@@ -85,7 +85,7 @@ pub struct Session {
     dht: Option<Dht>,
     pub(crate) connector: Arc<StreamConnector>,
     reqwest_client: reqwest::Client,
-    udp_tracker_client: UdpTrackerClient,
+    udp_tracker_client: Option<UdpTrackerClient>,
     disable_trackers: bool,
 
     // Lifecycle management
@@ -180,7 +180,12 @@ impl Session {
                 None
             };
 
-            let dht = if opts.disable_dht {
+            let has_proxy = opts.connect.as_ref().and_then(|s| s.proxy_url.as_ref()).is_some();
+
+            let dht = if opts.disable_dht || has_proxy {
+                if has_proxy && !opts.disable_dht {
+                    warn!("DHT disabled: SOCKS proxy configured (DHT uses UDP which cannot be proxied)");
+                }
                 None
             } else {
                 let dht = if opts.disable_dht_persistence {
@@ -324,9 +329,16 @@ impl Session {
                 None
             };
 
-            let udp_tracker_client = UdpTrackerClient::new(token.clone(), bind_device.as_ref())
-                .await
-                .context("error creating UDP tracker client")?;
+            let udp_tracker_client = if has_proxy {
+                warn!("UDP trackers disabled: SOCKS proxy configured");
+                None
+            } else {
+                Some(
+                    UdpTrackerClient::new(token.clone(), bind_device.as_ref())
+                        .await
+                        .context("error creating UDP tracker client")?,
+                )
+            };
 
             let category_manager = if let Some(p) = persistence.as_ref() {
                 match p.load_categories().await {
@@ -341,7 +353,10 @@ impl Session {
             };
 
             let lsd = {
-                if opts.disable_local_service_discovery {
+                if opts.disable_local_service_discovery || has_proxy {
+                    if has_proxy && !opts.disable_local_service_discovery {
+                        warn!("Local service discovery disabled: SOCKS proxy configured (LSD uses multicast which cannot be proxied)");
+                    }
                     None
                 } else {
                     LocalServiceDiscovery::new(LocalServiceDiscoveryOptions {

@@ -9,7 +9,7 @@ const FooterPiece: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 export const Footer: React.FC = () => {
   const stats = useStatsStore((stats) => stats.stats);
   return (
-    <div className="bg-surface-raised/80 backdrop-blur text-nowrap text-sm font-medium text-secondary flex gap-x-1 lg:gap-x-5 justify-evenly flex-wrap">
+    <div className="bg-surface-raised text-nowrap text-sm font-medium text-secondary flex gap-x-1 lg:gap-x-5 justify-evenly flex-wrap">
       <FooterPiece>
         &darr; {stats.download_speed.human_readable} (
         {formatBytes(stats.counters.fetched_bytes)})

@@ -148,13 +148,19 @@ impl TrackerComms {
         force_interval: Option<Duration>,
         announce_port: u16,
         reqwest_client: reqwest::Client,
-        udp_client: UdpTrackerClient,
+        udp_client: Option<UdpTrackerClient>,
     ) -> Option<BoxStream<'static, SocketAddr>> {
         let trackers = trackers
             .into_iter()
             .filter_map(|t| match t.scheme() {
                 "http" | "https" => Some(SupportedTracker::Http(t)),
-                "udp" => Some(SupportedTracker::Udp(t)),
+                "udp" => match &udp_client {
+                    Some(_) => Some(SupportedTracker::Udp(t)),
+                    None => {
+                        debug!("skipping UDP tracker {t}: proxy mode");
+                        None
+                    }
+                },
                 _ => {
                     debug!("unsupported tracker URL: {}", t);
                     None
@@ -184,7 +190,7 @@ impl TrackerComms {
             });
             let mut futures = FuturesUnordered::new();
             for tracker in trackers {
-                futures.push(comms.add_tracker(tracker, &udp_client))
+                futures.push(comms.add_tracker(tracker, udp_client.as_ref()))
             }
             while !(futures.is_empty()) {
                 tokio::select! {
@@ -208,7 +214,7 @@ impl TrackerComms {
     fn add_tracker(
         &self,
         url: SupportedTracker,
-        client: &UdpTrackerClient,
+        client: Option<&UdpTrackerClient>,
     ) -> Either<
         impl std::future::Future<Output = anyhow::Result<()>> + '_ + Send,
         impl std::future::Future<Output = anyhow::Result<()>> + '_ + Send,
@@ -216,8 +222,9 @@ impl TrackerComms {
         let info_hash = self.info_hash;
         match url {
             SupportedTracker::Udp(url) => {
+                // Safe to unwrap: UDP trackers are filtered out when client is None
                 let span = debug_span!(parent: None, "udp_tracker", tracker = %url, info_hash = ?info_hash);
-                self.task_single_tracker_monitor_udp(url, client.clone())
+                self.task_single_tracker_monitor_udp(url, client.unwrap().clone())
                     .instrument(span)
                     .right_future()
             }
@@ -237,9 +244,26 @@ impl TrackerComms {
 
     async fn task_single_tracker_monitor_http(&self, tracker_url: Url) -> anyhow::Result<()> {
         trace!(url=%tracker_url, "starting monitor");
-        let mut event = Some(tracker_comms_http::TrackerRequestEvent::Started);
+        let mut first = true;
+        let mut was_completed = false;
 
         loop {
+            let stats = self.stats.get();
+            let is_completed = stats.is_completed();
+
+            let event = if first {
+                first = false;
+                Some(tracker_comms_http::TrackerRequestEvent::Started)
+            } else if matches!(stats.torrent_state, TrackerCommsStatsState::Paused) {
+                Some(tracker_comms_http::TrackerRequestEvent::Stopped)
+            } else if is_completed && !was_completed {
+                Some(tracker_comms_http::TrackerRequestEvent::Completed)
+            } else {
+                None
+            };
+
+            was_completed = is_completed;
+
             let interval = (|| self.tracker_one_request_http(&tracker_url, event))
                 .retry(
                     ExponentialBuilder::new()
@@ -253,7 +277,6 @@ impl TrackerComms {
                 .await
                 .context("this shouldn't fail")?;
 
-            event = None;
             let interval = self.force_tracker_interval.unwrap_or(interval);
             debug!("sleeping for {:?} after calling tracker", interval);
             tokio::time::sleep(interval).await;
