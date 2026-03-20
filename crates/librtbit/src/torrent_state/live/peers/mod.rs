@@ -358,17 +358,6 @@ mod tests {
         drop(_guard);
         assert_eq!(sem.available_permits(), 2);
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-
-    use super::*;
-
-    fn addr(port: u16) -> SocketAddr {
-        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port))
-    }
 
     /// Test that aggregate stats correctly track peer state transitions.
     #[test]
