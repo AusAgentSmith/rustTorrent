@@ -5,7 +5,15 @@ import { useErrorStore } from "../stores/errorStore";
 import { useTorrentStore } from "../stores/torrentStore";
 import { useUIStore } from "../stores/uiStore";
 import { DeleteTorrentModal } from "./modal/DeleteTorrentModal";
-import { FaPlay, FaPause, FaCog, FaTrash, FaCopy, FaTag } from "react-icons/fa";
+import {
+  FaPlay,
+  FaPause,
+  FaCog,
+  FaTrash,
+  FaCopy,
+  FaTag,
+  FaPlus,
+} from "react-icons/fa";
 
 export interface ContextMenuState {
   x: number;
@@ -27,7 +35,10 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [actionInProgress, setActionInProgress] = useState(false);
+  const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
   const API = useContext(APIContext);
   const setCloseableError = useErrorStore((s) => s.setCloseableError);
@@ -176,6 +187,34 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
     onClose();
   };
 
+  const handleCreateAndAssignCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setShowNewCategoryInput(false);
+      return;
+    }
+    setActionInProgress(true);
+    try {
+      await API.createCategory(name);
+      const cats = await API.getCategories();
+      setCategories(cats);
+    } catch {
+      // category may already exist, still assign it
+    }
+    for (const t of targets) {
+      try {
+        await API.setTorrentCategory(t.id, name);
+      } catch (e: any) {
+        setCloseableError({
+          text: `Error setting category for "${t.name ?? t.id}"`,
+          details: e,
+        });
+      }
+    }
+    refreshTorrents();
+    onClose();
+  };
+
   const itemCls =
     "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-surface cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
   const iconCls = "w-3.5 h-3.5 shrink-0";
@@ -252,10 +291,34 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
                   {name}
                 </button>
               ))}
-              {categoryNames.length === 0 && (
-                <div className="px-3 py-1.5 text-xs text-tertiary">
-                  No categories defined
+              {showNewCategoryInput ? (
+                <div className="px-3 py-1">
+                  <input
+                    ref={newCategoryInputRef}
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateAndAssignCategory();
+                      if (e.key === "Escape") {
+                        setNewCategoryName("");
+                        setShowNewCategoryInput(false);
+                      }
+                    }}
+                    onBlur={handleCreateAndAssignCategory}
+                    placeholder="Category name..."
+                    autoFocus
+                    className="w-full px-2 py-1 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary placeholder:text-tertiary"
+                  />
                 </div>
+              ) : (
+                <button
+                  className={itemCls}
+                  onClick={() => setShowNewCategoryInput(true)}
+                >
+                  <FaPlus className={`${iconCls} text-tertiary`} />
+                  <span className="text-tertiary">New Category...</span>
+                </button>
               )}
             </div>
           )}

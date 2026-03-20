@@ -238,9 +238,10 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectRelative]);
 
-  // Row click handler
+  // Row click handler — skip right-clicks (handled by context menu)
   const handleRowClick = useCallback(
     (id: number, e: React.MouseEvent) => {
+      if (e.button === 2) return;
       if (e.shiftKey) {
         e.preventDefault();
         selectRange(id, orderedIdsRef.current);

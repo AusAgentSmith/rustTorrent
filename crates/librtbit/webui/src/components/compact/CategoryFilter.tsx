@@ -1,5 +1,5 @@
-import { useContext, useEffect, useMemo } from "react";
-import { BsTag, BsTagFill } from "react-icons/bs";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { BsTag, BsTagFill, BsPlus } from "react-icons/bs";
 import { APIContext } from "../../context";
 import { useUIStore } from "../../stores/uiStore";
 import { useTorrentStore } from "../../stores/torrentStore";
@@ -11,6 +11,10 @@ export const CategoryFilter: React.FC = () => {
   const setCategoryFilter = useUIStore((state) => state.setCategoryFilter);
   const categories = useUIStore((state) => state.categories);
   const setCategories = useUIStore((state) => state.setCategories);
+
+  const [showNewInput, setShowNewInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -26,6 +30,13 @@ export const CategoryFilter: React.FC = () => {
       cancelled = true;
     };
   }, [API, setCategories]);
+
+  // Focus input when it appears
+  useEffect(() => {
+    if (showNewInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [showNewInput]);
 
   // Count torrents per category
   const categoryCounts = useMemo(() => {
@@ -59,9 +70,22 @@ export const CategoryFilter: React.FC = () => {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [categories, categoryCounts.counts]);
 
-  if (categoryNames.length === 0 && categoryCounts.uncategorized === 0) {
-    return null;
-  }
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setShowNewInput(false);
+      return;
+    }
+    try {
+      await API.createCategory(name);
+      const cats = await API.getCategories();
+      setCategories(cats);
+    } catch {
+      // ignore - category may already exist
+    }
+    setNewCategoryName("");
+    setShowNewInput(false);
+  };
 
   const activeItemClass = "bg-primary/10 text-primary font-medium";
   const inactiveItemClass =
@@ -70,12 +94,41 @@ export const CategoryFilter: React.FC = () => {
 
   return (
     <div>
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pt-3 pb-1 flex items-center justify-between">
         <h3 className="text-xs font-semibold text-tertiary uppercase tracking-wider">
           Categories
         </h3>
+        <button
+          onClick={() => setShowNewInput(true)}
+          className="text-tertiary hover:text-primary cursor-pointer"
+          title="New category"
+        >
+          <BsPlus className="w-4 h-4" />
+        </button>
       </div>
       <div className="px-1.5">
+        {/* New category input */}
+        {showNewInput && (
+          <div className="px-2.5 py-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateCategory();
+                if (e.key === "Escape") {
+                  setNewCategoryName("");
+                  setShowNewInput(false);
+                }
+              }}
+              onBlur={handleCreateCategory}
+              placeholder="Category name..."
+              className="w-full px-2 py-1 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary placeholder:text-tertiary"
+            />
+          </div>
+        )}
+
         {/* All */}
         <button
           onClick={() => setCategoryFilter(null)}
