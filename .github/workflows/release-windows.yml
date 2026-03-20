@@ -1,9 +1,8 @@
 name: Release binaries for Windows
 
+# DISABLED: needs review and fixes before re-enabling auto triggers
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always

@@ -1,11 +1,8 @@
 name: Release binaries for Linux and Docker
 
+# DISABLED: needs review and fixes before re-enabling auto triggers
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   release-linux:
