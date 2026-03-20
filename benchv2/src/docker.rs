@@ -1,6 +1,5 @@
 use anyhow::Result;
 use bollard::Docker;
-use bollard::exec::{CreateExecOptions, StartExecResults};
 use futures_util::StreamExt;
 use std::collections::HashMap;
 
@@ -65,7 +64,7 @@ pub async fn exec_in_container(
     let exec = docker
         .create_exec(
             container_id,
-            CreateExecOptions {
+            bollard::exec::CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
@@ -75,11 +74,17 @@ pub async fn exec_in_container(
         .await?;
 
     let mut output = String::new();
-    if let StartExecResults::Attached { mut output: stream, .. } =
+    if let bollard::exec::StartExecResults::Attached { mut output: stream, .. } =
         docker.start_exec(&exec.id, None).await?
     {
         while let Some(Ok(chunk)) = stream.next().await {
-            output.push_str(&chunk.to_string());
+            match chunk {
+                bollard::container::LogOutput::StdOut { message }
+                | bollard::container::LogOutput::StdErr { message } => {
+                    output.push_str(&String::from_utf8_lossy(&message));
+                }
+                _ => {}
+            }
         }
     }
     Ok(output)
