@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { TorrentListItem } from "../../api-types";
 import { TorrentTable } from "./TorrentTable";
 import { DetailPane } from "./DetailPane";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 const DETAIL_PANE_MIN_HEIGHT = 100;
 const DETAIL_PANE_MAX_HEIGHT = 600;
@@ -16,6 +17,9 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({
   torrents,
   loading,
 }) => {
+  // Keyboard shortcuts (Ctrl+A, Ctrl+F, Escape)
+  useKeyboardShortcuts();
+
   const [detailPaneHeight, setDetailPaneHeight] = useState(
     DETAIL_PANE_DEFAULT_HEIGHT,
   );

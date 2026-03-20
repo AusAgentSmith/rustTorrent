@@ -13,9 +13,33 @@ import { LogStream } from "../LogStream";
 
 type TabId = "overview" | "files" | "peers" | "trackers" | "speed" | "logs";
 
+const VALID_TABS: TabId[] = [
+  "overview",
+  "files",
+  "peers",
+  "trackers",
+  "speed",
+  "logs",
+];
+
 export const DetailPane: React.FC = () => {
   const selectedTorrentIds = useUIStore((state) => state.selectedTorrentIds);
+  const detailPaneRequestedTab = useUIStore(
+    (state) => state.detailPaneRequestedTab,
+  );
+  const setDetailPaneTab = useUIStore((state) => state.setDetailPaneTab);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  // Respond to programmatic tab switch requests
+  useEffect(() => {
+    if (
+      detailPaneRequestedTab &&
+      VALID_TABS.includes(detailPaneRequestedTab as TabId)
+    ) {
+      setActiveTab(detailPaneRequestedTab as TabId);
+      setDetailPaneTab(null);
+    }
+  }, [detailPaneRequestedTab, setDetailPaneTab]);
 
   const selectedArray = Array.from(selectedTorrentIds);
   const selectedCount = selectedArray.length;

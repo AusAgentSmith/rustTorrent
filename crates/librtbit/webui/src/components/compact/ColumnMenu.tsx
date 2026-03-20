@@ -4,6 +4,7 @@ import {
   useColumnStore,
   ColumnId,
 } from "../../stores/columnStore";
+import { GoTriangleUp, GoTriangleDown } from "react-icons/go";
 
 interface ColumnMenuProps {
   x: number;
@@ -12,10 +13,13 @@ interface ColumnMenuProps {
 }
 
 export const ColumnMenu: React.FC<ColumnMenuProps> = ({ x, y, onClose }) => {
-  const isVisible = useColumnStore((s) => s.isVisible);
+  // Subscribe to data directly so component re-renders on changes
+  const columnVisibility = useColumnStore((s) => s.columnVisibility);
+  const columnOrder = useColumnStore((s) => s.columnOrder);
   const toggleColumnVisibility = useColumnStore(
     (s) => s.toggleColumnVisibility,
   );
+  const moveColumn = useColumnStore((s) => s.moveColumn);
   const resetColumns = useColumnStore((s) => s.resetColumns);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -37,12 +41,24 @@ export const ColumnMenu: React.FC<ColumnMenuProps> = ({ x, y, onClose }) => {
   }, [onClose]);
 
   // Clamp position to viewport
-  const menuWidth = 200;
+  const menuWidth = 260;
   const menuMaxHeight = 400;
   const left = Math.min(x, window.innerWidth - menuWidth - 8);
   const top = Math.min(y, window.innerHeight - menuMaxHeight - 8);
 
-  const configurableColumns = COLUMN_DEFS.filter((c) => c.configurable);
+  // Show columns in their current order
+  const orderedColumns = columnOrder
+    .map((id) => COLUMN_DEFS.find((c) => c.id === id)!)
+    .filter((c) => c && c.configurable);
+
+  const isVisible = (id: ColumnId): boolean => {
+    const v = columnVisibility[id];
+    if (v !== undefined) return v;
+    return COLUMN_DEFS.find((c) => c.id === id)?.defaultVisible ?? true;
+  };
+
+  const arrowBtn =
+    "p-0.5 text-tertiary hover:text-primary rounded hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer";
 
   return (
     <div
@@ -53,23 +69,43 @@ export const ColumnMenu: React.FC<ColumnMenuProps> = ({ x, y, onClose }) => {
       <div className="px-3 py-1.5 text-xs font-semibold text-tertiary uppercase tracking-wider border-b border-divider">
         Columns
       </div>
-      {configurableColumns.map((col) => {
+      {orderedColumns.map((col, idx) => {
         const visible = isVisible(col.id);
         return (
-          <label
+          <div
             key={col.id}
-            className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface cursor-pointer text-sm"
+            className="flex items-center gap-1 px-2 py-1 hover:bg-surface"
           >
-            <input
-              type="checkbox"
-              checked={visible}
-              onChange={() => toggleColumnVisibility(col.id as ColumnId)}
-              className="w-3.5 h-3.5 rounded border-divider-strong bg-surface text-primary focus:ring-primary"
-            />
-            <span className={visible ? "text-primary" : "text-tertiary"}>
-              {col.label}
-            </span>
-          </label>
+            <label className="flex items-center gap-2 flex-1 cursor-pointer text-sm">
+              <input
+                type="checkbox"
+                checked={visible}
+                onChange={() => toggleColumnVisibility(col.id as ColumnId)}
+                className="w-3.5 h-3.5 rounded border-divider-strong bg-surface text-primary focus:ring-primary"
+              />
+              <span className={visible ? "text-primary" : "text-tertiary"}>
+                {col.label}
+              </span>
+            </label>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                className={arrowBtn}
+                onClick={() => moveColumn(col.id as ColumnId, "up")}
+                disabled={idx === 0}
+                title="Move up"
+              >
+                <GoTriangleUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                className={arrowBtn}
+                onClick={() => moveColumn(col.id as ColumnId, "down")}
+                disabled={idx === orderedColumns.length - 1}
+                title="Move down"
+              >
+                <GoTriangleDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         );
       })}
       <div className="border-t border-divider mt-1 pt-1">

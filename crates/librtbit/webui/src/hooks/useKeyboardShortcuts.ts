@@ -18,6 +18,7 @@ export function useKeyboardShortcuts(actions?: KeyboardShortcutActions) {
   const torrents = useTorrentStore((state) => state.torrents);
   const searchQuery = useUIStore((state) => state.searchQuery);
   const statusFilter = useUIStore((state) => state.statusFilter);
+  const categoryFilter = useUIStore((state) => state.categoryFilter);
   const selectAll = useUIStore((state) => state.selectAll);
   const clearSelection = useUIStore((state) => state.clearSelection);
   const selectedTorrentIds = useUIStore((state) => state.selectedTorrentIds);
@@ -47,7 +48,14 @@ export function useKeyboardShortcuts(actions?: KeyboardShortcutActions) {
         if (torrents) {
           const normalizedQuery = searchQuery.toLowerCase();
           const visibleIds = torrents
-            .filter((t) => isTorrentVisible(t, normalizedQuery, statusFilter))
+            .filter((t) =>
+              isTorrentVisible(
+                t,
+                normalizedQuery,
+                statusFilter,
+                categoryFilter,
+              ),
+            )
             .map((t) => t.id);
           selectAll(visibleIds);
         }
@@ -110,6 +118,7 @@ export function useKeyboardShortcuts(actions?: KeyboardShortcutActions) {
     torrents,
     searchQuery,
     statusFilter,
+    categoryFilter,
     selectAll,
     clearSelection,
     selectedTorrentIds,

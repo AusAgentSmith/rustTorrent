@@ -18,6 +18,24 @@ export type ColumnId =
   | "ratio"
   | "category";
 
+// IDs of configurable columns in their default order
+const DEFAULT_CONFIGURABLE_ORDER: ColumnId[] = [
+  "id",
+  "name",
+  "size",
+  "progress",
+  "downloadedBytes",
+  "downSpeed",
+  "upSpeed",
+  "uploadedBytes",
+  "eta",
+  "peers",
+  "state",
+  "info_hash",
+  "ratio",
+  "category",
+];
+
 export interface ColumnDef {
   id: ColumnId;
   label: string;
@@ -194,6 +212,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
 
 const STORAGE_KEY_WIDTHS = "rqbit-column-widths";
 const STORAGE_KEY_VISIBLE = "rqbit-column-visible";
+const STORAGE_KEY_ORDER = "rqbit-column-order";
 
 function loadJson(key: string): Record<string, any> {
   try {
@@ -204,9 +223,27 @@ function loadJson(key: string): Record<string, any> {
   }
 }
 
+function loadColumnOrder(): ColumnId[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_ORDER);
+    if (stored) {
+      const parsed = JSON.parse(stored) as ColumnId[];
+      // Ensure all configurable columns are present (in case new columns were added)
+      const missing = DEFAULT_CONFIGURABLE_ORDER.filter(
+        (id) => !parsed.includes(id),
+      );
+      return [...parsed, ...missing];
+    }
+  } catch {
+    // ignore
+  }
+  return [...DEFAULT_CONFIGURABLE_ORDER];
+}
+
 export interface ColumnStore {
   columnWidths: Record<string, number>;
   columnVisibility: Record<string, boolean>;
+  columnOrder: ColumnId[];
 
   getWidth: (id: ColumnId) => number;
   isVisible: (id: ColumnId) => boolean;
@@ -214,12 +251,14 @@ export interface ColumnStore {
 
   setColumnWidth: (id: ColumnId, width: number) => void;
   toggleColumnVisibility: (id: ColumnId) => void;
+  moveColumn: (id: ColumnId, direction: "up" | "down") => void;
   resetColumns: () => void;
 }
 
 export const useColumnStore = create<ColumnStore>((set, get) => ({
   columnWidths: loadJson(STORAGE_KEY_WIDTHS),
   columnVisibility: loadJson(STORAGE_KEY_VISIBLE),
+  columnOrder: loadColumnOrder(),
 
   getWidth: (id) => {
     const w = get().columnWidths[id];
@@ -234,7 +273,13 @@ export const useColumnStore = create<ColumnStore>((set, get) => ({
   },
 
   getVisibleColumns: () => {
-    return COLUMN_DEFS.filter((c) => get().isVisible(c.id));
+    const { isVisible, columnOrder } = get();
+    // Fixed columns first, then configurable columns in user's order
+    const fixed = COLUMN_DEFS.filter((c) => !c.configurable && isVisible(c.id));
+    const ordered = columnOrder
+      .map((id) => COLUMN_DEFS.find((c) => c.id === id)!)
+      .filter((c) => c && isVisible(c.id));
+    return [...fixed, ...ordered];
   },
 
   setColumnWidth: (id, width) => {
@@ -261,9 +306,27 @@ export const useColumnStore = create<ColumnStore>((set, get) => ({
     });
   },
 
+  moveColumn: (id, direction) => {
+    set((state) => {
+      const order = [...state.columnOrder];
+      const idx = order.indexOf(id);
+      if (idx === -1) return state;
+      const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= order.length) return state;
+      [order[idx], order[targetIdx]] = [order[targetIdx], order[idx]];
+      localStorage.setItem(STORAGE_KEY_ORDER, JSON.stringify(order));
+      return { columnOrder: order };
+    });
+  },
+
   resetColumns: () => {
     localStorage.removeItem(STORAGE_KEY_WIDTHS);
     localStorage.removeItem(STORAGE_KEY_VISIBLE);
-    set({ columnWidths: {}, columnVisibility: {} });
+    localStorage.removeItem(STORAGE_KEY_ORDER);
+    set({
+      columnWidths: {},
+      columnVisibility: {},
+      columnOrder: [...DEFAULT_CONFIGURABLE_ORDER],
+    });
   },
 }));

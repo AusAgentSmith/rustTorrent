@@ -49,6 +49,9 @@ export interface UIStore {
   detailsModalTorrentId: number | null;
   openDetailsModal: (id: number) => void;
   closeDetailsModal: () => void;
+
+  detailPaneRequestedTab: string | null;
+  setDetailPaneTab: (tab: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
@@ -209,4 +212,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
       lastSelectedId: id,
     }),
   closeDetailsModal: () => set({ detailsModalTorrentId: null }),
+
+  detailPaneRequestedTab: null,
+  setDetailPaneTab: (tab) => set({ detailPaneRequestedTab: tab }),
 }));

@@ -5,7 +5,7 @@ import { useErrorStore } from "../stores/errorStore";
 import { useTorrentStore } from "../stores/torrentStore";
 import { useUIStore } from "../stores/uiStore";
 import { DeleteTorrentModal } from "./modal/DeleteTorrentModal";
-import { FaPlay, FaPause, FaCog, FaTrash, FaCopy } from "react-icons/fa";
+import { FaPlay, FaPause, FaCog, FaTrash, FaCopy, FaTag } from "react-icons/fa";
 
 export interface ContextMenuState {
   x: number;
@@ -26,12 +26,16 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
   const { x, y } = menu;
   const menuRef = useRef<HTMLDivElement>(null);
   const [showDelete, setShowDelete] = useState(false);
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [actionInProgress, setActionInProgress] = useState(false);
 
   const API = useContext(APIContext);
   const setCloseableError = useErrorStore((s) => s.setCloseableError);
   const refreshTorrents = useTorrentStore((s) => s.refreshTorrents);
   const openDetailsModal = useUIStore((s) => s.openDetailsModal);
+  const setDetailPaneTab = useUIStore((s) => s.setDetailPaneTab);
+  const categories = useUIStore((s) => s.categories);
+  const setCategories = useUIStore((s) => s.setCategories);
 
   const targets = menu.selectedTorrents;
   const isBulk = targets.length > 1;
@@ -45,6 +49,16 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
     singleTarget &&
     (singleTarget.stats?.state === "paused" ||
       singleTarget.stats?.state === "live");
+
+  // Fetch categories once when menu opens
+  const categoriesFetched = useRef(false);
+  useEffect(() => {
+    if (categoriesFetched.current) return;
+    categoriesFetched.current = true;
+    API.getCategories()
+      .then((cats) => setCategories(cats))
+      .catch(() => {});
+  }, [API, setCategories]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
@@ -141,7 +155,24 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
   const handleConfigure = () => {
     if (singleTarget) {
       openDetailsModal(singleTarget.id);
+      setDetailPaneTab("files");
     }
+    onClose();
+  };
+
+  const handleSetCategory = async (category: string | null) => {
+    setActionInProgress(true);
+    for (const t of targets) {
+      try {
+        await API.setTorrentCategory(t.id, category);
+      } catch (e: any) {
+        setCloseableError({
+          text: `Error setting category for "${t.name ?? t.id}"`,
+          details: e,
+        });
+      }
+    }
+    refreshTorrents();
     onClose();
   };
 
@@ -149,6 +180,10 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
     "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-surface cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
   const iconCls = "w-3.5 h-3.5 shrink-0";
   const separator = <div className="border-t border-divider my-1" />;
+
+  const categoryNames = Object.keys(categories).sort((a, b) =>
+    a.localeCompare(b),
+  );
 
   return (
     <>
@@ -189,6 +224,44 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
             {separator}
           </>
         )}
+
+        {/* Category submenu */}
+        <div className="relative">
+          <button
+            className={itemCls}
+            onClick={() => setShowCategoryMenu((v) => !v)}
+            disabled={actionInProgress}
+          >
+            <FaTag className={`${iconCls} text-secondary`} />
+            {isBulk ? "Set Category..." : "Set Category..."}
+          </button>
+          {showCategoryMenu && (
+            <div className="border-t border-divider bg-surface-raised">
+              <button
+                className={`${itemCls} text-tertiary`}
+                onClick={() => handleSetCategory(null)}
+              >
+                None
+              </button>
+              {categoryNames.map((name) => (
+                <button
+                  key={name}
+                  className={itemCls}
+                  onClick={() => handleSetCategory(name)}
+                >
+                  {name}
+                </button>
+              ))}
+              {categoryNames.length === 0 && (
+                <div className="px-3 py-1.5 text-xs text-tertiary">
+                  No categories defined
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {separator}
 
         <button className={itemCls} onClick={handleCopyName}>
           <FaCopy className={`${iconCls} text-secondary`} />

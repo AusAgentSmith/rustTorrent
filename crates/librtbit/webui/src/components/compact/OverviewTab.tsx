@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import {
   TorrentListItem,
   STATE_INITIALIZING,
@@ -38,14 +38,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ torrent }) => {
 
   const statsResponse = torrent?.stats ?? null;
 
-  // Fetch categories if not loaded yet
+  // Fetch categories once per mount
+  const categoriesFetched = useRef(false);
   useEffect(() => {
-    if (Object.keys(categories).length === 0) {
-      API.getCategories()
-        .then((cats) => setCategories(cats))
-        .catch(() => {});
-    }
-  }, [API, categories, setCategories]);
+    if (categoriesFetched.current) return;
+    categoriesFetched.current = true;
+    API.getCategories()
+      .then((cats) => setCategories(cats))
+      .catch(() => {});
+  }, [API, setCategories]);
 
   if (!torrent || !statsResponse) {
     return <div className="p-3 text-tertiary">Loading...</div>;

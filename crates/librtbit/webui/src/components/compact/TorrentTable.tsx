@@ -76,6 +76,8 @@ function getTableSortValue(
 
 /** Generate a <colgroup> from visible columns with their widths */
 function TableColGroup({ columns }: { columns: ColumnDef[] }) {
+  // Subscribe to columnWidths directly so we re-render when widths change
+  useColumnStore((s) => s.columnWidths);
   const getWidth = useColumnStore((s) => s.getWidth);
   return (
     <colgroup>
@@ -109,6 +111,10 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
   const statusFilter = useUIStore((state) => state.statusFilter);
   const categoryFilter = useUIStore((state) => state.categoryFilter);
 
+  // Subscribe to data directly so component re-renders on changes
+  useColumnStore((s) => s.columnVisibility);
+  useColumnStore((s) => s.columnWidths);
+  useColumnStore((s) => s.columnOrder);
   const visibleColumns = useColumnStore((s) => s.getVisibleColumns)();
   const getWidth = useColumnStore((s) => s.getWidth);
   const setColumnWidth = useColumnStore((s) => s.setColumnWidth);
@@ -304,7 +310,12 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     (colId: ColumnId, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const currentWidth = getWidth(colId);
+      let currentWidth = getWidth(colId);
+      if (currentWidth === 0) {
+        // Flex column: use actual rendered width
+        const th = (e.target as HTMLElement).closest("th");
+        if (th) currentWidth = th.getBoundingClientRect().width;
+      }
       setResizing({ colId, startX: e.clientX, startWidth: currentWidth });
     },
     [getWidth],
@@ -403,8 +414,7 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
                     ? "text-right"
                     : "text-left";
               const isSortable = col.sortable;
-              const w = getWidth(col.id);
-              const canResize = w > 0; // flex column (name) has width 0
+              const canResize = col.configurable;
 
               return (
                 <th
