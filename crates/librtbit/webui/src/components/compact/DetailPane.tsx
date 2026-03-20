@@ -6,10 +6,12 @@ import { useTorrentStore } from "../../stores/torrentStore";
 import { OverviewTab } from "./OverviewTab";
 import { FilesTab } from "./FilesTab";
 import { PeersTab } from "./PeersTab";
+import { TrackersTab } from "./TrackersTab";
+import { SpeedTab } from "./SpeedTab";
 import { TabButton, TabList } from "../Tabs";
 import { LogStream } from "../LogStream";
 
-type TabId = "overview" | "files" | "peers" | "logs";
+type TabId = "overview" | "files" | "peers" | "trackers" | "speed" | "logs";
 
 export const DetailPane: React.FC = () => {
   const selectedTorrentIds = useUIStore((state) => state.selectedTorrentIds);
@@ -56,6 +58,18 @@ export const DetailPane: React.FC = () => {
           label="Peers"
           active={activeTab === "peers"}
           onClick={() => setActiveTab("peers")}
+        />
+        <TabButton
+          id="trackers"
+          label="Trackers"
+          active={activeTab === "trackers"}
+          onClick={() => setActiveTab("trackers")}
+        />
+        <TabButton
+          id="speed"
+          label="Speed"
+          active={activeTab === "speed"}
+          onClick={() => setActiveTab("speed")}
         />
         <TabButton
           id="logs"
@@ -129,6 +143,8 @@ const DetailPaneContent: React.FC<DetailPaneContentProps> = ({
         />
       )}
       {activeTab === "peers" && <PeersTab torrent={torrent ?? null} />}
+      {activeTab === "trackers" && <TrackersTab torrent={torrent ?? null} />}
+      {activeTab === "speed" && <SpeedTab torrent={torrent ?? null} />}
       {activeTab === "logs" && (
         <div className="h-full">
           {logsUrl ? (

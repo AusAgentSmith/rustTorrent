@@ -5,6 +5,9 @@ import { isTorrentVisible } from "../helper/torrentFilters";
 
 interface KeyboardShortcutActions {
   onDelete?: () => void;
+  onToggleSidebar?: () => void;
+  onOpenSettings?: () => void;
+  onOpenLogs?: () => void;
 }
 
 /**
@@ -76,6 +79,27 @@ export function useKeyboardShortcuts(actions?: KeyboardShortcutActions) {
       ) {
         e.preventDefault();
         actions?.onDelete?.();
+        return;
+      }
+
+      // B: Toggle sidebar
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        actions?.onToggleSidebar?.();
+        return;
+      }
+
+      // Ctrl/Cmd+, (comma): Open settings
+      if (isMod && e.key === ",") {
+        e.preventDefault();
+        actions?.onOpenSettings?.();
+        return;
+      }
+
+      // Ctrl/Cmd+L: Open logs
+      if (isMod && e.key === "l") {
+        e.preventDefault();
+        actions?.onOpenLogs?.();
         return;
       }
     };
