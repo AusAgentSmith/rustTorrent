@@ -253,6 +253,91 @@ async fn announce_all(
     tracing::info!("Announced {count} (torrent, peer) pairs");
 }
 
+/// Reload torrents from disk, merge into the live map, and re-announce.
+/// Returns the new total count.
+async fn do_reload(
+    torrents: &TorrentMap,
+    data_dir: &Path,
+    torrent_dir: &Path,
+    tracker_url: &str,
+    num_peers: usize,
+    base_port: u16,
+) -> usize {
+    let loaded = load_torrents(data_dir, torrent_dir).await;
+    let mut map = torrents.write().await;
+    let before = map.len();
+    for (k, v) in loaded {
+        map.entry(k).or_insert(v);
+    }
+    let after = map.len();
+    if after > before {
+        tracing::info!("Reload: {} -> {} torrent(s), re-announcing", before, after);
+        announce_all(&map, tracker_url, num_peers, base_port).await;
+    }
+    after
+}
+
+/// HTTP control server: /health, /status, /reload
+async fn run_control_server(
+    health_port: u16,
+    torrents: TorrentMap,
+    data_dir: PathBuf,
+    torrent_dir: PathBuf,
+    tracker_url: String,
+    num_peers: usize,
+    base_port: u16,
+) {
+    let listener = TcpListener::bind(("0.0.0.0", health_port)).await.unwrap();
+    tracing::info!("Control server on port {health_port} (/health, /status, /reload)");
+
+    loop {
+        let Ok((mut stream, _)) = listener.accept().await else { continue };
+        let torrents = torrents.clone();
+        let data_dir = data_dir.clone();
+        let torrent_dir = torrent_dir.clone();
+        let tracker_url = tracker_url.clone();
+
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            let n = match stream.read(&mut buf).await {
+                Ok(n) => n,
+                Err(_) => return,
+            };
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let path = req.split_whitespace().nth(1).unwrap_or("/");
+
+            let response = match path {
+                "/health" => {
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK".to_string()
+                }
+                "/status" => {
+                    let count = torrents.read().await.len();
+                    let body = format!("{{\"torrents\":{count}}}");
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    )
+                }
+                "/reload" => {
+                    let count = do_reload(
+                        &torrents, &data_dir, &torrent_dir,
+                        &tracker_url, num_peers, base_port,
+                    ).await;
+                    let body = format!("{{\"torrents\":{count}}}");
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    )
+                }
+                _ => {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+                }
+            };
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+    }
+}
+
 pub async fn run(
     num_peers: usize,
     base_port: u16,
@@ -261,23 +346,18 @@ pub async fn run(
     torrent_dir: PathBuf,
     health_port: u16,
 ) -> Result<()> {
-    // Health check server
-    let health = TcpListener::bind(("0.0.0.0", health_port)).await?;
-    tracing::info!("Health check on port {health_port}");
-    tokio::spawn(async move {
-        loop {
-            if let Ok((mut stream, _)) = health.accept().await {
-                tokio::spawn(async move {
-                    let mut buf = [0u8; 512];
-                    let _ = stream.read(&mut buf).await;
-                    let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";
-                    let _ = stream.write_all(resp).await;
-                });
-            }
-        }
-    });
-
     let torrents: TorrentMap = Arc::new(RwLock::new(HashMap::new()));
+
+    // Start control server (health/status/reload)
+    tokio::spawn(run_control_server(
+        health_port,
+        torrents.clone(),
+        data_dir.clone(),
+        torrent_dir.clone(),
+        tracker_url.clone(),
+        num_peers,
+        base_port,
+    ));
 
     // Wait for torrents to appear
     loop {
@@ -337,15 +417,10 @@ pub async fn run(
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(25)).await;
-            // Re-scan for new torrents
-            let loaded = load_torrents(&data_dir_clone, &torrent_dir_clone).await;
-            if !loaded.is_empty() {
-                let mut map = torrents_clone.write().await;
-                for (k, v) in loaded {
-                    map.entry(k).or_insert(v);
-                }
-                announce_all(&map, &tracker_url_clone, num_peers, base_port).await;
-            }
+            do_reload(
+                &torrents_clone, &data_dir_clone, &torrent_dir_clone,
+                &tracker_url_clone, num_peers, base_port,
+            ).await;
         }
     });
 

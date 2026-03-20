@@ -59,6 +59,49 @@ async fn wait_for_service(name: &str, url: &str, timeout_secs: u64) -> Result<()
     }
 }
 
+/// Tell the mock seeder to reload torrents from disk, then wait until it has
+/// at least `min_torrents` loaded.  This closes the race where the orchestrator
+/// generates test data but the mock seeder hasn't scanned for it yet.
+async fn wait_for_mock_seeder_torrents(min_torrents: usize, timeout_secs: u64) -> Result<()> {
+    let client = reqwest::Client::new();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+
+    // Trigger reload
+    let _ = client
+        .get("http://mock-seeder:8080/reload")
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await;
+
+    loop {
+        if tokio::time::Instant::now() > deadline {
+            anyhow::bail!("mock-seeder did not load {min_torrents} torrent(s) within {timeout_secs}s");
+        }
+        if let Ok(resp) = client
+            .get("http://mock-seeder:8080/status")
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+        {
+            if let Ok(body) = resp.text().await {
+                // Parse {"torrents":N}
+                if let Some(n) = body
+                    .split("torrents\":")
+                    .nth(1)
+                    .and_then(|s| s.trim_end_matches('}').parse::<usize>().ok())
+                {
+                    if n >= min_torrents {
+                        tracing::info!("  mock-seeder: {n} torrent(s) loaded (need {min_torrents})");
+                        return Ok(());
+                    }
+                    tracing::debug!("  mock-seeder: {n}/{min_torrents} torrents, waiting...");
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
 pub async fn run(
     scenario_selector: String,
     data_dir: PathBuf,
@@ -91,6 +134,7 @@ pub async fn run(
     wait_for_service("rqbit", &format!("{}/", config::RQBIT_API), 120).await?;
     wait_for_service("qBittorrent", &format!("{}/", config::QBT_API), 120).await?;
     wait_for_service("prometheus", &format!("{}/-/healthy", config::PROMETHEUS_API), 120).await?;
+    wait_for_service("mock-seeder", "http://mock-seeder:8080/health", 120).await?;
 
     // Discover seeders
     let seeder_ips = docker::get_service_ips(&docker_client, "seeder").await?;
@@ -196,8 +240,8 @@ pub async fn run(
         }
 
         if sc.mock_peers > 0 {
-            tracing::info!("Mock seeder active with {} peers", sc.mock_peers);
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tracing::info!("Mock seeder active with {} peers — triggering reload", sc.mock_peers);
+            wait_for_mock_seeder_torrents(sc.num_files, 60).await?;
         }
 
         tracing::info!("Seeding ready. Running downloads sequentially.");
