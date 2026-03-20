@@ -1,0 +1,32 @@
+name: Deploy rqbit
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Node B
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 192.168.0.30
+          username: sprooty
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/rustTorrent || { git clone https://gitea.sprooty.com/sprooty/rustTorrent.git ~/rustTorrent && cd ~/rustTorrent; }
+            git pull
+            docker compose up --build -d
+            echo "Waiting for rqbit to start..."
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:3030/ > /dev/null 2>&1; then
+                echo "rqbit is healthy"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Health check failed after 60s"
+            docker compose logs --tail 50
+            exit 1
