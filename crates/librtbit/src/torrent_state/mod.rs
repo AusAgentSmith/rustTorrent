@@ -192,6 +192,9 @@ pub struct ManagedTorrentShared {
 
     // "dn" from magnet link
     pub(crate) magnet_name: Option<String>,
+
+    /// Category assigned to this torrent.
+    pub category: RwLock<Option<String>>,
 }
 
 pub struct ManagedTorrent {

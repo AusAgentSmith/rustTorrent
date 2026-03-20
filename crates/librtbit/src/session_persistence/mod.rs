@@ -2,7 +2,7 @@ pub mod json;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashMap, collections::HashSet, path::PathBuf};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -13,7 +13,8 @@ use librqbit_core::magnet::Magnet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    AddTorrent, AddTorrentOptions, bitv_factory::BitVFactory, session::TorrentId,
+    AddTorrent, AddTorrentOptions, bitv_factory::BitVFactory,
+    category::TorrentCategory, session::TorrentId,
     torrent_state::ManagedTorrentHandle,
 };
 
@@ -30,13 +31,27 @@ pub struct SerializedTorrent {
     output_folder: PathBuf,
     only_files: Option<Vec<usize>>,
     is_paused: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
 }
 
 impl SerializedTorrent {
     pub fn info_hash(&self) -> &Id20 {
         &self.info_hash
     }
+
+    #[allow(dead_code)]
+    pub fn category(&self) -> Option<&str> {
+        self.category.as_deref()
+    }
+
+    #[allow(dead_code)]
+    pub fn set_category(&mut self, category: Option<String>) {
+        self.category = category;
+    }
+
     pub fn into_add_torrent(self) -> anyhow::Result<(AddTorrent<'static>, AddTorrentOptions)> {
+        let category = self.category.clone();
         let add_torrent = if !self.torrent_bytes.is_empty() {
             AddTorrent::TorrentFileBytes(self.torrent_bytes)
         } else {
@@ -59,6 +74,7 @@ impl SerializedTorrent {
             ),
             only_files: self.only_files,
             overwrite: true,
+            category,
             ..Default::default()
         };
 
@@ -81,6 +97,19 @@ pub trait SessionPersistenceStore: core::fmt::Debug + Send + Sync + BitVFactory 
     async fn stream_all(
         &self,
     ) -> anyhow::Result<BoxStream<'_, anyhow::Result<(TorrentId, SerializedTorrent)>>>;
+
+    async fn load_categories(
+        &self,
+    ) -> anyhow::Result<HashMap<String, TorrentCategory>> {
+        Ok(HashMap::new())
+    }
+
+    async fn store_categories(
+        &self,
+        _categories: &HashMap<String, TorrentCategory>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 fn serialize_info_hash<S>(id: &Id20, serializer: S) -> Result<S::Ok, S::Error>

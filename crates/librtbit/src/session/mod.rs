@@ -29,6 +29,7 @@ use crate::{
     ManagedTorrent, ManagedTorrentShared,
     api::TorrentIdOrHash,
     bitv_factory::{BitVFactory, NonPersistentBitVFactory},
+    category::CategoryManager,
     ip_ranges::IpRanges,
     limits::Limits,
     merge_streams::merge_streams,
@@ -99,6 +100,9 @@ pub struct Session {
     trackers: HashSet<url::Url>,
 
     lsd: Option<LocalServiceDiscovery>,
+
+    // Categories
+    category_manager: CategoryManager,
 
     // Limits and throttling
     pub(crate) concurrent_initialize_semaphore: Arc<tokio::sync::Semaphore>,
@@ -319,6 +323,18 @@ impl Session {
                 .await
                 .context("error creating UDP tracker client")?;
 
+            let category_manager = if let Some(p) = persistence.as_ref() {
+                match p.load_categories().await {
+                    Ok(cats) => CategoryManager::from_categories(cats),
+                    Err(e) => {
+                        warn!("error loading categories from persistence: {e:#}");
+                        CategoryManager::new()
+                    }
+                }
+            } else {
+                CategoryManager::new()
+            };
+
             let lsd = {
                 if opts.disable_local_service_discovery {
                     None
@@ -368,6 +384,7 @@ impl Session {
                 blocklist,
                 allowlist,
                 lsd,
+                category_manager,
             });
 
             if let Some(mut listen) = listen_result {
@@ -791,6 +808,7 @@ impl Session {
                 connector: self.connector.clone(),
                 session: Arc::downgrade(self),
                 magnet_name: name,
+                category: RwLock::new(opts.category.clone()),
             });
 
             let initializing = Arc::new(TorrentStateInitializing::new(
@@ -937,7 +955,7 @@ impl Session {
         Ok(())
     }
 
-    async fn try_update_persistence_metadata(&self, handle: &ManagedTorrentHandle) {
+    pub(crate) async fn try_update_persistence_metadata(&self, handle: &ManagedTorrentHandle) {
         if let Some(p) = self.persistence.as_ref()
             && let Err(e) = p.update_metadata(handle.id(), handle).await
         {
@@ -974,6 +992,30 @@ impl Session {
 
     pub fn announce_port(&self) -> Option<u16> {
         self.announce_port
+    }
+
+    pub fn categories(&self) -> &CategoryManager {
+        &self.category_manager
+    }
+
+    pub fn set_torrent_category(
+        &self,
+        id: TorrentIdOrHash,
+        category: Option<String>,
+    ) -> anyhow::Result<()> {
+        let handle = self
+            .get(id)
+            .context("torrent not found")?;
+        *handle.shared().category.write() = category;
+        Ok(())
+    }
+
+    pub async fn persist_categories(&self) -> anyhow::Result<()> {
+        if let Some(p) = self.persistence.as_ref() {
+            let snapshot = self.category_manager.snapshot();
+            p.store_categories(&snapshot).await?;
+        }
+        Ok(())
     }
 }
 

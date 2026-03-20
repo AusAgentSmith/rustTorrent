@@ -44,6 +44,7 @@ mod stat_gen;
 pub mod api;
 mod api_error;
 mod bitv;
+pub mod category;
 mod bitv_factory;
 mod chunk_tracker;
 mod create_torrent_file;
