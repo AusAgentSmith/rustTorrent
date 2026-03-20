@@ -3,7 +3,7 @@
 
 FROM rust:alpine AS builder
 
-RUN apk update && apk add clang lld npm pkgconf musl-dev openssl-dev openssl-libs-static
+RUN apk update && apk add clang lld npm pkgconf musl-dev openssl-dev openssl-libs-static curl
 
 COPY . /src/
 WORKDIR /src/
