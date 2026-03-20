@@ -62,7 +62,7 @@ pub fn build_summary(results: &[(ClientResult, ClientResult)]) -> String {
 
     for (rq, qb) in results {
         lines.push(String::new());
-        lines.push(format!("  Scenario: {}", rq.scenario));
+        lines.push(format!("  Scenario: {} — {}", rq.scenario, rq.scenario_description));
         lines.push("-".repeat(78));
         lines.push(format!(
             "  {:24} {:>15} {:>15} {:>12}",

@@ -9,6 +9,7 @@ const BG_COLOR: &str = "#1a1a2e";
 const PANEL_BG: &str = "#16213e";
 const TEXT_COLOR: &str = "#ddd";
 const GRID_COLOR: &str = "#333";
+const MUTED_TEXT: &str = "#888";
 
 /// Generate all charts as SVGs.
 pub fn generate_all(results: &[(ClientResult, ClientResult)], dir: &Path) -> Result<()> {
@@ -29,77 +30,140 @@ pub fn generate_all(results: &[(ClientResult, ClientResult)], dir: &Path) -> Res
     Ok(())
 }
 
+/// Escape XML special characters in text content.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
 fn write_bar_chart(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<()> {
-    let metrics: Vec<(&str, f64, f64)> = vec![
-        ("Duration (s)", rq.duration_sec, qb.duration_sec),
-        ("Avg Speed (Mbps)", rq.avg_speed_mbps, qb.avg_speed_mbps),
-        ("Peak Speed (Mbps)", rq.peak_speed_mbps, qb.peak_speed_mbps),
-        ("CPU Avg (%)", rq.cpu_avg, qb.cpu_avg),
-        ("CPU Peak (%)", rq.cpu_peak, qb.cpu_peak),
-        ("Mem Avg (MB)", rq.mem_avg_mb, qb.mem_avg_mb),
-        ("Mem Peak (MB)", rq.mem_peak_mb, qb.mem_peak_mb),
-        ("IO Wait (%)", rq.iowait_avg, qb.iowait_avg),
+    // Group metrics into categories, each with its own scale
+    let categories: Vec<(&str, Vec<(&str, f64, f64, &str)>)> = vec![
+        (
+            "Performance",
+            vec![
+                ("Duration", rq.duration_sec, qb.duration_sec, "s"),
+                ("Avg Speed", rq.avg_speed_mbps, qb.avg_speed_mbps, "Mbps"),
+                ("Peak Speed", rq.peak_speed_mbps, qb.peak_speed_mbps, "Mbps"),
+                (
+                    "Time to 1st Piece",
+                    rq.time_to_first_piece,
+                    qb.time_to_first_piece,
+                    "s",
+                ),
+            ],
+        ),
+        (
+            "Resource Usage",
+            vec![
+                ("CPU Avg", rq.cpu_avg, qb.cpu_avg, "%"),
+                ("CPU Peak", rq.cpu_peak, qb.cpu_peak, "%"),
+                ("Mem Avg", rq.mem_avg_mb, qb.mem_avg_mb, "MB"),
+                ("Mem Peak", rq.mem_peak_mb, qb.mem_peak_mb, "MB"),
+                ("IO Wait", rq.iowait_avg, qb.iowait_avg, "%"),
+            ],
+        ),
     ];
-    let metrics: Vec<_> = metrics
-        .into_iter()
-        .filter(|(_, r, q)| *r != 0.0 || *q != 0.0)
-        .collect();
 
-    let n = metrics.len();
+    // Filter out zero metrics and flatten
+    let mut rows: Vec<(&str, &str, f64, f64, &str)> = Vec::new(); // (category, label, rq, qb, unit)
+    let mut last_cat = "";
+    for (cat, metrics) in &categories {
+        for (label, r, q, unit) in metrics {
+            if *r != 0.0 || *q != 0.0 {
+                rows.push((cat, label, *r, *q, unit));
+                last_cat = cat;
+            }
+        }
+    }
+    let _ = last_cat;
+
     let w = 900;
-    let h = 60 + n * 50;
-    let bar_w = 300.0;
-    let gap = 50.0;
-    let label_x = 150.0;
+    let row_h = 44;
+    // Count category headers
+    let mut cat_headers = 0;
+    let mut prev_cat = "";
+    for (cat, _, _, _, _) in &rows {
+        if *cat != prev_cat {
+            cat_headers += 1;
+            prev_cat = cat;
+        }
+    }
+    let h = 90 + rows.len() * row_h + cat_headers * 30;
+    let bar_w = 320.0;
+    let label_x = 160.0;
+    let bar_x = label_x + 30.0;
 
-    let max_val = metrics
-        .iter()
-        .flat_map(|(_, r, q)| [*r, *q])
-        .fold(0.0f64, f64::max)
-        .max(1.0);
+    let desc = xml_escape(&rq.scenario_description);
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="30" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace">Metric Comparison — {}</text>
-<text x="{}" y="48" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">■ rqbit</text>
-<text x="{}" y="48" fill="{QBT_COLOR}" font-size="11" font-family="monospace">■ qBittorrent</text>"#,
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Metric Comparison</text>
+<text x="{}" y="48" fill="{MUTED_TEXT}" font-size="12" text-anchor="middle" font-family="monospace">{desc}</text>
+<text x="{}" y="68" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">■ rqbit</text>
+<text x="{}" y="68" fill="{QBT_COLOR}" font-size="11" font-family="monospace">■ qBittorrent</text>"#,
         w / 2,
-        rq.scenario,
-        w - 200,
-        w - 100,
+        w / 2,
+        w - 220,
+        w - 110,
     );
 
-    for (i, (label, rq_v, qb_v)) in metrics.iter().enumerate() {
-        let y = 70 + i * 50;
+    let mut y = 80;
+    let mut prev_cat = "";
+    for (cat, label, rq_v, qb_v, unit) in &rows {
+        // Category header
+        if *cat != prev_cat {
+            y += 8;
+            svg.push_str(&format!(
+                r#"<text x="20" y="{}" fill="{MUTED_TEXT}" font-size="10" font-family="monospace" text-transform="uppercase">{cat}</text>"#,
+                y + 12,
+            ));
+            svg.push_str(&format!(
+                r#"<line x1="20" y1="{}" x2="{}" y2="{}" stroke="{GRID_COLOR}" stroke-width="1"/>"#,
+                y + 16,
+                w - 20,
+                y + 16,
+            ));
+            y += 22;
+            prev_cat = cat;
+        }
+
+        // Per-metric max for independent scaling
+        let max_val = rq_v.max(*qb_v).max(0.001);
         let rq_w = rq_v / max_val * bar_w;
         let qb_w = qb_v / max_val * bar_w;
-        let bar_x = label_x + gap;
 
+        // Label
         svg.push_str(&format!(
             r#"<text x="{label_x}" y="{}" fill="{TEXT_COLOR}" font-size="11" text-anchor="end" font-family="monospace">{label}</text>"#,
             y + 12,
         ));
+
         // rqbit bar
         svg.push_str(&format!(
-            r#"<rect x="{bar_x}" y="{y}" width="{rq_w:.1}" height="18" fill="{RQBIT_COLOR}" opacity="0.9"/>"#,
+            r#"<rect x="{bar_x}" y="{y}" width="{rq_w:.1}" height="16" fill="{RQBIT_COLOR}" opacity="0.9" rx="2"/>"#,
         ));
         svg.push_str(&format!(
-            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="9" font-family="monospace">{:.1}</text>"#,
-            bar_x + rq_w + 4.0,
-            y + 13,
+            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="9" font-family="monospace">{:.1} {unit}</text>"#,
+            bar_x + rq_w + 5.0,
+            y + 12,
             rq_v,
         ));
-        // qbt bar
-        let y2 = y + 22;
+
+        // qBittorrent bar
+        let y2 = y + 20;
         svg.push_str(&format!(
-            r#"<rect x="{bar_x}" y="{y2}" width="{qb_w:.1}" height="18" fill="{QBT_COLOR}" opacity="0.9"/>"#,
+            r#"<rect x="{bar_x}" y="{y2}" width="{qb_w:.1}" height="16" fill="{QBT_COLOR}" opacity="0.9" rx="2"/>"#,
         ));
         svg.push_str(&format!(
-            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="9" font-family="monospace">{:.1}</text>"#,
-            bar_x + qb_w + 4.0,
-            y2 + 13,
+            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="9" font-family="monospace">{:.1} {unit}</text>"#,
+            bar_x + qb_w + 5.0,
+            y2 + 12,
             qb_v,
         ));
+
+        y += row_h;
     }
 
     svg.push_str("</svg>");
@@ -109,78 +173,136 @@ fn write_bar_chart(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<(
 }
 
 fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<()> {
-    let panels: Vec<(&str, Box<dyn Fn(&crate::metrics::MetricSample) -> f64>)> = vec![
-        ("CPU %", Box::new(|s| s.cpu_pct)),
-        ("Memory (MB)", Box::new(|s| s.mem_bytes as f64 / MB as f64)),
-        ("IO Wait %", Box::new(|s| s.iowait_pct)),
+    let panels: Vec<(&str, &str, Box<dyn Fn(&crate::metrics::MetricSample) -> f64>)> = vec![
+        ("CPU", "%", Box::new(|s| s.cpu_pct)),
+        ("Memory", "MB", Box::new(|s| s.mem_bytes as f64 / MB as f64)),
+        ("IO Wait", "%", Box::new(|s| s.iowait_pct)),
+        ("Net RX", "Mbps", Box::new(|s| s.net_rx_bps * 8.0 / 1e6)),
     ];
 
-    let panel_h = 150;
-    let w = 800;
-    let h = 60 + panels.len() * (panel_h + 30);
+    let panel_h: usize = 160;
+    let panel_gap: usize = 40;
+    let w: usize = 850;
+    let px: usize = 70;
+    let pw: usize = w - 100;
+    let h = 80 + panels.len() * (panel_h + panel_gap);
+
+    let desc = xml_escape(&rq.scenario_description);
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="30" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace">Time Series — {}</text>"#,
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Time Series</text>
+<text x="{}" y="48" fill="{MUTED_TEXT}" font-size="12" text-anchor="middle" font-family="monospace">{desc}</text>
+<text x="{}" y="66" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">— rqbit</text>
+<text x="{}" y="66" fill="{QBT_COLOR}" font-size="11" font-family="monospace">— qBittorrent</text>"#,
         w / 2,
-        rq.scenario,
+        w / 2,
+        w - 220,
+        w - 110,
     );
 
-    for (pi, (label, extractor)) in panels.iter().enumerate() {
-        let py = 50 + pi * (panel_h + 30);
-        let pw = w - 80;
-        let px = 60;
+    // Compute shared time axis (max duration across both clients)
+    let rq_dur = if rq.timeseries.is_empty() {
+        0.0
+    } else {
+        rq.timeseries.last().unwrap().ts - rq.timeseries[0].ts
+    };
+    let qb_dur = if qb.timeseries.is_empty() {
+        0.0
+    } else {
+        qb.timeseries.last().unwrap().ts - qb.timeseries[0].ts
+    };
+    let max_t = rq_dur.max(qb_dur).max(1.0);
+
+    for (pi, (label, unit, extractor)) in panels.iter().enumerate() {
+        let py = 75 + pi * (panel_h + panel_gap);
+
+        // Compute shared Y max across both clients for this metric
+        let rq_max = rq
+            .timeseries
+            .iter()
+            .map(|s| extractor(s))
+            .fold(0.0f64, f64::max);
+        let qb_max = qb
+            .timeseries
+            .iter()
+            .map(|s| extractor(s))
+            .fold(0.0f64, f64::max);
+        let max_v = rq_max.max(qb_max).max(0.01);
 
         // Panel background
         svg.push_str(&format!(
             r#"<rect x="{px}" y="{py}" width="{pw}" height="{panel_h}" fill="{PANEL_BG}" rx="4"/>"#,
         ));
+
+        // Panel label
         svg.push_str(&format!(
-            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="12" text-anchor="middle" font-family="monospace">{label}</text>"#,
+            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="13" text-anchor="middle" font-family="monospace" font-weight="bold">{label} ({unit})</text>"#,
             px + pw / 2,
-            py - 5,
+            py - 8,
         ));
 
+        // Y-axis gridlines and labels (4 ticks)
+        for tick in 0..=4 {
+            let frac = tick as f64 / 4.0;
+            let val = max_v * frac;
+            let gy = (py + panel_h) as f64 - frac * (panel_h - 10) as f64;
+            svg.push_str(&format!(
+                r#"<line x1="{px}" y1="{gy:.0}" x2="{}" y2="{gy:.0}" stroke="{GRID_COLOR}" stroke-width="0.5"/>"#,
+                px + pw,
+            ));
+            let label_text = if max_v >= 100.0 {
+                format!("{:.0}", val)
+            } else if max_v >= 1.0 {
+                format!("{:.1}", val)
+            } else {
+                format!("{:.2}", val)
+            };
+            svg.push_str(&format!(
+                r#"<text x="{}" y="{}" fill="{MUTED_TEXT}" font-size="8" text-anchor="end" font-family="monospace">{label_text}</text>"#,
+                px - 4,
+                gy + 3.0,
+            ));
+        }
+
+        // X-axis time labels (5 ticks)
+        for tick in 0..=4 {
+            let frac = tick as f64 / 4.0;
+            let t_val = max_t * frac;
+            let gx = px as f64 + frac * pw as f64;
+            svg.push_str(&format!(
+                r#"<text x="{gx:.0}" y="{}" fill="{MUTED_TEXT}" font-size="8" text-anchor="middle" font-family="monospace">{:.0}s</text>"#,
+                py + panel_h + 12,
+                t_val,
+            ));
+        }
+
+        // Plot data for both clients
         for (result, color) in [(rq, RQBIT_COLOR), (qb, QBT_COLOR)] {
             if result.timeseries.is_empty() {
                 continue;
             }
             let t0 = result.timeseries[0].ts;
-            let vals: Vec<(f64, f64)> = result
+            let points: String = result
                 .timeseries
                 .iter()
-                .map(|s| (s.ts - t0, extractor(s)))
-                .collect();
-
-            let max_t = vals.last().map(|(t, _)| *t).unwrap_or(1.0).max(1.0);
-            let max_v = vals
-                .iter()
-                .map(|(_, v)| *v)
-                .fold(0.0f64, f64::max)
-                .max(0.01);
-
-            let points: String = vals
-                .iter()
-                .map(|(t, v)| {
-                    let x = px as f64 + (*t / max_t) * pw as f64;
-                    let y = (py + panel_h) as f64 - (*v / max_v) * (panel_h - 10) as f64;
+                .map(|s| {
+                    let t = s.ts - t0;
+                    let v = extractor(s);
+                    let x = px as f64 + (t / max_t) * pw as f64;
+                    let y = (py + panel_h) as f64 - (v / max_v) * (panel_h - 10) as f64;
                     format!("{:.1},{:.1}", x, y)
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
 
-            svg.push_str(&format!(
-                r#"<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2" opacity="0.9"/>"#,
-            ));
+            if !points.is_empty() {
+                svg.push_str(&format!(
+                    r#"<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2" opacity="0.9"/>"#,
+                ));
+            }
         }
     }
-
-    // Legend
-    let ly = h - 15;
-    svg.push_str(&format!(
-        r#"<text x="60" y="{ly}" fill="{RQBIT_COLOR}" font-size="11" font-family="monospace">— rqbit</text>
-<text x="160" y="{ly}" fill="{QBT_COLOR}" font-size="11" font-family="monospace">— qBittorrent</text>"#,
-    ));
 
     svg.push_str("</svg>");
     let path = dir.join(format!("{}_timeseries.svg", rq.scenario));
@@ -190,50 +312,77 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
 
 fn write_cross_scenario(results: &[(ClientResult, ClientResult)], dir: &Path) -> Result<()> {
     let n = results.len();
-    let w = 900;
-    let bar_h = 30;
-    let h = 80 + n * (bar_h + 10) * 2 + 20;
+    let w = 950;
+    let row_h = 50;
+    let h = 90 + n * row_h;
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="30" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace">Cross-Scenario: Speed Ratio</text>
-<text x="{}" y="50" fill="{TEXT_COLOR}" font-size="10" font-family="monospace">&gt;1 = rqbit faster</text>"#,
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="16" text-anchor="middle" font-family="monospace" font-weight="bold">Cross-Scenario: Speed Ratio (qBittorrent duration / rqbit duration)</text>
+<text x="{}" y="50" fill="#4CAF50" font-size="10" font-family="monospace">Green = rqbit faster</text>
+<text x="{}" y="50" fill="#FF5722" font-size="10" font-family="monospace">Red = qBittorrent faster</text>
+<line x1="500" y1="60" x2="500" y2="{}" stroke="{MUTED_TEXT}" stroke-dasharray="4" stroke-width="1"/>
+<text x="500" y="72" fill="{MUTED_TEXT}" font-size="8" text-anchor="middle" font-family="monospace">1.0x (equal)</text>"#,
         w / 2,
-        w / 2,
+        w / 2 - 120,
+        w / 2 + 60,
+        80 + n * row_h,
     );
 
-    let max_bar = 600.0;
+    let max_bar = 400.0;
+    // Find max ratio to scale bars
+    let max_ratio = results
+        .iter()
+        .map(|(rq, qb)| {
+            if rq.duration_sec > 0.0 {
+                qb.duration_sec / rq.duration_sec
+            } else {
+                1.0
+            }
+        })
+        .fold(0.0f64, f64::max)
+        .max(2.0);
+
     for (i, (rq, qb)) in results.iter().enumerate() {
-        let y = 70 + i * (bar_h + 10);
+        let y = 80 + i * row_h;
         let ratio = if rq.duration_sec > 0.0 {
             qb.duration_sec / rq.duration_sec
         } else {
             1.0
         };
-        let bar_w = (ratio / 2.0 * max_bar).min(max_bar);
+        let bar_w = (ratio / max_ratio * max_bar).min(max_bar);
         let color = if ratio >= 1.0 { "#4CAF50" } else { "#FF5722" };
+        let desc = xml_escape(&rq.scenario_description);
 
+        // Scenario description
         svg.push_str(&format!(
-            r#"<text x="190" y="{}" fill="{TEXT_COLOR}" font-size="10" text-anchor="end" font-family="monospace">{}</text>"#,
-            y + 20,
-            rq.scenario,
+            r#"<text x="290" y="{}" fill="{TEXT_COLOR}" font-size="10" text-anchor="end" font-family="monospace">{}</text>"#,
+            y + 16,
+            xml_escape(&rq.scenario),
         ));
         svg.push_str(&format!(
-            r#"<rect x="200" y="{}" width="{bar_w:.0}" height="{bar_h}" fill="{color}" opacity="0.85" rx="3"/>"#,
-            y + 5,
+            r#"<text x="290" y="{}" fill="{MUTED_TEXT}" font-size="8" text-anchor="end" font-family="monospace">{desc}</text>"#,
+            y + 28,
+        ));
+
+        // Bar
+        svg.push_str(&format!(
+            r#"<rect x="300" y="{}" width="{bar_w:.0}" height="24" fill="{color}" opacity="0.85" rx="3"/>"#,
+            y + 6,
         ));
         svg.push_str(&format!(
-            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="10" font-family="monospace">{:.2}x</text>"#,
-            200.0 + bar_w + 8.0,
+            r#"<text x="{}" y="{}" fill="{TEXT_COLOR}" font-size="11" font-family="monospace" font-weight="bold">{:.2}x</text>"#,
+            300.0 + bar_w + 8.0,
             y + 23,
             ratio,
         ));
-        // Reference line at 1.0
-        let ref_x = 200.0 + (1.0 / 2.0 * max_bar);
+
+        // Reference line at 1.0 for this row
+        let ref_x = 300.0 + (1.0 / max_ratio * max_bar);
         svg.push_str(&format!(
-            "<line x1=\"{ref_x:.0}\" y1=\"{}\" x2=\"{ref_x:.0}\" y2=\"{}\" stroke=\"#888\" stroke-dasharray=\"4\" stroke-width=\"1\"/>",
-            y + 5,
-            y + 5 + bar_h,
+            r#"<line x1="{ref_x:.0}" y1="{}" x2="{ref_x:.0}" y2="{}" stroke="{MUTED_TEXT}" stroke-dasharray="4" stroke-width="1"/>"#,
+            y + 6,
+            y + 30,
         ));
     }
 
@@ -244,30 +393,51 @@ fn write_cross_scenario(results: &[(ClientResult, ClientResult)], dir: &Path) ->
 
 fn write_dashboard(results: &[(ClientResult, ClientResult)], dir: &Path) -> Result<()> {
     let n = results.len();
-    let w = 1000;
-    let h = 100 + n * 80;
+    let w = 1100;
+    let row_h = 90;
+    let h = 110 + n * row_h;
+
+    let col_labels = ["Duration (s)", "Avg Speed (Mbps)", "CPU Peak (%)", "Mem Peak (MB)"];
 
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" style="background:{BG_COLOR}">
-<text x="{}" y="30" fill="{TEXT_COLOR}" font-size="18" text-anchor="middle" font-family="monospace" font-weight="bold">Benchmark Dashboard: rqbit vs qBittorrent</text>
-<text x="50" y="55" fill="{RQBIT_COLOR}" font-size="12" font-family="monospace">■ rqbit</text>
-<text x="150" y="55" fill="{QBT_COLOR}" font-size="12" font-family="monospace">■ qBittorrent</text>
-<text x="300" y="55" fill="{TEXT_COLOR}" font-size="10" font-family="monospace">Duration(s) | Speed(Mbps) | CPU Peak(%) | Mem Peak(MB)</text>"#,
+<text x="{}" y="28" fill="{TEXT_COLOR}" font-size="18" text-anchor="middle" font-family="monospace" font-weight="bold">Benchmark Dashboard: rqbit vs qBittorrent</text>
+<text x="60" y="55" fill="{RQBIT_COLOR}" font-size="12" font-family="monospace">■ rqbit</text>
+<text x="160" y="55" fill="{QBT_COLOR}" font-size="12" font-family="monospace">■ qBittorrent</text>"#,
         w / 2,
     );
 
+    // Column headers
+    for (ci, col_label) in col_labels.iter().enumerate() {
+        let cx = 320 + ci * 190;
+        svg.push_str(&format!(
+            r#"<text x="{cx}" y="75" fill="{MUTED_TEXT}" font-size="10" font-family="monospace">{col_label}</text>"#,
+        ));
+    }
+
+    // Header divider
+    svg.push_str(&format!(
+        r#"<line x1="10" y1="82" x2="{}" y2="82" stroke="{GRID_COLOR}" stroke-width="1"/>"#,
+        w - 10,
+    ));
+
     for (i, (rq, qb)) in results.iter().enumerate() {
-        let y = 70 + i * 80;
+        let y = 90 + i * row_h;
         let max_dur = rq.duration_sec.max(qb.duration_sec).max(1.0);
         let max_spd = rq.avg_speed_mbps.max(qb.avg_speed_mbps).max(1.0);
         let max_cpu = rq.cpu_peak.max(qb.cpu_peak).max(0.1);
         let max_mem = rq.mem_peak_mb.max(qb.mem_peak_mb).max(1.0);
 
-        // Scenario label
+        // Scenario name + description
         svg.push_str(&format!(
-            r#"<text x="10" y="{}" fill="{TEXT_COLOR}" font-size="10" font-family="monospace">{}</text>"#,
-            y + 20,
-            rq.scenario,
+            r#"<text x="15" y="{}" fill="{TEXT_COLOR}" font-size="11" font-family="monospace" font-weight="bold">{}</text>"#,
+            y + 18,
+            xml_escape(&rq.scenario),
+        ));
+        svg.push_str(&format!(
+            r#"<text x="15" y="{}" fill="{MUTED_TEXT}" font-size="9" font-family="monospace">{}</text>"#,
+            y + 32,
+            xml_escape(&rq.scenario_description),
         ));
 
         let cols: Vec<(f64, f64, f64)> = vec![
@@ -278,8 +448,8 @@ fn write_dashboard(results: &[(ClientResult, ClientResult)], dir: &Path) -> Resu
         ];
 
         for (ci, (rv, qv, maxv)) in cols.iter().enumerate() {
-            let cx = 200 + ci * 200;
-            let bw = 160.0;
+            let cx = 320 + ci * 190;
+            let bw = 140.0;
             let rw = rv / maxv * bw;
             let qw = qv / maxv * bw;
 
@@ -305,13 +475,13 @@ fn write_dashboard(results: &[(ClientResult, ClientResult)], dir: &Path) -> Resu
             ));
         }
 
-        // Divider
+        // Row divider
         if i < n - 1 {
             svg.push_str(&format!(
                 r#"<line x1="10" y1="{}" x2="{}" y2="{}" stroke="{GRID_COLOR}" stroke-width="1"/>"#,
-                y + 55,
+                y + row_h - 5,
                 w - 10,
-                y + 55,
+                y + row_h - 5,
             ));
         }
     }

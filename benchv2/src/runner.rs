@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct ClientResult {
     pub client: String,
     pub scenario: String,
+    pub scenario_description: String,
     pub total_bytes: u64,
     pub duration_sec: f64,
     pub avg_speed_mbps: f64,
@@ -252,6 +253,7 @@ async fn run_client(
     let mut result = ClientResult {
         client: client_name.to_string(),
         scenario: sc.name.clone(),
+        scenario_description: sc.description.clone(),
         total_bytes: sc.total_bytes(),
         duration_sec: 0.0,
         avg_speed_mbps: 0.0,
