@@ -1,4 +1,11 @@
-use std::{collections::HashSet, marker::PhantomData, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    net::SocketAddr,
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::Context;
 use buffers::ByteBufOwned;
@@ -11,6 +18,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     WithStatus, WithStatusError,
     api_error::ApiError,
+    category::TorrentCategory,
     session::{
         AddTorrent, AddTorrentOptions, AddTorrentResponse, ListOnlyResponse, Session, TorrentId,
     },
@@ -229,6 +237,7 @@ impl Api {
                         // These will be filled in /details and /stats endpoints
                         files: None,
                         stats: None,
+                        category: mgr.shared().category.read().clone(),
                     };
                     if opts.with_stats {
                         r.stats = Some(mgr.stats());
@@ -244,6 +253,7 @@ impl Api {
         let handle = self.mgr_handle(idx)?;
         let info_hash = handle.shared().info_hash;
         let only_files = handle.only_files();
+        let category = handle.shared().category.read().clone();
         let output_folder = handle
             .shared()
             .options
@@ -258,6 +268,7 @@ impl Api {
             handle.name().as_deref(),
             only_files.as_deref(),
             output_folder,
+            category,
         )
     }
 
@@ -399,6 +410,7 @@ impl Api {
                         .output_folder
                         .to_string_lossy()
                         .into_owned(),
+                    handle.shared().category.read().clone(),
                 )
                 .context("error making torrent details")?;
                 ApiAddTorrentResponse {
@@ -431,6 +443,7 @@ impl Api {
                     None,
                     only_files.as_deref(),
                     output_folder.to_string_lossy().into_owned().to_string(),
+                    None,
                 )
                 .context("error making torrent details")?,
             },
@@ -447,6 +460,7 @@ impl Api {
                         .output_folder
                         .to_string_lossy()
                         .into_owned(),
+                    handle.shared().category.read().clone(),
                 )
                 .context("error making torrent details")?;
                 ApiAddTorrentResponse {
@@ -512,6 +526,58 @@ impl Api {
         let mgr = self.mgr_handle(idx)?;
         Ok(mgr.stream(file_id).await?)
     }
+
+    pub fn api_list_categories(&self) -> HashMap<String, TorrentCategory> {
+        self.session.categories().list()
+    }
+
+    pub async fn api_create_or_edit_category(
+        &self,
+        name: String,
+        save_path: Option<PathBuf>,
+    ) -> Result<EmptyJsonResponse> {
+        let mgr = self.session.categories();
+        if mgr.exists(&name) {
+            mgr.edit(&name, save_path)
+                .context("error editing category")?;
+        } else {
+            mgr.create(name, save_path)
+                .context("error creating category")?;
+        }
+        self.session
+            .persist_categories()
+            .await
+            .context("error persisting categories")?;
+        Ok(Default::default())
+    }
+
+    pub async fn api_remove_category(&self, name: &str) -> Result<EmptyJsonResponse> {
+        self.session
+            .categories()
+            .remove(name)
+            .context("error removing category")?;
+        self.session
+            .persist_categories()
+            .await
+            .context("error persisting categories")?;
+        Ok(Default::default())
+    }
+
+    pub async fn api_set_torrent_category(
+        &self,
+        idx: TorrentIdOrHash,
+        category: Option<String>,
+    ) -> Result<EmptyJsonResponse> {
+        self.session
+            .set_torrent_category(idx, category)
+            .context("error setting torrent category")?;
+        // Persist the torrent metadata to save the category
+        let handle = self.mgr_handle(idx)?;
+        self.session
+            .try_update_persistence_metadata(&handle)
+            .await;
+        Ok(Default::default())
+    }
 }
 
 #[derive(Serialize)]
@@ -552,6 +618,8 @@ pub struct TorrentDetailsResponse {
     #[serde(skip_serializing_if = "Option::is_none", skip_deserializing)]
     #[cfg_attr(feature = "swagger", schema(value_type = Object))]
     pub stats: Option<TorrentStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -571,6 +639,7 @@ fn make_torrent_details(
     name: Option<&str>,
     only_files: Option<&[usize]>,
     output_folder: String,
+    category: Option<String>,
 ) -> Result<TorrentDetailsResponse> {
     let files = match info {
         Some(info) => info
@@ -602,6 +671,7 @@ fn make_torrent_details(
         output_folder,
         total_pieces,
         stats: None,
+        category,
     })
 }
 

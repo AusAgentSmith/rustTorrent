@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 use anyhow::Context;
 use axum::{
@@ -575,4 +575,53 @@ pub async fn h_create_torrent(
             Ok((headers, torrent.as_bytes()?).into_response())
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct CreateOrEditCategoryRequest {
+    pub name: String,
+    pub save_path: Option<PathBuf>,
+}
+
+#[derive(Deserialize)]
+pub struct SetTorrentCategoryRequest {
+    pub category: Option<String>,
+}
+
+pub async fn h_list_categories(State(state): State<ApiState>) -> impl IntoResponse {
+    axum::Json(state.api.api_list_categories())
+}
+
+pub async fn h_create_or_edit_category(
+    State(state): State<ApiState>,
+    axum::Json(req): axum::Json<CreateOrEditCategoryRequest>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_create_or_edit_category(req.name, req.save_path)
+        .await
+        .map(axum::Json)
+}
+
+pub async fn h_delete_category(
+    State(state): State<ApiState>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_remove_category(&name)
+        .await
+        .map(axum::Json)
+}
+
+pub async fn h_set_torrent_category(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+    axum::Json(req): axum::Json<SetTorrentCategoryRequest>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_set_torrent_category(idx, req.category)
+        .await
+        .map(axum::Json)
 }

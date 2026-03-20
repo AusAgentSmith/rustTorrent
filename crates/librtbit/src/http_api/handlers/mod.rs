@@ -14,7 +14,7 @@ use axum::response::Redirect;
 use axum::{
     Router,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use http::request::Parts;
 
@@ -105,7 +105,8 @@ pub fn make_api_router(state: ApiState) -> Router {
             "/torrents/{id}/stream/{file_id}/{*filename}",
             get(streaming::h_torrent_stream_file),
         )
-        .route("/torrents/limits", get(configure::h_get_session_ratelimits));
+        .route("/torrents/limits", get(configure::h_get_session_ratelimits))
+        .route("/torrents/categories", get(torrents::h_list_categories));
 
     if !state.opts.read_only {
         api_router = api_router
@@ -135,7 +136,19 @@ pub fn make_api_router(state: ApiState) -> Router {
                 post(torrents::h_torrent_action_update_only_files),
             )
             .route("/torrents/{id}/add_peers", post(torrents::h_add_peers))
-            .route("/torrents/create", post(torrents::h_create_torrent));
+            .route("/torrents/create", post(torrents::h_create_torrent))
+            .route(
+                "/torrents/categories",
+                post(torrents::h_create_or_edit_category),
+            )
+            .route(
+                "/torrents/categories/{name}",
+                delete(torrents::h_delete_category),
+            )
+            .route(
+                "/torrents/{id}/set_category",
+                post(torrents::h_set_torrent_category),
+            );
     }
 
     api_router.with_state(state)

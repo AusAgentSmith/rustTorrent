@@ -4,6 +4,7 @@ use crate::{
     api::TorrentIdOrHash,
     bitv::{BitV, DiskBackedBitV},
     bitv_factory::BitVFactory,
+    category::TorrentCategory,
     session::TorrentId,
     spawn_utils::BlockingSpawner,
     storage::filesystem::FilesystemStorageFactory,
@@ -121,6 +122,10 @@ impl JsonSessionPersistenceStore {
         self.output_folder.join(format!("{info_hash:?}.bitv"))
     }
 
+    fn categories_filename(&self) -> PathBuf {
+        self.output_folder.join("categories.json")
+    }
+
     async fn update_db(
         &self,
         id: TorrentId,
@@ -148,6 +153,7 @@ impl JsonSessionPersistenceStore {
             only_files: torrent.only_files().clone(),
             is_paused: torrent.is_paused(),
             output_folder: torrent.shared().options.output_folder.clone(),
+            category: torrent.shared().category.read().clone(),
         };
 
         let torrent_bytes = torrent
@@ -338,5 +344,55 @@ impl SessionPersistenceStore for JsonSessionPersistenceStore {
         torrent: &ManagedTorrentHandle,
     ) -> anyhow::Result<()> {
         self.update_db(id, torrent, false).await
+    }
+
+    async fn load_categories(
+        &self,
+    ) -> anyhow::Result<HashMap<String, TorrentCategory>> {
+        let filename = self.categories_filename();
+        match tokio::fs::File::open(&filename).await {
+            Ok(f) => {
+                let mut buf = Vec::new();
+                let mut rdr = tokio::io::BufReader::new(f);
+                rdr.read_to_end(&mut buf).await?;
+                let categories: HashMap<String, TorrentCategory> =
+                    serde_json::from_reader(&buf[..])
+                        .context("error deserializing categories")?;
+                Ok(categories)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
+            Err(e) => {
+                Err(e).context(format!("error opening categories file {filename:?}"))
+            }
+        }
+    }
+
+    async fn store_categories(
+        &self,
+        categories: &HashMap<String, TorrentCategory>,
+    ) -> anyhow::Result<()> {
+        let filename = self.categories_filename();
+        let tmp_filename = format!("{}.tmp", filename.to_str().unwrap());
+        let mut tmp = tokio::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&tmp_filename)
+            .await
+            .with_context(|| format!("error opening {tmp_filename:?}"))?;
+
+        let mut buf = Vec::new();
+        serde_json::to_writer_pretty(&mut buf, categories)
+            .context("error serializing categories")?;
+
+        tmp.write_all(&buf)
+            .await
+            .with_context(|| format!("error writing {tmp_filename:?}"))?;
+
+        tokio::fs::rename(&tmp_filename, &filename)
+            .await
+            .context("error renaming categories file")?;
+        trace!(filename=?filename, "wrote categories");
+        Ok(())
     }
 }
