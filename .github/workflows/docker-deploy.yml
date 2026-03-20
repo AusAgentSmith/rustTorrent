@@ -62,15 +62,12 @@ jobs:
     needs: build-and-publish
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Deploy
         run: |
           set -e
-          # Fix ownership if needed (from prior root-owned deploys)
-          if [ -d ~/rustTorrent ] && [ "$(stat -c %U ~/rustTorrent)" != "$(whoami)" ]; then
-            rm -rf ~/rustTorrent
-          fi
-          cd ~/rustTorrent || { git clone https://github.com/AusAgentSmith/rustTorrent.git ~/rustTorrent && cd ~/rustTorrent; }
-          git pull
           echo "==> Stopping old containers..."
           docker stop rqbit 2>/dev/null; docker rm rqbit 2>/dev/null || true
           docker compose down 2>/dev/null || true
