@@ -2,14 +2,10 @@ FROM rust:1-alpine AS builder
 RUN apk add --no-cache musl-dev pkgconf
 WORKDIR /app
 
-# Cache dependency build
-COPY Cargo.toml Cargo.lock* ./
-RUN mkdir src && echo 'fn main(){}' > src/main.rs && \
-    cargo build --release 2>/dev/null; rm -rf src
-
-# Build the actual binary
+COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
-RUN cargo build --release
+RUN cargo build --release && \
+    ./target/release/benchv2 --help > /dev/null
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates curl

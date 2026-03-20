@@ -75,19 +75,26 @@ impl QBittorrentClient {
             while let Some(Ok(chunk)) = log_stream.next().await {
                 logs.push_str(&chunk.to_string());
             }
-            // Look for: "temporary password is provided for this session: XXXXX"
-            if let Some(idx) = logs.find("temporary password") {
-                let after = &logs[idx..];
-                if let Some(pw) = after.split_whitespace().last() {
-                    if self.try_login("admin", pw.trim()).await {
-                        return Ok(());
+            // Find line with "temporary password ... session: XXXXX"
+            for line in logs.lines() {
+                if line.contains("temporary password") {
+                    tracing::debug!("qbt password line: {line}");
+                    // Extract after last colon
+                    if let Some((_, after_colon)) = line.rsplit_once(':') {
+                        let pw = after_colon.trim();
+                        if !pw.is_empty() {
+                            tracing::info!("qBittorrent: found temp password ({} chars)", pw.len());
+                            if self.try_login("admin", pw).await {
+                                return Ok(());
+                            }
+                        }
                     }
-                }
-                // Try more robust parsing
-                for word in after.split_whitespace().rev().take(3) {
-                    let pw = word.trim();
-                    if !pw.is_empty() && self.try_login("admin", pw).await {
-                        return Ok(());
+                    // Fallback: last whitespace-delimited word
+                    if let Some(pw) = line.split_whitespace().last() {
+                        let pw = pw.trim();
+                        if self.try_login("admin", pw).await {
+                            return Ok(());
+                        }
                     }
                 }
             }

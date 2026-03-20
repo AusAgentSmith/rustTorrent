@@ -44,21 +44,26 @@ done
 export SCENARIOS MAX_SEEDERS MOCK_PEERS
 
 mkdir -p results
+LOGFILE="results/run_$(date +%Y%m%d_%H%M%S).log"
+
 docker compose down -v 2>/dev/null || true
 
 echo "[*] Scenarios:   $SCENARIOS"
 echo "[*] Seeders:     $MAX_SEEDERS real, $MOCK_PEERS mock"
+echo "[*] Log file:    $LOGFILE"
 echo "[*] Building (first run compiles Rust — takes a few minutes)..."
 echo ""
 
-docker compose up --build --abort-on-container-exit --exit-code-from orchestrator
-EXIT_CODE=$?
+# Run and tee output to both console and log file
+docker compose up --build --abort-on-container-exit --exit-code-from orchestrator 2>&1 | tee "$LOGFILE"
+EXIT_CODE=${PIPESTATUS[0]}
 
 [[ "$CLEANUP" == "1" ]] && docker compose down -v 2>/dev/null || true
 
 echo ""
 echo "════════════════════════════════════════════"
 echo "  Results: $(pwd)/results/"
+echo "  Log:     $LOGFILE"
 ls -lh results/ 2>/dev/null | tail -5
 echo "════════════════════════════════════════════"
 exit "${EXIT_CODE}"

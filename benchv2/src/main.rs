@@ -61,6 +61,13 @@ enum Command {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Print before anything else — if we don't see this, the binary isn't running
+    eprintln!(
+        "[benchv2] PID={} args={:?}",
+        std::process::id(),
+        std::env::args().collect::<Vec<_>>()
+    );
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -70,12 +77,13 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+    tracing::info!("Subcommand: {:?}", std::env::args().nth(1).unwrap_or_default());
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
 
-    rt.block_on(async {
+    let result = rt.block_on(async {
         match cli.command {
             Command::Run {
                 scenarios,
@@ -98,5 +106,10 @@ fn main() -> anyhow::Result<()> {
                     .await
             }
         }
-    })
+    });
+
+    if let Err(ref e) = result {
+        tracing::error!("Fatal error: {e:#}");
+    }
+    result
 }

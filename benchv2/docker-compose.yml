@@ -30,7 +30,7 @@ services:
       - mock-seed
       - --peers=${MOCK_PEERS:-100}
       - --base-port=6900
-      - --tracker=http://tracker:6969/announce
+      - --tracker-url=http://tracker:6969/announce
     volumes:
       - testdata:/data/testdata
       - torrents:/data/torrents
