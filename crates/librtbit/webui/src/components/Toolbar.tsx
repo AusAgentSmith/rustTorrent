@@ -268,6 +268,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <ConfigModal
             isOpen={configOpen}
             onClose={() => setConfigOpen(false)}
+            version={version}
           />
         </>
       )}

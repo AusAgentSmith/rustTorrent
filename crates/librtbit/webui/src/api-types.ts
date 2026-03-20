@@ -127,6 +127,16 @@ export interface LimitsConfig {
   download_bps?: number | null;
 }
 
+export interface DhtStats {
+  id?: string;
+  outstanding_requests?: number;
+  seen_peers?: number;
+  have_peers?: number;
+  inflight_peers?: number;
+  // Make it flexible - the exact shape may vary
+  [key: string]: any;
+}
+
 // Interface for the Torrent Stats API response
 export interface LiveTorrentStats {
   snapshot: {
@@ -275,4 +285,6 @@ export interface RqbitAPI {
   stats: () => Promise<SessionStats>;
   getLimits: () => Promise<LimitsConfig>;
   setLimits: (limits: LimitsConfig) => Promise<void>;
+  getDhtStats: () => Promise<DhtStats>;
+  setRustLog: (value: string) => Promise<void>;
 }

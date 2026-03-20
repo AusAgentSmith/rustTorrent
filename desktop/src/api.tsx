@@ -166,5 +166,11 @@ export const makeAPI = (configuration: RqbitDesktopConfig): RqbitAPI => {
       // Desktop manages rate limits via config change, not this API
       return Promise.resolve();
     },
+    getDhtStats: () => {
+      return invokeAPI("dht_stats");
+    },
+    setRustLog: (value: string) => {
+      return invokeAPI<void>("set_rust_log", { value });
+    },
   };
 };

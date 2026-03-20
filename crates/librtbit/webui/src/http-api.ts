@@ -1,5 +1,6 @@
 import {
   AddTorrentResponse,
+  DhtStats,
   ErrorDetails,
   LimitsConfig,
   ListTorrentsResponse,
@@ -206,5 +207,11 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
   },
   setLimits: (limits: LimitsConfig): Promise<void> => {
     return makeRequest("POST", "/torrents/limits", limits, true);
+  },
+  getDhtStats: (): Promise<DhtStats> => {
+    return makeRequest("GET", "/dht/stats");
+  },
+  setRustLog: (value: string): Promise<void> => {
+    return makeRequest("POST", "/rust_log", value);
   },
 };

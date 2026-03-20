@@ -1,6 +1,11 @@
 import React, { useContext, useEffect, useState } from "react";
 import { TabbedConfigModal } from "../modal/TabbedConfigModal";
 import { RateLimitsTab } from "./RateLimitsTab";
+import { GeneralTab } from "./GeneralTab";
+import { ConnectionTab } from "./ConnectionTab";
+import { DHTTab } from "./DHTTab";
+import { HttpApiTab } from "./HttpApiTab";
+import { AdvancedTab } from "./AdvancedTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
 import { ErrorWithLabel } from "../../rqbit-web";
@@ -11,11 +16,13 @@ import { ModalBody } from "../modal/ModalBody";
 export interface ConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
+  version?: string;
 }
 
 export const ConfigModal: React.FC<ConfigModalProps> = ({
   isOpen,
   onClose,
+  version,
 }) => {
   const [limits, setLimits] = useState<LimitsConfig>({
     upload_bps: null,
@@ -57,7 +64,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
 
   if (loading && isOpen) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Configure">
+      <Modal isOpen={isOpen} onClose={onClose} title="Settings">
         <ModalBody>
           <div className="flex justify-center p-4">
             <Spinner />
@@ -71,11 +78,16 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
     <TabbedConfigModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Configure"
+      title="Settings"
       tabs={[
         {
-          id: "limits",
-          label: "Rate Limits",
+          id: "general",
+          label: "General",
+          content: <GeneralTab version={version ?? "unknown"} />,
+        },
+        {
+          id: "speed",
+          label: "Speed",
           content: (
             <RateLimitsTab
               downloadBps={limits.download_bps}
@@ -90,27 +102,24 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           ),
         },
         {
-          id: "other",
-          label: "Other",
-          content: (
-            <div className="text-secondary py-2">
-              <p>
-                All other parameters (DHT, connections, persistence, etc.) can
-                be configured via{" "}
-                <code className="bg-surface-sunken px-1 rounded text-sm">
-                  rqbit
-                </code>{" "}
-                CLI arguments when starting the server.
-              </p>
-              <p className="mt-2">
-                Run{" "}
-                <code className="bg-surface-sunken px-1 rounded text-sm">
-                  rqbit --help
-                </code>{" "}
-                to see all available options.
-              </p>
-            </div>
-          ),
+          id: "connections",
+          label: "Connections",
+          content: <ConnectionTab />,
+        },
+        {
+          id: "dht",
+          label: "DHT",
+          content: <DHTTab />,
+        },
+        {
+          id: "http-api",
+          label: "HTTP API",
+          content: <HttpApiTab />,
+        },
+        {
+          id: "advanced",
+          label: "Advanced",
+          content: <AdvancedTab />,
         },
       ]}
       onSave={handleSave}
