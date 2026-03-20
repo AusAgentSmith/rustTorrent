@@ -383,10 +383,14 @@ impl ManagedTorrent {
                         async move {
                             let concurrent_init_semaphore =
                                 session.concurrent_initialize_semaphore.clone();
+                            init.queued_for_init
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
                             let _permit = concurrent_init_semaphore
                                 .acquire()
                                 .await
                                 .context("bug: concurrent init semaphore was closed")?;
+                            init.queued_for_init
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
 
                             match init.check().await {
                                 Ok(paused) => {
@@ -431,7 +435,10 @@ impl ManagedTorrent {
                     Ok(())
                 }
                 ManagedTorrentState::Error(_) => {
-                    let metadata = t.metadata.load_full().context("torrent metadata was not loaded")?;
+                    let metadata = t
+                        .metadata
+                        .load_full()
+                        .context("torrent metadata was not loaded")?;
                     let initializing = Arc::new(TorrentStateInitializing::new(
                         t.shared.clone(),
                         metadata.clone(),
@@ -523,6 +530,7 @@ impl ManagedTorrent {
             uploaded_bytes: 0,
             finished: false,
             live: None,
+            queued_for_init: None,
         };
 
         self.with_state(|s| {
@@ -530,6 +538,7 @@ impl ManagedTorrent {
                 ManagedTorrentState::Initializing(i) => {
                     resp.state = S::Initializing;
                     resp.progress_bytes = i.checked_bytes.load(Ordering::Relaxed);
+                    resp.queued_for_init = Some(i.is_queued_for_init());
                 }
                 ManagedTorrentState::Paused(p) => {
                     resp.state = S::Paused;

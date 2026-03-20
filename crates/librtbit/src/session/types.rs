@@ -121,6 +121,11 @@ pub struct AddTorrentOptions {
     /// Category to assign to this torrent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+
+    /// Timeout for magnet link metadata resolution, in seconds.
+    /// If not set, defaults to 120 seconds. Set to 0 to disable the timeout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magnet_resolution_timeout_secs: Option<u64>,
 }
 
 pub struct ListOnlyResponse {

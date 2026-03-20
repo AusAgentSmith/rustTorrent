@@ -76,6 +76,10 @@ pub struct TorrentStats {
     pub total_bytes: u64,
     pub finished: bool,
     pub live: Option<LiveStats>,
+    /// When in "initializing" state, true if the torrent is waiting for a
+    /// concurrent init slot rather than actively checking files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queued_for_init: Option<bool>,
 }
 
 impl std::fmt::Display for TorrentStats {

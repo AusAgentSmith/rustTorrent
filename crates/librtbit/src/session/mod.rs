@@ -709,9 +709,24 @@ impl Session {
                     let peer_rx = make_peer_rx().context(
                         "no known way to resolve peers (no DHT, no trackers, no initial_peers)",
                     )?;
-                    let resolved_magnet = self
-                        .resolve_magnet(info_hash, peer_rx, &trackers, opts.peer_opts)
-                        .await?;
+
+                    const DEFAULT_MAGNET_TIMEOUT_SECS: u64 = 120;
+                    let timeout_secs = opts
+                        .magnet_resolution_timeout_secs
+                        .unwrap_or(DEFAULT_MAGNET_TIMEOUT_SECS);
+
+                    let resolve_fut =
+                        self.resolve_magnet(info_hash, peer_rx, &trackers, opts.peer_opts);
+
+                    let resolved_magnet = if timeout_secs == 0 {
+                        resolve_fut.await?
+                    } else {
+                        tokio::time::timeout(Duration::from_secs(timeout_secs), resolve_fut)
+                            .await
+                            .context(format!(
+                                "magnet metadata resolution timed out after {timeout_secs}s"
+                            ))??
+                    };
 
                     // Add back seen_peers into the peer stream, as we consumed some peers
                     // while resolving the magnet.
@@ -914,7 +929,10 @@ impl Session {
             debug!("error pausing torrent before deletion: {e:#}")
         }
 
-        let metadata = removed.metadata.load_full().context("torrent metadata was not loaded")?;
+        let metadata = removed
+            .metadata
+            .load_full()
+            .context("torrent metadata was not loaded")?;
 
         let storage = removed
             .with_state_mut(|s| match s.take() {
@@ -1012,11 +1030,7 @@ impl Session {
 
     /// Spawn a task that watches for a torrent to complete and moves its files
     /// to the completed folder.
-    fn spawn_completion_watcher(
-        self: &Arc<Self>,
-        id: TorrentId,
-        handle: ManagedTorrentHandle,
-    ) {
+    fn spawn_completion_watcher(self: &Arc<Self>, id: TorrentId, handle: ManagedTorrentHandle) {
         let session = Arc::downgrade(self);
         let handle_weak = Arc::downgrade(&handle);
         let span = handle.shared.span.clone();
@@ -1070,7 +1084,10 @@ impl Session {
 
         // Don't move if already in the target folder
         if current_output == target_folder {
-            debug!(id, "torrent is already in the completed folder, skipping move");
+            debug!(
+                id,
+                "torrent is already in the completed folder, skipping move"
+            );
             return Ok(());
         }
 
@@ -1130,9 +1147,9 @@ impl Session {
                     tokio::fs::copy(&src, &dst)
                         .await
                         .with_context(|| format!("error copying {src:?} to {dst:?}"))?;
-                    tokio::fs::remove_file(&src)
-                        .await
-                        .with_context(|| format!("error removing source file {src:?} after copy"))?;
+                    tokio::fs::remove_file(&src).await.with_context(|| {
+                        format!("error removing source file {src:?} after copy")
+                    })?;
                     debug!(id, ?src, ?dst, "moved file via copy+delete");
                 }
             }
@@ -1177,9 +1194,7 @@ impl Session {
         id: TorrentIdOrHash,
         category: Option<String>,
     ) -> anyhow::Result<()> {
-        let handle = self
-            .get(id)
-            .context("torrent not found")?;
+        let handle = self.get(id).context("torrent not found")?;
         *handle.shared().category.write() = category;
         Ok(())
     }
@@ -1221,5 +1236,157 @@ mod tests {
         assert_eq!(parsed.info_hash, generated_parsed.info_hash);
         assert_eq!(parsed.info, generated_parsed.info);
         assert_eq!(parsed_trackers, get_trackers(&generated_parsed));
+    }
+
+    /// Test that magnet resolution respects the configured timeout and returns
+    /// an appropriate error when it expires. Uses a magnet with unreachable
+    /// initial peers so resolution will hang until the timeout.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_magnet_resolution_timeout() {
+        use std::net::SocketAddr;
+        use std::str::FromStr;
+        use std::time::Instant;
+
+        use crate::{AddTorrent, AddTorrentOptions, SessionOptions};
+
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let session = super::Session::new_with_opts(
+            tempdir.path().to_owned(),
+            SessionOptions {
+                disable_dht: true,
+                disable_trackers: true,
+                disable_local_service_discovery: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // A random info hash with no real peers -- resolution will hang.
+        let magnet = "magnet:?xt=urn:btih:0000000000000000000000000000000000000001";
+
+        let start = Instant::now();
+        let result = session
+            .add_torrent(
+                AddTorrent::from_url(magnet),
+                Some(AddTorrentOptions {
+                    // Set a short timeout so the test doesn't wait long.
+                    magnet_resolution_timeout_secs: Some(2),
+                    // Provide an unreachable peer so peer discovery doesn't
+                    // immediately fail with "no known way to resolve peers".
+                    initial_peers: Some(vec![SocketAddr::from_str("192.0.2.1:6881").unwrap()]),
+                    ..Default::default()
+                }),
+            )
+            .await;
+
+        let elapsed = start.elapsed();
+        assert!(result.is_err(), "expected a timeout error");
+        let err_msg = format!("{:#}", result.err().unwrap());
+        assert!(
+            err_msg.contains("magnet metadata resolution timed out"),
+            "error message should mention timeout, got: {err_msg}"
+        );
+        // Verify the timeout was roughly respected (within a generous margin).
+        assert!(
+            elapsed.as_secs() < 10,
+            "should have timed out quickly, took {elapsed:?}"
+        );
+    }
+
+    /// Test that the concurrent init limit is configurable: setting it to a
+    /// custom value creates a semaphore with the correct number of permits.
+    #[tokio::test]
+    async fn test_concurrent_init_limit_configurable() {
+        use crate::SessionOptions;
+
+        let tempdir = tempfile::TempDir::new().unwrap();
+
+        // Create session with a custom concurrent init limit.
+        let session = super::Session::new_with_opts(
+            tempdir.path().to_owned(),
+            SessionOptions {
+                disable_dht: true,
+                disable_trackers: true,
+                disable_local_service_discovery: true,
+                concurrent_init_limit: Some(5),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // The semaphore should have 5 available permits.
+        assert_eq!(
+            session.concurrent_initialize_semaphore.available_permits(),
+            5,
+            "semaphore should have 5 permits"
+        );
+
+        // Default (no explicit limit) should give 3 permits.
+        let session_default = super::Session::new_with_opts(
+            tempdir.path().to_owned(),
+            SessionOptions {
+                disable_dht: true,
+                disable_trackers: true,
+                disable_local_service_discovery: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            session_default
+                .concurrent_initialize_semaphore
+                .available_permits(),
+            3,
+            "default semaphore should have 3 permits"
+        );
+    }
+
+    /// Test that when the init semaphore is full and a permit is dropped
+    /// (e.g. when a torrent finishes init or is deleted), the slot is freed
+    /// so that a waiting task can proceed.
+    #[tokio::test]
+    async fn test_init_semaphore_doesnt_deadlock() {
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        // Create a semaphore with 1 permit (simulating concurrent_init_limit = 1).
+        let sem = Arc::new(tokio::sync::Semaphore::new(1));
+
+        // Acquire the only permit.
+        let permit = sem.clone().acquire_owned().await.unwrap();
+
+        // Spawn a task that tries to acquire the semaphore -- it should block.
+        let sem2 = sem.clone();
+        let acquired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let acquired2 = acquired.clone();
+        let handle = tokio::spawn(async move {
+            let _p = sem2.acquire().await.unwrap();
+            acquired2.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
+        // Give the spawned task a moment to start waiting.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !acquired.load(std::sync::atomic::Ordering::SeqCst),
+            "second acquire should be blocked"
+        );
+
+        // Drop the permit (simulating torrent deletion freeing the slot).
+        drop(permit);
+
+        // The spawned task should now be able to acquire the permit.
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("task should complete after permit is freed")
+            .unwrap();
+
+        assert!(
+            acquired.load(std::sync::atomic::Ordering::SeqCst),
+            "second acquire should have succeeded after permit was dropped"
+        );
     }
 }
