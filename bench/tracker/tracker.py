@@ -35,6 +35,20 @@ ANNOUNCE_INTERVAL = 30
 PEER_EXPIRY = 120
 
 
+def _expire_peers_loop():
+    """Background thread: periodically purge stale peers."""
+    while True:
+        time.sleep(30)
+        now = time.time()
+        with lock:
+            for ih in list(peers.keys()):
+                expired = [k for k, v in peers[ih].items() if now - v > PEER_EXPIRY]
+                for k in expired:
+                    del peers[ih][k]
+                if not peers[ih]:
+                    del peers[ih]
+
+
 # ── Bencode ──────────────────────────────────────────────────────────────────
 
 def bencode(obj):
@@ -88,20 +102,13 @@ class TrackerHandler(BaseHTTPRequestHandler):
 
         with lock:
             stats["announces"] += 1
-            now = time.time()
-
-            # Expire stale peers
-            for ih in list(peers.keys()):
-                expired = [k for k, v in peers[ih].items() if now - v > PEER_EXPIRY]
-                for k in expired:
-                    del peers[ih][k]
 
             if event == "stopped":
                 peers[info_hash].pop((peer_ip, port), None)
             else:
-                peers[info_hash][(peer_ip, port)] = now
+                peers[info_hash][(peer_ip, port)] = time.time()
 
-            # Peer list excluding requester
+            # Snapshot peer list for this info_hash (no full-table scan)
             peer_list = [
                 (ip, p) for (ip, p) in peers[info_hash]
                 if not (ip == peer_ip and p == port)
@@ -183,6 +190,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
     port = int(os.environ.get("TRACKER_PORT", "6969"))
+
+    # Start background peer expiry thread
+    expiry_thread = threading.Thread(target=_expire_peers_loop, daemon=True)
+    expiry_thread.start()
+
     server = ThreadedHTTPServer(("0.0.0.0", port), TrackerHandler)
     log.info("Listening on 0.0.0.0:%d", port)
     try:

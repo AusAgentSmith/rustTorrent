@@ -24,6 +24,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import mmap
 import os
 import struct
 import sys
@@ -39,6 +40,9 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger("mock")
+
+# Thread pool for offloading synchronous file I/O from the asyncio event loop
+_io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
 # ── BitTorrent protocol constants ────────────────────────────────────────────
 
@@ -120,6 +124,10 @@ class TorrentMeta:
         if not self.data_path.exists():
             raise FileNotFoundError(f"Data file missing: {self.data_path}")
 
+        # Keep file handle open to avoid open/close per request
+        self._fh = open(self.data_path, "rb")
+        self._fh_lock = threading.Lock()
+
     def bitfield_bytes(self) -> bytes:
         """Full bitfield: all pieces available."""
         n_bytes = math.ceil(self.num_pieces / 8)
@@ -129,11 +137,11 @@ class TorrentMeta:
         return bytes(bf)
 
     def read_block(self, piece: int, offset: int, length: int) -> bytes:
-        """Read a block from the data file."""
+        """Read a block from the data file (thread-safe, reuses file handle)."""
         file_offset = piece * self.piece_length + offset
-        with open(self.data_path, "rb") as f:
-            f.seek(file_offset)
-            return f.read(length)
+        with self._fh_lock:
+            self._fh.seek(file_offset)
+            return self._fh.read(length)
 
 
 # ── Peer connection handler ──────────────────────────────────────────────────
@@ -216,9 +224,12 @@ class PeerSession:
             # ignore other messages
 
     async def _handle_request(self, piece: int, offset: int, length: int):
-        """Respond to a piece request."""
+        """Respond to a piece request (file I/O offloaded to thread pool)."""
         try:
-            data = self.torrent.read_block(piece, offset, length)
+            loop = asyncio.get_running_loop()
+            data = await loop.run_in_executor(
+                _io_pool, self.torrent.read_block, piece, offset, length
+            )
             header = struct.pack("!IBII", 9 + len(data), MSG_PIECE, piece, offset)
             self.writer.write(header + data)
             await self.writer.drain()
@@ -284,23 +295,18 @@ class MockSeeder:
             log.info("No tracker URL, skipping announce")
             return
 
+        loop = asyncio.get_running_loop()
+        announced = await loop.run_in_executor(_io_pool, self._announce_all_sync)
+        log.info("Announced %d (torrent, peer) pairs to tracker", announced)
+
+    def _announce_all_sync(self) -> int:
+        """Synchronous announce — run in thread pool."""
         announced = 0
         for meta in self.torrents.values():
             for i in range(self.num_peers):
                 port = self.base_port + i
                 peer_id = self._peer_ids[i]
                 try:
-                    params = urllib.parse.urlencode({
-                        "info_hash": meta.info_hash,
-                        "peer_id": peer_id,
-                        "port": port,
-                        "uploaded": 0,
-                        "downloaded": 0,
-                        "left": 0,
-                        "compact": 1,
-                        "event": "started",
-                    })
-                    # info_hash needs special encoding (binary)
                     ih_encoded = urllib.parse.quote(meta.info_hash, safe="")
                     pid_encoded = urllib.parse.quote(peer_id, safe="")
                     url = (f"{self.tracker_url}?"
@@ -313,7 +319,7 @@ class MockSeeder:
                 except Exception as e:
                     if announced == 0:
                         log.warning("Announce failed: %s", e)
-        log.info("Announced %d (torrent, peer) pairs to tracker", announced)
+        return announced
 
     async def _re_announce_loop(self):
         """Periodically re-announce to keep peers alive."""
