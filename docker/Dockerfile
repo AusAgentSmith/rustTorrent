@@ -21,6 +21,7 @@ ENV RQBIT_LISTEN_PORT=4240
 VOLUME /home/rqbit/db
 VOLUME /home/rqbit/cache
 VOLUME /home/rqbit/downloads
+VOLUME /home/rqbit/completed
 
 EXPOSE 3030
 EXPOSE 4240

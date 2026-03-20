@@ -167,6 +167,10 @@ pub struct RqbitDesktopConfigUpnp {
 pub struct RqbitDesktopConfig {
     pub default_download_location: PathBuf,
 
+    /// Move completed torrents to this folder.
+    #[serde(default)]
+    pub completed_folder: Option<PathBuf>,
+
     #[cfg(feature = "disable-upload")]
     #[serde(default)]
     pub disable_upload: bool,
@@ -191,6 +195,7 @@ impl Default for RqbitDesktopConfig {
 
         Self {
             default_download_location: download_folder,
+            completed_folder: None,
             dht: Default::default(),
             connections: Default::default(),
             upnp: Default::default(),

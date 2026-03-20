@@ -12,10 +12,12 @@ services:
       RQBIT_HTTP_API_LISTEN_ADDR: "0.0.0.0:3030"
       RQBIT_LISTEN_PORT: "4240"
       RQBIT_FASTRESUME: "true"
+      RQBIT_COMPLETED_FOLDER: "/home/rqbit/completed"
     volumes:
       - rqbit-db:/home/rqbit/db
       - rqbit-cache:/home/rqbit/cache
       - ${RQBIT_DOWNLOADS:-/mnt/data3/downloads/rqbit}:/home/rqbit/downloads
+      - ${RQBIT_COMPLETED:-/mnt/data3/completed/rqbit}:/home/rqbit/completed
 
 volumes:
   rqbit-db:

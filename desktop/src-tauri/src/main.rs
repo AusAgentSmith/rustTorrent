@@ -117,6 +117,7 @@ async fn api_from_config(
             listen,
             fastresume: config.persistence.fastresume,
             ratelimits: config.ratelimits,
+            completed_folder: config.completed_folder.clone(),
             #[cfg(feature = "disable-upload")]
             disable_upload: config.disable_upload,
             ..Default::default()
