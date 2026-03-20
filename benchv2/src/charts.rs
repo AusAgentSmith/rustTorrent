@@ -178,8 +178,8 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
     let panels: Vec<(&str, &str, Box<dyn Fn(&crate::metrics::MetricSample) -> f64>)> = vec![
         ("CPU", "%", Box::new(|s| s.cpu_pct)),
         ("Memory", "MB", Box::new(|s| s.mem_bytes as f64 / MB as f64)),
-        ("IO Wait", "%", Box::new(|s| s.iowait_pct)),
         ("Net RX", "Mbps", Box::new(|s| s.net_rx_bps * 8.0 / 1e6)),
+        ("Disk Write", "MB/s", Box::new(|s| s.disk_write_bps / MB as f64)),
     ];
 
     let panel_h: usize = 160;
@@ -280,12 +280,16 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
         }
 
         // Plot data for both clients
-        for (result, color) in [(rq, RQBIT_COLOR), (qb, QBT_COLOR)] {
+        for (result, color, label) in [
+            (rq, RQBIT_COLOR, "rqbit"),
+            (qb, QBT_COLOR, "qBittorrent"),
+        ] {
             if result.timeseries.is_empty() {
                 continue;
             }
             let t0 = result.timeseries[0].ts;
-            let points: String = result
+            let dur = result.timeseries.last().unwrap().ts - t0;
+            let points: Vec<(f64, f64)> = result
                 .timeseries
                 .iter()
                 .map(|s| {
@@ -293,15 +297,44 @@ fn write_timeseries(rq: &ClientResult, qb: &ClientResult, dir: &Path) -> Result<
                     let v = extractor(s);
                     let x = px as f64 + (t / max_t) * pw as f64;
                     let y = (py + panel_h) as f64 - (v / max_v) * (panel_h - 10) as f64;
-                    format!("{:.1},{:.1}", x, y)
+                    (x, y)
                 })
+                .collect();
+
+            let pts_str: String = points
+                .iter()
+                .map(|(x, y)| format!("{:.1},{:.1}", x, y))
                 .collect::<Vec<_>>()
                 .join(" ");
 
-            if !points.is_empty() {
+            if !pts_str.is_empty() {
                 svg.push_str(&format!(
-                    r#"<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2" opacity="0.9"/>"#,
+                    r#"<polyline points="{pts_str}" fill="none" stroke="{color}" stroke-width="2" opacity="0.9"/>"#,
                 ));
+            }
+
+            // "done" marker at the end of the line if it finishes before the chart ends
+            if dur < max_t * 0.9 {
+                if let Some(&(end_x, end_y)) = points.last() {
+                    // Vertical dashed line
+                    svg.push_str(&format!(
+                        r#"<line x1="{end_x:.0}" y1="{}" x2="{end_x:.0}" y2="{}" stroke="{color}" stroke-dasharray="3" stroke-width="1" opacity="0.6"/>"#,
+                        py,
+                        py + panel_h,
+                    ));
+                    // Dot at end point
+                    svg.push_str(&format!(
+                        r#"<circle cx="{end_x:.1}" cy="{end_y:.1}" r="3" fill="{color}"/>"#,
+                    ));
+                    // "done" label (only on first panel to avoid clutter)
+                    if pi == 0 {
+                        svg.push_str(&format!(
+                            r#"<text x="{:.0}" y="{}" fill="{color}" font-size="8" font-family="monospace">{label} done ({dur:.0}s)</text>"#,
+                            end_x + 4.0,
+                            py + 10,
+                        ));
+                    }
+                }
             }
         }
     }

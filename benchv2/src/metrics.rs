@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Default)]
 pub struct MetricSample {
     pub ts: f64,
     pub cpu_pct: f64,

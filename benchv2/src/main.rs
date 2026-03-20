@@ -42,6 +42,15 @@ enum Command {
         #[arg(long, default_value = "6969")]
         port: u16,
     },
+    /// Regenerate charts from existing benchmark JSON
+    RegenCharts {
+        /// Path to benchmark JSON file
+        #[arg(long)]
+        json: PathBuf,
+        /// Output directory for charts
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Run the mock BitTorrent seeder
     MockSeed {
         #[arg(long, default_value = "100", env = "MOCK_PEERS")]
@@ -92,6 +101,20 @@ fn main() -> anyhow::Result<()> {
                 results_dir,
             } => {
                 runner::run(scenarios, data_dir, torrent_dir, results_dir).await
+            }
+            Command::RegenCharts { json, out } => {
+                let data = std::fs::read_to_string(&json)?;
+                let items: Vec<serde_json::Value> = serde_json::from_str(&data)?;
+                let mut results: Vec<(runner::ClientResult, runner::ClientResult)> = Vec::new();
+                for item in &items {
+                    let rq: runner::ClientResult = serde_json::from_value(item["rqbit"].clone())?;
+                    let qb: runner::ClientResult = serde_json::from_value(item["qbittorrent"].clone())?;
+                    results.push((rq, qb));
+                }
+                std::fs::create_dir_all(&out)?;
+                charts::generate_all(&results, &out)?;
+                tracing::info!("Charts written to {}", out.display());
+                Ok(())
             }
             Command::Tracker { port } => tracker::run(port).await,
             Command::MockSeed {
