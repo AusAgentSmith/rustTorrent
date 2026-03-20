@@ -5,7 +5,6 @@ FROM rust:alpine AS builder
 
 RUN apk update && apk add clang lld npm pkgconf musl-dev openssl-dev openssl-libs-static curl
 
-ARG CACHEBUST=1
 COPY . /src/
 WORKDIR /src/
 
@@ -14,9 +13,8 @@ ENV OPENSSL_STATIC=1
 RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
-    --mount=type=cache,target=/src/target \
     cargo build --profile release-github && \
-    cp /src/target/release-github/rqbit /bin/rqbit
+    cp target/release-github/rqbit /bin/rqbit
 
 # ---
 
