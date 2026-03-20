@@ -3,6 +3,7 @@ pub mod stats;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use librqbit_core::hash_id::Id20;
 use librqbit_core::lengths::ChunkInfo;
@@ -26,6 +27,9 @@ pub(crate) struct Peer {
     state: PeerState,
     pub stats: stats::atomic::PeerStats,
     pub outgoing_address: Option<SocketAddr>,
+    /// Tracks when the peer last transitioned to a terminal state (Dead/NotNeeded).
+    /// Used by the pruning task to remove stale entries from the peer map.
+    pub last_state_change: Instant,
 }
 
 impl Peer {
@@ -45,6 +49,7 @@ impl Peer {
             state,
             stats: Default::default(),
             outgoing_address: None,
+            last_state_change: Instant::now(),
         }
     }
 
@@ -54,6 +59,7 @@ impl Peer {
             outgoing_address: Some(addr),
             stats: Default::default(),
             state: Default::default(),
+            last_state_change: Instant::now(),
         }
     }
 
@@ -167,6 +173,7 @@ impl Peer {
             }
         }
 
+        self.last_state_change = Instant::now();
         std::mem::replace(&mut self.state, new)
     }
 

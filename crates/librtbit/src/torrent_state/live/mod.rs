@@ -158,6 +158,11 @@ impl TorrentStateLocked {
 
 const FLUSH_BITV_EVERY_BYTES: u64 = 16 * 1024 * 1024;
 
+/// How often the dead peer pruning task runs.
+const PEER_PRUNE_INTERVAL: Duration = Duration::from_secs(60);
+/// Peers in Dead/NotNeeded state are removed from the map after this duration.
+const PEER_PRUNE_RETENTION: Duration = Duration::from_secs(300);
+
 pub enum AddIncomingPeerResult {
     Added,
     AlreadyActive,
@@ -323,6 +328,25 @@ impl TorrentStateLive {
             debug_span!(parent: state.shared.span.clone(), "upload_scheduler"),
             format!("[{}]upload_scheduler", state.shared.id),
             state.clone().task_upload_scheduler(ratelimit_upload_rx),
+        );
+
+        state.spawn(
+            debug_span!(parent: state.shared.span.clone(), "dead_peer_pruner"),
+            format!("[{}]dead_peer_pruner", state.shared.id),
+            {
+                let state = Arc::downgrade(&state);
+                async move {
+                    let mut interval = tokio::time::interval(PEER_PRUNE_INTERVAL);
+                    loop {
+                        interval.tick().await;
+                        let state = match state.upgrade() {
+                            Some(s) => s,
+                            None => return Ok(()),
+                        };
+                        state.peers.prune_dead_peers(PEER_PRUNE_RETENTION);
+                    }
+                }
+            },
         );
         Ok(state)
     }
