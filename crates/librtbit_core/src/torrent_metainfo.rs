@@ -4,8 +4,9 @@ use bytes::Bytes;
 use clone_to_owned::CloneToOwned;
 use encoding_rs::Encoding;
 use itertools::Either;
+use serde::de;
 use serde_derive::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::HashSet, iter::once, path::PathBuf};
+use std::{borrow::Cow, collections::HashSet, fmt, iter::once, marker::PhantomData, path::PathBuf};
 use tracing::debug;
 
 use crate::{Error, hash_id::Id20, lengths::Lengths};
@@ -42,6 +43,96 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+/// BEP 19: WebSeed URL list. Can be a single URL string or a list of URL strings.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum UrlList<BufType> {
+    Single(BufType),
+    Multi(Vec<BufType>),
+}
+
+impl<BufType> UrlList<BufType> {
+    /// Iterate over the URLs in this list.
+    pub fn iter(&self) -> impl Iterator<Item = &BufType> {
+        match self {
+            UrlList::Single(url) => Either::Left(once(url)),
+            UrlList::Multi(urls) => Either::Right(urls.iter()),
+        }
+    }
+}
+
+impl<BufType> CloneToOwned for UrlList<BufType>
+where
+    BufType: CloneToOwned,
+{
+    type Target = UrlList<<BufType as CloneToOwned>::Target>;
+
+    fn clone_to_owned(&self, within_buffer: Option<&Bytes>) -> Self::Target {
+        match self {
+            UrlList::Single(url) => UrlList::Single(url.clone_to_owned(within_buffer)),
+            UrlList::Multi(urls) => UrlList::Multi(urls.clone_to_owned(within_buffer)),
+        }
+    }
+}
+
+/// Custom deserializer for UrlList that handles both a single bencode string
+/// and a bencode list of strings, since the bencode crate does not support
+/// `deserialize_enum`.
+impl<'de, BufType> de::Deserialize<'de> for UrlList<BufType>
+where
+    BufType: de::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct UrlListVisitor<BufType>(PhantomData<BufType>);
+
+        impl<'de, BufType> de::Visitor<'de> for UrlListVisitor<BufType>
+        where
+            BufType: de::Deserialize<'de>,
+        {
+            type Value = UrlList<BufType>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or a list of strings")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut urls = Vec::new();
+                while let Some(url) = seq.next_element()? {
+                    urls.push(url);
+                }
+                Ok(UrlList::Multi(urls))
+            }
+
+            fn visit_bytes<E>(self, _v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // Re-deserialize from the bytes using the BufType deserializer.
+                // For ByteBuf this will work via visit_borrowed_bytes.
+                Err(E::custom("expected borrowed bytes"))
+            }
+
+            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // We need to convert &[u8] to BufType. We do this by creating
+                // a simple deserializer that yields these bytes.
+                let buf = BufType::deserialize(de::value::BorrowedBytesDeserializer::new(v))?;
+                Ok(UrlList::Single(buf))
+            }
+        }
+
+        deserializer.deserialize_any(UrlListVisitor(PhantomData))
+    }
+}
+
 /// A parsed .torrent file.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TorrentMetaV1<BufType> {
@@ -64,6 +155,8 @@ pub struct TorrentMetaV1<BufType> {
     pub publisher: Option<BufType>,
     #[serde(rename = "publisher-url", skip_serializing_if = "Option::is_none")]
     pub publisher_url: Option<BufType>,
+    #[serde(rename = "url-list", default, skip_serializing_if = "Option::is_none")]
+    pub url_list: Option<UrlList<BufType>>,
     #[serde(rename = "creation date", skip_serializing_if = "Option::is_none")]
     pub creation_date: Option<usize>,
 
@@ -85,9 +178,14 @@ impl<BufType> TorrentMetaV1<BufType> {
 pub struct TorrentMetaV1Info<BufType> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<BufType>,
-    pub pieces: BufType,
+    /// v1 piece hashes (concatenated 20-byte SHA-1). Optional for v2-only torrents.
+    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    pub pieces: Option<BufType>,
     #[serde(rename = "piece length")]
     pub piece_length: u32,
+    /// BEP 52: meta version field. 2 for v2 torrents, absent for v1-only.
+    #[serde(rename = "meta version", default, skip_serializing_if = "Option::is_none")]
+    pub meta_version: Option<u32>,
 
     // Single-file mode
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,6 +403,10 @@ impl<BufType: AsRef<[u8]>> ValidatedTorrentMetaV1Info<BufType> {
 
 impl<BufType: AsRef<[u8]>> TorrentMetaV1Info<BufType> {
     pub fn validate(self) -> crate::Result<ValidatedTorrentMetaV1Info<BufType>> {
+        // BEP 52: reject v2-only torrents (no v1 piece hashes)
+        if !self.has_v1_pieces() {
+            return Err(Error::V2OnlyNotSupported);
+        }
         let lengths = Lengths::from_torrent(&self)?;
         let encoding = self.detect_encoding();
         let validated = ValidatedTorrentMetaV1Info {
@@ -356,17 +458,34 @@ impl<BufType: AsRef<[u8]>> TorrentMetaV1Info<BufType> {
     }
 
     pub fn get_hash(&self, piece: u32) -> Option<&[u8]> {
+        let pieces = self.pieces.as_ref()?;
         let start = piece as usize * 20;
         let end = start + 20;
-        let expected_hash = self.pieces.as_ref().get(start..end)?;
+        let expected_hash = pieces.as_ref().get(start..end)?;
         Some(expected_hash)
     }
 
     pub fn compare_hash(&self, piece: u32, hash: [u8; 20]) -> Option<bool> {
+        let pieces = self.pieces.as_ref()?;
         let start = piece as usize * 20;
         let end = start + 20;
-        let expected_hash = self.pieces.as_ref().get(start..end)?;
+        let expected_hash = pieces.as_ref().get(start..end)?;
         Some(expected_hash == hash)
+    }
+
+    /// Returns true if this torrent has v1 piece hashes.
+    pub fn has_v1_pieces(&self) -> bool {
+        self.pieces.as_ref().is_some_and(|p| !p.as_ref().is_empty())
+    }
+
+    /// Returns true if this is a BEP 52 v2 torrent (meta_version == 2).
+    pub fn is_v2(&self) -> bool {
+        self.meta_version == Some(2)
+    }
+
+    /// Returns true if this is a hybrid torrent (has both v1 pieces and v2 meta_version).
+    pub fn is_hybrid(&self) -> bool {
+        self.has_v1_pieces() && self.is_v2()
     }
 
     pub fn detect_encoding(&self) -> &'static Encoding {
@@ -471,6 +590,7 @@ where
             name: self.name.clone_to_owned(within_buffer),
             pieces: self.pieces.clone_to_owned(within_buffer),
             piece_length: self.piece_length,
+            meta_version: self.meta_version,
             length: self.length,
             md5sum: self.md5sum.clone_to_owned(within_buffer),
             files: self.files.clone_to_owned(within_buffer),
@@ -498,6 +618,7 @@ where
             encoding: self.encoding.clone_to_owned(within_buffer),
             publisher: self.publisher.clone_to_owned(within_buffer),
             publisher_url: self.publisher_url.clone_to_owned(within_buffer),
+            url_list: self.url_list.clone_to_owned(within_buffer),
             creation_date: self.creation_date,
             info_hash: self.info_hash,
         }

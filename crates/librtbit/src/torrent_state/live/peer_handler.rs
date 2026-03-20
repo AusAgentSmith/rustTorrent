@@ -18,6 +18,7 @@ use peer_binary_protocol::{
     extended::{
         ExtendedMessage,
         handshake::ExtendedHandshake,
+        ut_holepunch::{HolepunchErrorCode, HolepunchMessage, HolepunchMsgType},
         ut_metadata::{UtMetadata, UtMetadataData},
         ut_pex::UtPex,
     },
@@ -149,6 +150,9 @@ impl PeerConnectionHandler for &'_ PeerHandler {
                 } else {
                     self.on_pex_message(pex);
                 }
+            }
+            Message::Extended(ExtendedMessage::UtHolepunch(msg)) => {
+                self.on_holepunch_message(msg);
             }
             message => {
                 warn!(
@@ -1066,6 +1070,79 @@ impl PeerHandler {
                     })
                     .ok();
             });
+    }
+
+    fn on_holepunch_message(&self, msg: HolepunchMessage) {
+        if self.state.metadata.info.info().private {
+            warn!(
+                id = self.state.shared.id,
+                info_hash = ?self.state.shared.info_hash,
+                "received noncompliant holepunch message from {}, ignoring (private torrent)",
+                self.addr
+            );
+            return;
+        }
+
+        match msg.msg_type {
+            HolepunchMsgType::Rendezvous => {
+                let target_addr = msg.addr;
+                // Try to relay Connect to the target peer
+                let relayed = self.state.peers.with_live(target_addr, |live| {
+                    // Send Connect message to the target telling it about the initiator
+                    let connect_to_target = HolepunchMessage {
+                        msg_type: HolepunchMsgType::Connect,
+                        addr: self.addr,
+                        error_code: None,
+                    };
+                    let _ = live.tx.send(WriterRequest::UtHolepunch(connect_to_target));
+
+                    // Send Connect message back to the initiator telling it about the target
+                    let connect_to_initiator = HolepunchMessage {
+                        msg_type: HolepunchMsgType::Connect,
+                        addr: target_addr,
+                        error_code: None,
+                    };
+                    let _ = self
+                        .tx
+                        .send(WriterRequest::UtHolepunch(connect_to_initiator));
+                });
+
+                if relayed.is_none() {
+                    // Target peer is not connected, send Error back to initiator
+                    let error_msg = HolepunchMessage {
+                        msg_type: HolepunchMsgType::Error,
+                        addr: target_addr,
+                        error_code: Some(HolepunchErrorCode::NotConnected),
+                    };
+                    let _ = self.tx.send(WriterRequest::UtHolepunch(error_msg));
+                }
+            }
+            HolepunchMsgType::Connect => {
+                // A rendezvous peer is telling us to connect to this peer
+                let peer_addr = msg.addr;
+                self.state
+                    .add_peer_if_not_seen(peer_addr)
+                    .map_err(|error| {
+                        warn!(
+                            id = self.state.shared.id,
+                            info_hash = ?self.state.shared.info_hash,
+                            addr = %peer_addr,
+                            "holepunch: failed to add peer: {error:#}"
+                        );
+                        error
+                    })
+                    .ok();
+            }
+            HolepunchMsgType::Error => {
+                debug!(
+                    id = self.state.shared.id,
+                    info_hash = ?self.state.shared.info_hash,
+                    addr = %msg.addr,
+                    error_code = ?msg.error_code,
+                    "holepunch error received, ignoring"
+                );
+            }
+        }
     }
 
     fn lock_read(

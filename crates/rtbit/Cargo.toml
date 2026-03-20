@@ -36,6 +36,7 @@ librqbit = { workspace = true, features = [
     "upnp-serve-adapter",
     "watch",
 ] }
+librqbit-core.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 console-subscriber = { workspace = true, optional = true }
 anyhow.workspace = true

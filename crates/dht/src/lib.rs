@@ -1,6 +1,8 @@
+pub mod bep44_crypto;
 mod bprotocol;
 mod dht;
 mod error;
+pub mod mutable_item_store;
 mod peer_store;
 mod persistence;
 mod routing_table;

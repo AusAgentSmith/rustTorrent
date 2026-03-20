@@ -54,6 +54,9 @@ pub const MY_EXTENDED_UT_METADATA: u8 = 3;
 pub const EXTENDED_UT_PEX_KEY: &[u8] = b"ut_pex";
 pub const MY_EXTENDED_UT_PEX: u8 = 1;
 
+pub const EXTENDED_UT_HOLEPUNCH_KEY: &[u8] = b"ut_holepunch";
+pub const MY_EXTENDED_UT_HOLEPUNCH: u8 = 4;
+
 #[derive(Clone, Copy)]
 pub struct MsgIdDebug(MsgId);
 impl MsgIdDebug {
@@ -119,6 +122,8 @@ pub enum MessageDeserializeError {
         expected_size: u32,
         received_size: u32,
     },
+    #[error("holepunch deserialization error: {0}")]
+    HolepunchDeserialize(String),
     #[error("pstr doesn't match {PSTR_BT1:?}")]
     HandshakePstrWrongContent,
     #[error("pstr should be 19 bytes long but got {0}")]
@@ -241,6 +246,8 @@ pub enum SerializeError {
     NeedUtMetadata,
     #[error("need peer's handshake to serialize ut_pex, or peer does't support ut_pex")]
     NeedPex,
+    #[error("need peer's handshake to serialize ut_holepunch, or peer doesn't support ut_holepunch")]
+    NeedHolepunch,
 }
 
 impl From<std::io::Error> for SerializeError {

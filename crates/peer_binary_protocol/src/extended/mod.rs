@@ -19,15 +19,18 @@ use self::{handshake::ExtendedHandshake, ut_metadata::UtMetadata};
 use super::MessageDeserializeError;
 
 pub mod handshake;
+pub mod ut_holepunch;
 pub mod ut_metadata;
 pub mod ut_pex;
 
 use super::MY_EXTENDED_UT_METADATA;
+use super::MY_EXTENDED_UT_HOLEPUNCH;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct PeerExtendedMessageIds {
     pub ut_metadata: Option<u8>,
     pub ut_pex: Option<u8>,
+    pub ut_holepunch: Option<u8>,
 }
 
 impl PeerExtendedMessageIds {
@@ -35,6 +38,7 @@ impl PeerExtendedMessageIds {
         Self {
             ut_metadata: Some(MY_EXTENDED_UT_METADATA),
             ut_pex: Some(MY_EXTENDED_UT_PEX),
+            ut_holepunch: Some(MY_EXTENDED_UT_HOLEPUNCH),
         }
     }
 }
@@ -44,6 +48,7 @@ pub enum ExtendedMessage<ByteBuf: ByteBufT> {
     Handshake(ExtendedHandshake<ByteBuf>),
     UtMetadata(UtMetadata<ByteBuf>),
     UtPex(UtPex<ByteBuf>),
+    UtHolepunch(ut_holepunch::HolepunchMessage),
     Dyn(u8, BencodeValue<ByteBuf>),
 }
 
@@ -77,6 +82,14 @@ impl<'a> ExtendedMessage<ByteBuf<'a>> {
                 out.write_u8(emsg_id)?;
                 bencode_serialize_to_writer(m, &mut out)?;
             }
+            ExtendedMessage::UtHolepunch(m) => {
+                let emsg_id = peer_extended_msg_ids()
+                    .ut_holepunch
+                    .ok_or(SerializeError::NeedHolepunch)?;
+                out.write_u8(emsg_id)?;
+                let payload = m.serialize();
+                std::io::Write::write_all(&mut out, &payload)?;
+            }
         }
         Ok(out.position() as usize)
     }
@@ -106,6 +119,14 @@ impl<'a> ExtendedMessage<ByteBuf<'a>> {
                 Ok(ExtendedMessage::UtMetadata(UtMetadata::deserialize(buf)?))
             }
             MY_EXTENDED_UT_PEX => Ok(ExtendedMessage::UtPex(from_bytes_contig(&buf)?)),
+            MY_EXTENDED_UT_HOLEPUNCH => {
+                let data = buf
+                    .get_contiguous(buf.len())
+                    .ok_or(MessageDeserializeError::NeedContiguous)?;
+                let msg = ut_holepunch::HolepunchMessage::deserialize(data)
+                    .map_err(MessageDeserializeError::HolepunchDeserialize)?;
+                Ok(ExtendedMessage::UtHolepunch(msg))
+            }
             _ => Ok(ExtendedMessage::Dyn(emsg_id, from_bytes_contig(&buf)?)),
         }
     }

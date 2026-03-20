@@ -177,6 +177,8 @@ impl TestHarness {
                 ratelimits: LimitsConfig {
                     upload_bps: NonZero::new(64 * 1024),
                     download_bps: Default::default(),
+                    peer_limit: None,
+                    concurrent_init_limit: None,
                 },
                 disable_local_service_discovery: false,
                 connect: Some(ConnectionOptions {
@@ -306,6 +308,7 @@ impl TestHarness {
                 basic_auth: None,
                 allow_create: true,
                 token_store: None,
+                credential_store: None,
                 prometheus_handle: None,
             }),
         );

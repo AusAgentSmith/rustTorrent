@@ -16,6 +16,7 @@ use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ConnectionOptions,
     CreateTorrentOptions, ListOnlyResponse, ListenerMode, ListenerOptions, PeerConnectionOptions,
     Session, SessionOptions, SessionPersistenceConfig, TorrentStatsState,
+    dht,
     http_api::{HttpApi, HttpApiOptions},
     librqbit_spawn,
     limits::LimitsConfig,
@@ -120,6 +121,12 @@ struct Opts {
         env = "RQBIT_DHT_PERSISTENCE_DISABLE"
     )]
     disable_dht_persistence: bool,
+
+    /// How often to write DHT routing table to disk, e.g. 60s, 5m, 10m.
+    /// Default is 60s. Higher values reduce disk I/O at the cost of potentially losing
+    /// more DHT state if the process crashes.
+    #[arg(long = "dht-dump-interval", value_parser = parse_duration::parse, env = "RQBIT_DHT_DUMP_INTERVAL")]
+    dht_dump_interval: Option<Duration>,
 
     /// Set DHT bootstrap addrs
     /// A comma separated list of host:port or ip:port
@@ -629,7 +636,12 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             .dht_bootstrap_addrs
             .as_ref()
             .map(|s| s.split(",").map(|v| v.to_string()).collect()),
-        dht_config: None,
+        dht_config: opts.dht_dump_interval.map(|interval| {
+            dht::PersistentDhtConfig {
+                dump_interval: Some(interval),
+                ..Default::default()
+            }
+        }),
         // This will be overridden by "server start" below if needed.
         persistence: None,
         peer_id: None,
@@ -673,6 +685,8 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         ratelimits: LimitsConfig {
             upload_bps: opts.ratelimit_upload_bps,
             download_bps: opts.ratelimit_download_bps,
+            peer_limit: None,
+            concurrent_init_limit: None,
         },
         blocklist_url: opts.blocklist_url.take(),
         allowlist_url: opts.allowlist_url.take(),
@@ -685,7 +699,22 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         completed_folder: None,
     };
 
-    let basic_auth = if let Ok(up) = std::env::var("RQBIT_HTTP_BASIC_AUTH_USERPASS") {
+    // Credential store for persistent auth — uses the rqbit config directory
+    let credential_store = {
+        let config_dir = librqbit_core::directories::get_configuration_directory("session")
+            .map(|d| d.config_dir().to_owned())
+            .unwrap_or_else(|_| PathBuf::from("."));
+        Arc::new(librqbit::http_api::auth::CredentialStore::new(config_dir))
+    };
+
+    // Load auth: credential store first, then env var fallback
+    let basic_auth = if let Some(creds) = credential_store.get_credentials() {
+        info!(
+            username = %creds.username,
+            "loaded credentials from credential store"
+        );
+        Some((creds.username, creds.password))
+    } else if let Ok(up) = std::env::var("RQBIT_HTTP_BASIC_AUTH_USERPASS") {
         let (u, p) = up
             .split_once(":")
             .context("basic auth credentials should be in format username:password")?;
@@ -694,13 +723,10 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         None
     };
 
-    let token_store = if basic_auth.is_some() {
-        Some(std::sync::Arc::new(
-            librqbit::http_api::auth::TokenStore::new(),
-        ))
-    } else {
-        None
-    };
+    // Always create token store (needed for setup flow and login)
+    let token_store = Some(std::sync::Arc::new(
+        librqbit::http_api::auth::TokenStore::new(),
+    ));
 
     #[allow(clippy::needless_update)]
     let mut http_api_opts = HttpApiOptions {
@@ -708,6 +734,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         basic_auth,
         allow_create: opts.http_api_allow_create,
         token_store,
+        credential_store: Some(credential_store),
 
         // We need to install prometheus recorder early before we registered any metrics.
         #[cfg(feature = "prometheus")]

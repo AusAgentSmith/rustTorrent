@@ -5,6 +5,7 @@ import { GeneralTab } from "./GeneralTab";
 import { ConnectionTab } from "./ConnectionTab";
 import { DHTTab } from "./DHTTab";
 import { HttpApiTab } from "./HttpApiTab";
+import { SecurityTab } from "./SecurityTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
 import { ErrorWithLabel } from "../../rqbit-web";
@@ -26,6 +27,8 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
   const [limits, setLimits] = useState<LimitsConfig>({
     upload_bps: null,
     download_bps: null,
+    peer_limit: null,
+    concurrent_init_limit: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,11 +94,19 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
             <RateLimitsTab
               downloadBps={limits.download_bps}
               uploadBps={limits.upload_bps}
+              peerLimit={limits.peer_limit}
+              concurrentInitLimit={limits.concurrent_init_limit}
               onDownloadBpsChange={(v) =>
                 setLimits((l) => ({ ...l, download_bps: v }))
               }
               onUploadBpsChange={(v) =>
                 setLimits((l) => ({ ...l, upload_bps: v }))
+              }
+              onPeerLimitChange={(v) =>
+                setLimits((l) => ({ ...l, peer_limit: v }))
+              }
+              onConcurrentInitLimitChange={(v) =>
+                setLimits((l) => ({ ...l, concurrent_init_limit: v }))
               }
             />
           ),
@@ -109,6 +120,11 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           id: "dht",
           label: "DHT",
           content: <DHTTab />,
+        },
+        {
+          id: "security",
+          label: "Security",
+          content: <SecurityTab />,
         },
         {
           id: "http-api",

@@ -52,6 +52,8 @@ pub enum Error {
     V2InvalidPieceLength(u32),
     #[error("invalid v2 torrent: has meta_version but no pieces and no file_tree")]
     V2InvalidTorrent,
+    #[error("v2-only torrents are not yet supported (no v1 piece hashes). Use a hybrid or v1 torrent")]
+    V2OnlyNotSupported,
     #[error("v2 hybrid file list mismatch: {0}")]
     V2HybridFileListMismatch(String),
 }

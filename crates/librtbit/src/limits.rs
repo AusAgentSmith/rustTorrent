@@ -13,6 +13,8 @@ pub struct LimitsConfig {
     pub upload_bps: Option<NonZeroU32>,
     #[cfg_attr(feature = "swagger", schema(value_type = Option<u32>))]
     pub download_bps: Option<NonZeroU32>,
+    pub peer_limit: Option<usize>,
+    pub concurrent_init_limit: Option<usize>,
 }
 
 struct Limit {
@@ -97,6 +99,8 @@ impl Limits {
         LimitsConfig {
             upload_bps: self.get_upload_bps(),
             download_bps: self.get_download_bps(),
+            peer_limit: None,
+            concurrent_init_limit: None,
         }
     }
 }

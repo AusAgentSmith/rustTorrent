@@ -160,8 +160,9 @@ async fn create_torrent_raw<'a>(
     Ok(CreateTorrentRawResult {
         info: TorrentMetaV1Info {
             name: Some(name),
-            pieces: piece_hashes.into(),
+            pieces: Some(piece_hashes.into()),
             piece_length,
+            meta_version: None,
             length: if single_file_mode { Some(length) } else { None },
             md5sum: None,
             files: if single_file_mode {
@@ -234,6 +235,7 @@ pub async fn create_torrent<'a>(
             encoding: Some(b"utf-8"[..].into()),
             publisher: None,
             publisher_url: None,
+            url_list: None,
             creation_date: None,
             info_hash,
         },
@@ -349,8 +351,8 @@ mod tests {
 
         // Piece hashes must match in length.
         assert_eq!(
-            torrent.meta.info.data.pieces.as_ref().len(),
-            deserialized.info.data.pieces.as_ref().len()
+            torrent.meta.info.data.pieces.as_ref().unwrap().as_ref().len(),
+            deserialized.info.data.pieces.as_ref().unwrap().as_ref().len()
         );
 
         // Name must roundtrip.
@@ -374,9 +376,10 @@ mod tests {
 
         let info = &torrent.meta.info.data;
         // Piece hashes should be a multiple of 20 bytes (SHA1 hash size).
-        assert_eq!(info.pieces.as_ref().len() % 20, 0);
+        let pieces = info.pieces.as_ref().unwrap();
+        assert_eq!(pieces.as_ref().len() % 20, 0);
 
-        let num_pieces = info.pieces.as_ref().len() / 20;
+        let num_pieces = pieces.as_ref().len() / 20;
         // For a 1024 byte file with 2MiB pieces, there should be exactly 1 piece.
         assert_eq!(num_pieces, 1);
     }

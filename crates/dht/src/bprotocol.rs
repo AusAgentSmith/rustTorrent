@@ -339,6 +339,19 @@ pub struct Response<BufT: ByteBufT> {
     pub nodes6: Option<CompactNodeInfo<BufT, SocketAddrV6>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<BufT>,
+    // BEP 44 mutable item response fields.
+    /// The stored bencoded value (BEP 44).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub v: Option<BufT>,
+    /// 32-byte Ed25519 public key (BEP 44 mutable items).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub k: Option<BufT>,
+    /// 64-byte Ed25519 signature (BEP 44 mutable items).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sig: Option<BufT>,
+    /// Sequence number (BEP 44 mutable items).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -361,6 +374,40 @@ pub struct AnnouncePeer<BufT> {
     pub info_hash: Id20,
     pub port: u16,
     pub token: BufT,
+}
+
+/// BEP 44: get query arguments for mutable/immutable DHT items.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Bep44GetRequest {
+    pub id: Id20,
+    /// SHA-1 hash of the public key (+ optional salt) for mutable items,
+    /// or SHA-1 of the bencoded value for immutable items.
+    pub target: Id20,
+    /// If present, only return the stored value when its seq > this value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
+}
+
+/// BEP 44: put query arguments for mutable DHT items.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Bep44PutRequest<BufT> {
+    pub id: Id20,
+    /// Write token obtained from a prior get response.
+    pub token: BufT,
+    /// 32-byte Ed25519 public key.
+    pub k: BufT,
+    /// 64-byte Ed25519 signature.
+    pub sig: BufT,
+    /// Sequence number.
+    pub seq: i64,
+    /// The bencoded value to store (max 1000 bytes).
+    pub v: BufT,
+    /// Optional salt (used in target computation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub salt: Option<BufT>,
+    /// Optional compare-and-swap: only overwrite if stored seq == cas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cas: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -390,6 +437,8 @@ pub enum MessageKind<BufT: ByteBufT> {
     Response(Response<BufT>),
     PingRequest(PingRequest),
     AnnouncePeer(AnnouncePeer<BufT>),
+    Bep44GetRequest(Bep44GetRequest),
+    Bep44PutRequest(Bep44PutRequest<BufT>),
 }
 
 impl<BufT: ByteBufT> core::fmt::Debug for MessageKind<BufT> {
@@ -401,6 +450,8 @@ impl<BufT: ByteBufT> core::fmt::Debug for MessageKind<BufT> {
             Self::Response(r) => write!(f, "{r:?}"),
             Self::PingRequest(r) => write!(f, "{r:?}"),
             Self::AnnouncePeer(r) => write!(f, "{r:?}"),
+            Self::Bep44GetRequest(r) => write!(f, "{r:?}"),
+            Self::Bep44PutRequest(r) => write!(f, "{r:?}"),
         }
     }
 }
@@ -492,6 +543,32 @@ pub fn serialize_message<'a, W: Write, BufT: ByteBufT + From<&'a [u8]>>(
             };
             Ok(bencode::bencode_serialize_to_writer(msg, writer)?)
         }
+        MessageKind::Bep44GetRequest(req) => {
+            let msg: RawMessage<BufT, _, ()> = RawMessage {
+                message_type: MessageType::Request,
+                transaction_id,
+                error: None,
+                response: None,
+                method_name: Some(BufT::from(b"get")),
+                arguments: Some(req),
+                ip,
+                version,
+            };
+            Ok(bencode::bencode_serialize_to_writer(msg, writer)?)
+        }
+        MessageKind::Bep44PutRequest(req) => {
+            let msg: RawMessage<BufT, _, ()> = RawMessage {
+                message_type: MessageType::Request,
+                transaction_id,
+                error: None,
+                response: None,
+                method_name: Some(BufT::from(b"put")),
+                arguments: Some(req),
+                ip,
+                version,
+            };
+            Ok(bencode::bencode_serialize_to_writer(msg, writer)?)
+        }
     }
 }
 
@@ -541,6 +618,26 @@ where
                         version: de.version,
                         ip: de.ip.map(|c| c.0),
                         kind: MessageKind::AnnouncePeer(de.arguments.unwrap()),
+                    })
+                }
+                b"get" => {
+                    let de: RawMessage<BufT, Bep44GetRequest> =
+                        bencode::from_bytes(buf).map_err(|e| e.into_anyhow())?;
+                    Ok(Message {
+                        transaction_id: de.transaction_id,
+                        version: de.version,
+                        ip: de.ip.map(|c| c.0),
+                        kind: MessageKind::Bep44GetRequest(de.arguments.unwrap()),
+                    })
+                }
+                b"put" => {
+                    let de: RawMessage<BufT, Bep44PutRequest<BufT>> =
+                        bencode::from_bytes(buf).map_err(|e| e.into_anyhow())?;
+                    Ok(Message {
+                        transaction_id: de.transaction_id,
+                        version: de.version,
+                        ip: de.ip.map(|c| c.0),
+                        kind: MessageKind::Bep44PutRequest(de.arguments.unwrap()),
                     })
                 }
                 other => anyhow::bail!("unsupported method {:?}", ByteBuf(other)),
@@ -1175,6 +1272,250 @@ mod tests {
                 }
                 _ => panic!("expected Error for code {code}"),
             }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // BEP 44 message type tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_serialize_bep44_get_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x11; 20]);
+        let target = Id20::new([0x22; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"g4"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44GetRequest(bprotocol::Bep44GetRequest {
+                id,
+                target,
+                seq: None,
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Bep44GetRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.target, target);
+                assert!(req.seq.is_none());
+            }
+            _ => panic!("expected Bep44GetRequest"),
+        }
+    }
+
+    #[test]
+    fn test_serialize_bep44_get_request_with_seq() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x11; 20]);
+        let target = Id20::new([0x22; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"g5"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44GetRequest(bprotocol::Bep44GetRequest {
+                id,
+                target,
+                seq: Some(42),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Bep44GetRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.target, target);
+                assert_eq!(req.seq, Some(42));
+            }
+            _ => panic!("expected Bep44GetRequest"),
+        }
+    }
+
+    #[test]
+    fn test_serialize_bep44_put_request() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x33; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"p4"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44PutRequest(bprotocol::Bep44PutRequest {
+                id,
+                token: ByteBuf(b"tok123"),
+                k: ByteBuf(&[0xAA; 32]),
+                sig: ByteBuf(&[0xBB; 64]),
+                seq: 7,
+                v: ByteBuf(b"5:hello"),
+                salt: None,
+                cas: None,
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Bep44PutRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.token.0, b"tok123");
+                assert_eq!(req.k.0.len(), 32);
+                assert_eq!(req.sig.0.len(), 64);
+                assert_eq!(req.seq, 7);
+                assert_eq!(req.v.0, b"5:hello");
+                assert!(req.salt.is_none());
+                assert!(req.cas.is_none());
+            }
+            _ => panic!("expected Bep44PutRequest"),
+        }
+    }
+
+    #[test]
+    fn test_serialize_bep44_put_request_with_salt_and_cas() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x44; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"p5"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44PutRequest(bprotocol::Bep44PutRequest {
+                id,
+                token: ByteBuf(b"token"),
+                k: ByteBuf(&[0xCC; 32]),
+                sig: ByteBuf(&[0xDD; 64]),
+                seq: 10,
+                v: ByteBuf(b"i42e"),
+                salt: Some(ByteBuf(b"my-salt")),
+                cas: Some(9),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Bep44PutRequest(req) => {
+                assert_eq!(req.id, id);
+                assert_eq!(req.seq, 10);
+                assert_eq!(req.salt.as_ref().unwrap().0, b"my-salt");
+                assert_eq!(req.cas, Some(9));
+            }
+            _ => panic!("expected Bep44PutRequest"),
+        }
+    }
+
+    #[test]
+    fn test_bep44_get_roundtrip() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x55; 20]);
+        let target = Id20::new([0x66; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"rt"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44GetRequest(bprotocol::Bep44GetRequest {
+                id,
+                target,
+                seq: Some(100),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        let mut buf2 = Vec::new();
+        bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+            .unwrap();
+        assert_eq!(buf, buf2, "BEP 44 get roundtrip mismatch");
+    }
+
+    #[test]
+    fn test_bep44_put_roundtrip() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x77; 20]);
+
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"rp"),
+            None,
+            None,
+            bprotocol::MessageKind::Bep44PutRequest(bprotocol::Bep44PutRequest {
+                id,
+                token: ByteBuf(b"write-token"),
+                k: ByteBuf(&[0xEE; 32]),
+                sig: ByteBuf(&[0xFF; 64]),
+                seq: 99,
+                v: ByteBuf(b"12:Hello World!"),
+                salt: Some(ByteBuf(b"salty")),
+                cas: Some(98),
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        let mut buf2 = Vec::new();
+        bprotocol::serialize_message(&mut buf2, msg.transaction_id, msg.version, msg.ip, msg.kind)
+            .unwrap();
+        assert_eq!(buf, buf2, "BEP 44 put roundtrip mismatch");
+    }
+
+    #[test]
+    fn test_response_with_bep44_fields() {
+        use librqbit_core::hash_id::Id20;
+
+        let id = Id20::new([0x88; 20]);
+
+        // A BEP 44 get response includes v, k, sig, seq along with standard fields.
+        let mut buf = Vec::new();
+        bprotocol::serialize_message(
+            &mut buf,
+            ByteBuf(b"br"),
+            None,
+            None,
+            bprotocol::MessageKind::Response(bprotocol::Response {
+                id,
+                token: Some(ByteBuf(b"tok")),
+                v: Some(ByteBuf(b"5:hello")),
+                k: Some(ByteBuf(&[0xAA; 32])),
+                sig: Some(ByteBuf(&[0xBB; 64])),
+                seq: Some(42),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+
+        let msg = bprotocol::deserialize_message::<ByteBuf>(&buf).unwrap();
+        match &msg.kind {
+            bprotocol::MessageKind::Response(resp) => {
+                assert_eq!(resp.id, id);
+                assert_eq!(resp.v.as_ref().unwrap().0, b"5:hello");
+                assert_eq!(resp.k.as_ref().unwrap().0.len(), 32);
+                assert_eq!(resp.sig.as_ref().unwrap().0.len(), 64);
+                assert_eq!(resp.seq, Some(42));
+            }
+            _ => panic!("expected Response"),
         }
     }
 }

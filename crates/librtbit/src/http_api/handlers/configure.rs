@@ -28,6 +28,12 @@ pub async fn h_update_session_ratelimits(
         .session()
         .ratelimits
         .set_download_bps(limits.download_bps);
+    if let Some(peer_limit) = limits.peer_limit {
+        state.api.session().set_peer_limit(peer_limit);
+    }
+    if let Some(init_limit) = limits.concurrent_init_limit {
+        state.api.session().set_concurrent_init_limit(init_limit);
+    }
     Ok(Json(EmptyJsonResponse {}))
 }
 
@@ -39,6 +45,8 @@ pub async fn h_update_session_ratelimits(
     )
 ))]
 pub async fn h_get_session_ratelimits(State(state): State<ApiState>) -> Result<impl IntoResponse> {
-    let config = state.api.session().ratelimits.get_config();
+    let mut config = state.api.session().ratelimits.get_config();
+    config.peer_limit = Some(state.api.session().get_peer_limit());
+    config.concurrent_init_limit = Some(state.api.session().get_concurrent_init_limit());
     Ok(Json(config))
 }

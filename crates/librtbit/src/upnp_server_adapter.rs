@@ -391,14 +391,17 @@ mod tests {
     };
 
     fn create_torrent(name: Option<&str>, files: &[&str]) -> TorrentMetaV1Owned {
+        // Each file is 1 byte with piece_length=1, so we need one 20-byte SHA-1 hash per file.
+        let dummy_pieces: Vec<u8> = vec![0u8; files.len() * 20];
         TorrentMetaV1Owned {
             announce: None,
             announce_list: vec![],
             info: bencode::WithRawBytes {
                 data: TorrentMetaV1Info {
                     name: name.map(|n| n.as_bytes().into()),
-                    pieces: b""[..].into(),
+                    pieces: Some(dummy_pieces.into()),
                     piece_length: 1,
+                    meta_version: None,
                     length: None,
                     md5sum: None,
                     files: Some(

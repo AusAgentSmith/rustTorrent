@@ -18,7 +18,6 @@ use axum::Router;
 use crate::api::Api;
 
 use crate::ApiError;
-use crate::api::Result;
 
 pub mod auth;
 mod handlers;
@@ -83,6 +82,7 @@ pub struct HttpApiOptions {
     // Allow creating torrents via API.
     pub allow_create: bool,
     pub token_store: Option<Arc<auth::TokenStore>>,
+    pub credential_store: Option<Arc<auth::CredentialStore>>,
     #[cfg(feature = "prometheus")]
     pub prometheus_handle: Option<metrics_exporter_prometheus::PrometheusHandle>,
 }
@@ -96,45 +96,6 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         .zip(b.iter())
         .fold(0u8, |acc, (x, y)| acc | (x ^ y))
         == 0
-}
-
-async fn simple_basic_auth(
-    expected_username: Option<&str>,
-    expected_password: Option<&str>,
-    headers: HeaderMap,
-    request: axum::extract::Request,
-    next: Next,
-) -> Result<axum::response::Response> {
-    let (expected_user, expected_pass) = match (expected_username, expected_password) {
-        (Some(u), Some(p)) => (u, p),
-        _ => return Ok(next.run(request).await),
-    };
-    let user_pass = headers
-        .get("Authorization")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Basic "))
-        .and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).ok())
-        .and_then(|v| String::from_utf8(v).ok());
-    let user_pass = match user_pass {
-        Some(user_pass) => user_pass,
-        None => {
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                [("WWW-Authenticate", "Basic realm=\"API\"")],
-            )
-                .into_response());
-        }
-    };
-    // Use constant-time comparison to prevent timing attacks
-    match user_pass.split_once(':') {
-        Some((u, p))
-            if constant_time_eq(u.as_bytes(), expected_user.as_bytes())
-                && constant_time_eq(p.as_bytes(), expected_pass.as_bytes()) =>
-        {
-            Ok(next.run(request).await)
-        }
-        _ => Err(ApiError::unauthorized()),
-    }
 }
 
 impl HttpApi {
@@ -220,21 +181,49 @@ impl HttpApi {
                 .allow_headers(AllowHeaders::any())
         };
 
-        // Unified auth: supports Bearer token and Basic auth
-        if state.opts.basic_auth.is_some() {
+        // Unified auth: supports Bearer token, Basic auth, and credential store.
+        // The middleware checks credentials dynamically so runtime changes are picked up.
+        {
             let token_store = state.opts.token_store.clone();
-            let user = state.opts.basic_auth.as_ref().unwrap().0.clone();
-            let pass = state.opts.basic_auth.as_ref().unwrap().1.clone();
-            info!("Enabling authentication in HTTP API");
+            let basic_auth = state.opts.basic_auth.clone();
+            let credential_store = state.opts.credential_store.clone();
+
+            let has_initial_creds = basic_auth.is_some()
+                || credential_store
+                    .as_ref()
+                    .is_some_and(|cs| cs.has_credentials());
+
+            if has_initial_creds {
+                info!("Enabling authentication in HTTP API");
+            } else if credential_store.is_some() {
+                info!("Authentication not yet configured; setup required via /auth/setup");
+            }
+
             main_router = main_router.route_layer(axum::middleware::from_fn(
                 move |headers: HeaderMap, request: axum::extract::Request, next: Next| {
                     let token_store = token_store.clone();
-                    let user = user.clone();
-                    let pass = pass.clone();
+                    let basic_auth = basic_auth.clone();
+                    let credential_store = credential_store.clone();
                     async move {
-                        // Skip auth for login/refresh endpoints
+                        // Always skip auth for these public endpoints
                         let path = request.uri().path();
-                        if path == "/auth/login" || path == "/auth/refresh" {
+                        if path == "/auth/login"
+                            || path == "/auth/refresh"
+                            || path == "/auth/status"
+                            || path == "/auth/setup"
+                        {
+                            return Ok(next.run(request).await);
+                        }
+
+                        // Determine if any credentials are configured
+                        let has_stored_creds = credential_store
+                            .as_ref()
+                            .is_some_and(|cs| cs.has_credentials());
+                        let has_env_creds = basic_auth.is_some();
+
+                        // If no credentials configured anywhere, allow all requests through
+                        // (setup_required state — user needs to set up auth first)
+                        if !has_stored_creds && !has_env_creds {
                             return Ok(next.run(request).await);
                         }
 
@@ -252,8 +241,48 @@ impl HttpApi {
                             }
                         }
 
-                        // Fall back to Basic auth
-                        simple_basic_auth(Some(&user), Some(&pass), headers, request, next).await
+                        // Try Basic auth — check credential store first, then env var
+                        let user_pass = headers
+                            .get("Authorization")
+                            .and_then(|h| h.to_str().ok())
+                            .and_then(|h| h.strip_prefix("Basic "))
+                            .and_then(|v| {
+                                base64::engine::general_purpose::STANDARD.decode(v).ok()
+                            })
+                            .and_then(|v| String::from_utf8(v).ok());
+
+                        let user_pass = match user_pass {
+                            Some(up) => up,
+                            None => {
+                                return Ok((
+                                    StatusCode::UNAUTHORIZED,
+                                    [("WWW-Authenticate", "Basic realm=\"API\"")],
+                                )
+                                    .into_response());
+                            }
+                        };
+
+                        if let Some((u, p)) = user_pass.split_once(':') {
+                            // Check credential store
+                            if has_stored_creds {
+                                if let Some(cs) = &credential_store {
+                                    if cs.validate(u, p) {
+                                        return Ok(next.run(request).await);
+                                    }
+                                }
+                            }
+
+                            // Check env var credentials
+                            if let Some((env_u, env_p)) = &basic_auth {
+                                if constant_time_eq(u.as_bytes(), env_u.as_bytes())
+                                    && constant_time_eq(p.as_bytes(), env_p.as_bytes())
+                                {
+                                    return Ok(next.run(request).await);
+                                }
+                            }
+                        }
+
+                        Err(ApiError::unauthorized())
                     }
                 },
             ));

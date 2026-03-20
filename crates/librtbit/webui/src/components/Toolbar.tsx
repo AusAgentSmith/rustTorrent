@@ -1,7 +1,13 @@
 import { JSX, useCallback, useContext, useMemo, useState } from "react";
 import { FaPause, FaPlay, FaTrash } from "react-icons/fa";
 import { GoSearch, GoX } from "react-icons/go";
-import { BsBodyText, BsMoon, BsSliders2, BsSun } from "react-icons/bs";
+import {
+  BsBodyText,
+  BsBoxArrowRight,
+  BsMoon,
+  BsSliders2,
+  BsSun,
+} from "react-icons/bs";
 import { HiOutlineMenu } from "react-icons/hi";
 import debounce from "lodash.debounce";
 
@@ -21,6 +27,8 @@ import {
   TorrentListItem,
 } from "../api-types";
 import { DarkMode } from "../helper/darkMode";
+import { useAuthStore } from "../stores/authStore";
+import { AuthAPI } from "../http-api";
 import { MagnetInput } from "./buttons/MagnetInput";
 import { FileInput } from "./buttons/FileInput";
 import { IconButton } from "./buttons/IconButton";
@@ -70,6 +78,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [isDark, setIsDark] = useState(DarkMode.isDark());
   const [configOpen, setConfigOpen] = useState(false);
+  const authState = useAuthStore((s) => s.state);
+  const refreshToken = useAuthStore((s) => s.refreshToken);
+  const clearTokens = useAuthStore((s) => s.clearTokens);
+
+  const handleLogout = async () => {
+    if (refreshToken) {
+      try {
+        await AuthAPI.logout(refreshToken);
+      } catch {
+        // Ignore logout API errors — clear local state regardless
+      }
+    }
+    clearTokens();
+  };
 
   // Debounced search
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,6 +291,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <IconButton onClick={handleDarkModeToggle} title="Toggle dark mode">
         {isDark ? <BsSun /> : <BsMoon />}
       </IconButton>
+      {authState === "authenticated" && (
+        <IconButton onClick={handleLogout} title="Logout">
+          <BsBoxArrowRight />
+        </IconButton>
+      )}
       {/* Delete modal */}
       <DeleteTorrentModal
         show={showDeleteModal}

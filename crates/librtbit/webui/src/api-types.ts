@@ -128,6 +128,8 @@ export interface SessionStats {
 export interface LimitsConfig {
   upload_bps?: number | null;
   download_bps?: number | null;
+  peer_limit?: number | null;
+  concurrent_init_limit?: number | null;
 }
 
 export interface DhtStats {

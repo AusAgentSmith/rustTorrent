@@ -152,12 +152,24 @@ pub fn make_api_router(state: ApiState) -> Router {
             );
     }
 
-    // Auth endpoints (no auth middleware applied — they're public)
+    // Auth endpoints — status is always available; login/refresh/logout need token store;
+    // setup and change_credentials need credential store.
+    api_router = api_router.route("/auth/status", get(super::auth::h_auth_status));
+
     if state.opts.token_store.is_some() {
         api_router = api_router
             .route("/auth/login", post(super::auth::h_auth_login))
             .route("/auth/refresh", post(super::auth::h_auth_refresh))
             .route("/auth/logout", post(super::auth::h_auth_logout));
+    }
+
+    if state.opts.credential_store.is_some() {
+        api_router = api_router
+            .route("/auth/setup", post(super::auth::h_auth_setup))
+            .route(
+                "/auth/change_credentials",
+                post(super::auth::h_auth_change_credentials),
+            );
     }
 
     api_router.with_state(state)

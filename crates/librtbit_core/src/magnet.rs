@@ -11,6 +11,10 @@ pub struct Magnet {
     pub trackers: Vec<String>,
     pub name: Option<String>,
     select_only: Option<Vec<usize>>,
+    /// BEP 46: Ed25519 public key for mutable DHT item resolution.
+    pub public_key: Option<[u8; 32]>,
+    /// BEP 46: optional salt for mutable DHT item resolution.
+    pub salt: Option<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -31,6 +35,16 @@ impl Magnet {
         self.select_only.clone()
     }
 
+    /// BEP 46: return the Ed25519 public key, if present.
+    pub fn as_public_key(&self) -> Option<&[u8; 32]> {
+        self.public_key.as_ref()
+    }
+
+    /// BEP 46: return the optional salt, if present.
+    pub fn as_salt(&self) -> Option<&str> {
+        self.salt.as_deref()
+    }
+
     pub fn from_id20(id20: Id20, trackers: Vec<String>, select_only: Option<Vec<usize>>) -> Self {
         Self {
             id20: Some(id20),
@@ -38,6 +52,8 @@ impl Magnet {
             trackers,
             name: None,
             select_only,
+            public_key: None,
+            salt: None,
         }
     }
 
@@ -56,6 +72,8 @@ impl Magnet {
             trackers,
             name: None,
             select_only,
+            public_key: None,
+            salt: None,
         })
     }
 
@@ -70,6 +88,8 @@ impl Magnet {
                 name: None,
                 trackers: vec![],
                 select_only: None,
+                public_key: None,
+                salt: None,
             });
         }
         let url = url::Url::parse(url).context("magnet link must be a valid URL")?;
@@ -82,6 +102,8 @@ impl Magnet {
         let mut name: Option<String> = None;
         let mut trackers = Vec::<String>::new();
         let mut files = Vec::<usize>::new();
+        let mut public_key: Option<[u8; 32]> = None;
+        let mut salt: Option<String> = None;
         for (key, value) in url.query_pairs() {
             match key.as_ref() {
                 "xt" => {
@@ -95,6 +117,26 @@ impl Magnet {
                         info_hash_found = true;
                     } else {
                         anyhow::bail!("expected xt to start with btih or btmh");
+                    }
+                }
+                "xs" => {
+                    // BEP 46: xs=urn:btpk:<64-hex-chars> -> 32-byte Ed25519 public key
+                    if let Some(pk_hex) = value.as_ref().strip_prefix("urn:btpk:") {
+                        if pk_hex.len() == 64 {
+                            let mut pk = [0u8; 32];
+                            if hex::decode_to_slice(pk_hex, &mut pk).is_ok() {
+                                public_key = Some(pk);
+                                // BEP 46 magnet links may not have xt (info hash is
+                                // resolved from the DHT mutable item), so mark as found.
+                                info_hash_found = true;
+                            }
+                        }
+                    }
+                }
+                "s" => {
+                    // BEP 46: optional salt parameter
+                    if !value.is_empty() {
+                        salt = Some(value.into_owned());
                     }
                 }
                 "tr" => trackers.push(value.into()),
@@ -135,6 +177,8 @@ impl Magnet {
                 trackers,
                 name,
                 select_only: if files.is_empty() { None } else { Some(files) },
+                public_key,
+                salt,
             }),
             false => {
                 anyhow::bail!("did not find infohash")
@@ -231,5 +275,62 @@ mod tests {
             &Magnet::from_id20(id20, Default::default(), Some(vec![1, 2, 3])).to_string(),
             "magnet:?xt=urn:btih:a621779b5e3d486e127c3efbca9b6f8d135f52e5&so=1,2,3"
         );
+    }
+
+    #[test]
+    fn test_parse_bep46_magnet_with_public_key() {
+        // BEP 46 magnet link with xs=urn:btpk:<hex-encoded-ed25519-pubkey>
+        let pk_hex = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
+        let magnet = format!(
+            "magnet:?xs=urn:btpk:{pk_hex}&dn=test-bep46"
+        );
+        let m = Magnet::parse(&magnet).unwrap();
+        assert!(m.as_public_key().is_some());
+        let mut expected_pk = [0u8; 32];
+        hex::decode_to_slice(pk_hex, &mut expected_pk).unwrap();
+        assert_eq!(m.as_public_key().unwrap(), &expected_pk);
+        assert!(m.as_id20().is_none());
+        assert!(m.as_id32().is_none());
+        assert_eq!(m.name.as_deref(), Some("test-bep46"));
+    }
+
+    #[test]
+    fn test_parse_bep46_magnet_with_salt() {
+        let pk_hex = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
+        let magnet = format!(
+            "magnet:?xs=urn:btpk:{pk_hex}&s=my-salt"
+        );
+        let m = Magnet::parse(&magnet).unwrap();
+        assert!(m.as_public_key().is_some());
+        assert_eq!(m.as_salt(), Some("my-salt"));
+    }
+
+    #[test]
+    fn test_parse_bep46_magnet_with_xt_and_xs() {
+        // A magnet link can have both xt (info hash) and xs (public key)
+        let pk_hex = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
+        let magnet = format!(
+            "magnet:?xt=urn:btih:a621779b5e3d486e127c3efbca9b6f8d135f52e5&xs=urn:btpk:{pk_hex}"
+        );
+        let m = Magnet::parse(&magnet).unwrap();
+        let id20 = Id20::from_str("a621779b5e3d486e127c3efbca9b6f8d135f52e5").unwrap();
+        assert_eq!(m.as_id20(), Some(id20));
+        assert!(m.as_public_key().is_some());
+    }
+
+    #[test]
+    fn test_parse_bep46_invalid_public_key_length() {
+        // Too short public key hex should be silently ignored
+        let magnet = "magnet:?xs=urn:btpk:abcd&xt=urn:btih:a621779b5e3d486e127c3efbca9b6f8d135f52e5";
+        let m = Magnet::parse(magnet).unwrap();
+        assert!(m.as_public_key().is_none());
+    }
+
+    #[test]
+    fn test_parse_bep46_no_salt() {
+        let pk_hex = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
+        let magnet = format!("magnet:?xs=urn:btpk:{pk_hex}");
+        let m = Magnet::parse(&magnet).unwrap();
+        assert!(m.as_salt().is_none());
     }
 }

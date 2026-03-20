@@ -376,6 +376,11 @@ impl TorrentStateLive {
             format!("[{}]peer_health_monitor", state.shared.id),
             state.clone().task_peer_health_monitor(),
         );
+
+        if !state.shared.web_seed_urls.is_empty() {
+            info!(urls = ?state.shared.web_seed_urls, "torrent has webseed URLs");
+        }
+
         Ok(state)
     }
 

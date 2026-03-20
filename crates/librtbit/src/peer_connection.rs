@@ -59,6 +59,7 @@ pub enum WriterRequest {
     Message(Message<'static>),
     UtMetadata(UtMetadata<ByteBufOwned>),
     UtPex(UtPex<ByteBufOwned>),
+    UtHolepunch(peer_binary_protocol::extended::ut_holepunch::HolepunchMessage),
     ReadChunkRequest(ChunkInfo),
     Disconnect(anyhow::Result<()>),
 }
@@ -389,6 +390,10 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                     }
                     WriterRequest::UtPex(ut_pex) => {
                         Message::Extended(ExtendedMessage::UtPex(ut_pex.as_borrowed()))
+                            .serialize(&mut *write_buf, ext_msg_ids)?
+                    }
+                    WriterRequest::UtHolepunch(hp) => {
+                        Message::Extended(ExtendedMessage::UtHolepunch(hp))
                             .serialize(&mut *write_buf, ext_msg_ids)?
                     }
                     WriterRequest::ReadChunkRequest(chunk) => {

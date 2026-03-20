@@ -360,6 +360,7 @@ pub(super) struct InternalAddResult {
     pub metadata: Option<TorrentMetadata>,
     pub trackers: Vec<url::Url>,
     pub name: Option<String>,
+    pub web_seed_urls: Vec<String>,
 }
 
 pub(crate) struct ResolveMagnetResult {

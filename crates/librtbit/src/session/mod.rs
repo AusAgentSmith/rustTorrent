@@ -107,6 +107,8 @@ pub struct Session {
     // Limits and throttling
     pub(crate) concurrent_initialize_semaphore: Arc<tokio::sync::Semaphore>,
     pub ratelimits: Limits,
+    pub(crate) peer_limit_atomic: AtomicUsize,
+    pub(crate) concurrent_init_limit_atomic: AtomicUsize,
 
     pub blocklist: IpRanges,
     pub allowlist: Option<IpRanges>,
@@ -138,6 +140,26 @@ impl Session {
 
     pub fn cancellation_token(&self) -> &CancellationToken {
         &self.cancellation_token
+    }
+
+    pub fn get_peer_limit(&self) -> usize {
+        self.peer_limit_atomic
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_peer_limit(&self, limit: usize) {
+        self.peer_limit_atomic
+            .store(limit, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn get_concurrent_init_limit(&self) -> usize {
+        self.concurrent_init_limit_atomic
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_concurrent_init_limit(&self, limit: usize) {
+        self.concurrent_init_limit_atomic
+            .store(limit, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Create a new session with options.
@@ -370,6 +392,9 @@ impl Session {
                 }
             };
 
+            let resolved_peer_limit = opts.peer_limit.unwrap_or(200);
+            let resolved_concurrent_init_limit = opts.concurrent_init_limit.unwrap_or(3);
+
             let session = Arc::new(Self {
                 persistence,
                 bitv_factory,
@@ -390,10 +415,12 @@ impl Session {
                 root_span: opts.root_span,
                 stats: Arc::new(SessionStats::new()),
                 concurrent_initialize_semaphore: Arc::new(tokio::sync::Semaphore::new(
-                    opts.concurrent_init_limit.unwrap_or(3),
+                    resolved_concurrent_init_limit,
                 )),
                 udp_tracker_client,
                 ratelimits: Limits::new(opts.ratelimits),
+                peer_limit_atomic: AtomicUsize::new(resolved_peer_limit),
+                concurrent_init_limit_atomic: AtomicUsize::new(resolved_concurrent_init_limit),
                 ipv4_only: opts.ipv4_only,
                 trackers: opts.trackers,
                 disable_trackers: opts.disable_trackers,
@@ -583,6 +610,7 @@ impl Session {
                             .collect(),
                         metadata: None,
                         name: magnet.name,
+                        web_seed_urls: Vec::new(),
                     }
                 }
                 other => {
@@ -619,6 +647,15 @@ impl Session {
                         trackers.extend(custom_trackers);
                     }
 
+                    let web_seed_urls: Vec<String> = torrent
+                        .meta
+                        .url_list
+                        .iter()
+                        .flat_map(|ul| ul.iter())
+                        .filter_map(|url| std::str::from_utf8(url.as_ref()).ok())
+                        .map(|s| s.to_owned())
+                        .collect();
+
                     InternalAddResult {
                         info_hash: torrent.meta.info_hash,
                         metadata: Some(TorrentMetadata::new(
@@ -631,6 +668,7 @@ impl Session {
                             .filter_map(|t| url::Url::parse(t).ok())
                             .collect(),
                         name: None,
+                        web_seed_urls,
                     }
                 }
             };
@@ -694,6 +732,7 @@ impl Session {
             metadata,
             trackers,
             name,
+            web_seed_urls,
         } = add_res;
 
         let private = metadata.as_ref().is_some_and(|m| m.info.info().private);
@@ -842,6 +881,7 @@ impl Session {
                 connector: self.connector.clone(),
                 session: Arc::downgrade(self),
                 magnet_name: name,
+                web_seed_urls,
                 category: RwLock::new(opts.category.clone()),
                 cancellation_token: parking_lot::Mutex::new(
                     self.cancellation_token.child_token(),

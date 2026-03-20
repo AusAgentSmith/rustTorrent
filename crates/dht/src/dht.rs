@@ -883,6 +883,7 @@ impl DhtState {
                         token: Some(ByteBufOwned::from(
                             &self.peer_store.gen_token_for(req.id, addr)[..],
                         )),
+                        ..Default::default()
                     }),
                 };
                 self.worker_sender
@@ -911,6 +912,65 @@ impl DhtState {
                         id: self.id,
                         nodes,
                         nodes6,
+                        ..Default::default()
+                    }),
+                };
+                self.worker_sender
+                    .send(WorkerSendRequest {
+                        our_tid: None,
+                        message,
+                        addr,
+                    })
+                    .ok()
+                    .ok_or(Error::DhtDead)?;
+                Ok(())
+            }
+            MessageKind::Bep44GetRequest(req) => {
+                // BEP 44: respond to get requests for mutable/immutable items.
+                // Return closest nodes to target; actual item lookup from the store
+                // will be implemented when the full BEP 44 handler is wired up.
+                let (nodes, nodes6) =
+                    self.generate_compact_nodes_both(req.target, Want::Both);
+                self.get_table_for_addr(addr)
+                    .write()
+                    .mark_last_query(&req.id, now());
+                let message = Message {
+                    transaction_id: msg.transaction_id,
+                    version: None,
+                    ip: Some(addr),
+                    kind: MessageKind::Response(bprotocol::Response {
+                        id: self.id,
+                        nodes,
+                        nodes6,
+                        token: Some(ByteBufOwned::from(
+                            &self.peer_store.gen_token_for(req.id, addr)[..],
+                        )),
+                        ..Default::default()
+                    }),
+                };
+                self.worker_sender
+                    .send(WorkerSendRequest {
+                        our_tid: None,
+                        message,
+                        addr,
+                    })
+                    .ok()
+                    .ok_or(Error::DhtDead)?;
+                Ok(())
+            }
+            MessageKind::Bep44PutRequest(req) => {
+                // BEP 44: respond to put requests for mutable items.
+                // Signature verification and item storage will be implemented
+                // when the full BEP 44 handler is wired up.
+                self.get_table_for_addr(addr)
+                    .write()
+                    .mark_last_query(&req.id, now());
+                let message = Message {
+                    transaction_id: msg.transaction_id,
+                    version: None,
+                    ip: Some(addr),
+                    kind: MessageKind::Response(bprotocol::Response {
+                        id: self.id,
                         ..Default::default()
                     }),
                 };

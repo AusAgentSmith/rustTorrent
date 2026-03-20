@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -120,6 +121,78 @@ impl TokenStore {
     }
 }
 
+// --- Credential Store ---
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StoredCredentials {
+    pub username: String,
+    pub password: String,
+}
+
+pub struct CredentialStore {
+    credentials: RwLock<Option<StoredCredentials>>,
+    file_path: PathBuf,
+}
+
+impl CredentialStore {
+    pub fn new(config_dir: PathBuf) -> Self {
+        let file_path = config_dir.join("credentials.json");
+        let credentials = if file_path.exists() {
+            match std::fs::read_to_string(&file_path) {
+                Ok(contents) => serde_json::from_str(&contents).ok(),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+        Self {
+            credentials: RwLock::new(credentials),
+            file_path,
+        }
+    }
+
+    pub fn has_credentials(&self) -> bool {
+        self.credentials.read().is_some()
+    }
+
+    pub fn get_credentials(&self) -> Option<StoredCredentials> {
+        self.credentials.read().clone()
+    }
+
+    pub fn set_credentials(&self, creds: StoredCredentials) -> Result<(), std::io::Error> {
+        let json = serde_json::to_string_pretty(&creds)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        // Create parent directory if needed
+        if let Some(parent) = self.file_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&self.file_path, &json)?;
+        // Set file permissions to owner-only on unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(
+                &self.file_path,
+                std::fs::Permissions::from_mode(0o600),
+            )?;
+        }
+        *self.credentials.write() = Some(creds);
+        Ok(())
+    }
+
+    pub fn validate(&self, username: &str, password: &str) -> bool {
+        match &*self.credentials.read() {
+            Some(creds) => {
+                super::constant_time_eq(username.as_bytes(), creds.username.as_bytes())
+                    && super::constant_time_eq(password.as_bytes(), creds.password.as_bytes())
+            }
+            None => false,
+        }
+    }
+}
+
+// --- HTTP Handlers ---
+
 use axum::{Json, extract::State, response::IntoResponse};
 use http::StatusCode;
 
@@ -127,20 +200,178 @@ use super::HttpApi;
 
 type ApiState = Arc<HttpApi>;
 
+// --- Auth Status ---
+
+#[derive(Serialize)]
+pub struct AuthStatus {
+    pub auth_enabled: bool,
+    pub setup_required: bool,
+}
+
+pub async fn h_auth_status(State(state): State<ApiState>) -> impl IntoResponse {
+    let has_env_auth = state.opts.basic_auth.is_some();
+    let has_stored_creds = state
+        .opts
+        .credential_store
+        .as_ref()
+        .is_some_and(|cs| cs.has_credentials());
+    let has_creds = has_env_auth || has_stored_creds;
+    Json(AuthStatus {
+        auth_enabled: has_creds,
+        setup_required: !has_creds,
+    })
+}
+
+// --- Auth Setup (first-boot) ---
+
+#[derive(Deserialize)]
+pub struct SetupRequest {
+    pub username: String,
+    pub password: String,
+}
+
+pub async fn h_auth_setup(
+    State(state): State<ApiState>,
+    Json(req): Json<SetupRequest>,
+) -> impl IntoResponse {
+    let cs = match &state.opts.credential_store {
+        Some(cs) => cs,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                "credential management not available",
+            )
+                .into_response();
+        }
+    };
+
+    // Only allow if no credentials exist anywhere
+    if cs.has_credentials() || state.opts.basic_auth.is_some() {
+        return (StatusCode::FORBIDDEN, "credentials already configured").into_response();
+    }
+
+    if req.username.is_empty() || req.password.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            "username and password are required",
+        )
+            .into_response();
+    }
+
+    match cs.set_credentials(StoredCredentials {
+        username: req.username,
+        password: req.password,
+    }) {
+        Ok(_) => {
+            // Create tokens for the new user so they're immediately logged in
+            if let Some(ts) = &state.opts.token_store {
+                let tokens = ts.create_tokens();
+                return (StatusCode::OK, Json(tokens)).into_response();
+            }
+            StatusCode::OK.into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to save credentials: {e}"),
+        )
+            .into_response(),
+    }
+}
+
+// --- Change Credentials ---
+
+#[derive(Deserialize)]
+pub struct ChangeCredentialsRequest {
+    pub current_password: String,
+    pub new_username: Option<String>,
+    pub new_password: Option<String>,
+}
+
+pub async fn h_auth_change_credentials(
+    State(state): State<ApiState>,
+    Json(req): Json<ChangeCredentialsRequest>,
+) -> impl IntoResponse {
+    let cs = match &state.opts.credential_store {
+        Some(cs) => cs,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                "credential management not available",
+            )
+                .into_response();
+        }
+    };
+
+    // Get current credentials from credential store or env var fallback
+    let current_creds = match cs.get_credentials() {
+        Some(c) => c,
+        None => match &state.opts.basic_auth {
+            Some((u, p)) => StoredCredentials {
+                username: u.clone(),
+                password: p.clone(),
+            },
+            None => {
+                return (StatusCode::NOT_FOUND, "no credentials configured").into_response();
+            }
+        },
+    };
+
+    // Verify current password
+    if !super::constant_time_eq(
+        req.current_password.as_bytes(),
+        current_creds.password.as_bytes(),
+    ) {
+        return (StatusCode::UNAUTHORIZED, "current password is incorrect").into_response();
+    }
+
+    let new_creds = StoredCredentials {
+        username: req.new_username.unwrap_or(current_creds.username),
+        password: req.new_password.unwrap_or(current_creds.password),
+    };
+
+    match cs.set_credentials(new_creds) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to save credentials: {e}"),
+        )
+            .into_response(),
+    }
+}
+
+// --- Login ---
+
 pub async fn h_auth_login(
     State(state): State<ApiState>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let (expected_user, expected_pass) = match &state.opts.basic_auth {
-        Some((u, p)) => (u.as_str(), p.as_str()),
-        None => {
-            return (StatusCode::NOT_FOUND, "authentication not configured").into_response();
+    // Check credential store first, then fall back to basic_auth
+    let valid = if let Some(cs) = &state.opts.credential_store {
+        if cs.has_credentials() {
+            cs.validate(&req.username, &req.password)
+        } else {
+            // Fall back to env var credentials
+            match &state.opts.basic_auth {
+                Some((u, p)) => {
+                    super::constant_time_eq(req.username.as_bytes(), u.as_bytes())
+                        && super::constant_time_eq(req.password.as_bytes(), p.as_bytes())
+                }
+                None => false,
+            }
+        }
+    } else {
+        match &state.opts.basic_auth {
+            Some((u, p)) => {
+                super::constant_time_eq(req.username.as_bytes(), u.as_bytes())
+                    && super::constant_time_eq(req.password.as_bytes(), p.as_bytes())
+            }
+            None => {
+                return (StatusCode::NOT_FOUND, "authentication not configured").into_response();
+            }
         }
     };
 
-    if !super::constant_time_eq(req.username.as_bytes(), expected_user.as_bytes())
-        || !super::constant_time_eq(req.password.as_bytes(), expected_pass.as_bytes())
-    {
+    if !valid {
         return (StatusCode::UNAUTHORIZED, "invalid credentials").into_response();
     }
 
