@@ -1,9 +1,11 @@
-use std::{collections::HashSet, net::SocketAddr, sync::Arc};
+use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration};
 
 use dashmap::DashMap;
 use librqbit_core::lengths::ValidPieceIndex;
 use parking_lot::RwLock;
 use peer_binary_protocol::{Message, Request};
+
+use tracing::debug;
 
 use crate::{
     Error,
@@ -172,5 +174,178 @@ impl PeerStates {
                 }
             });
         });
+    }
+
+    /// Remove peers that have been in Dead or NotNeeded state for longer than
+    /// `retention`. Returns the number of peers pruned.
+    pub fn prune_dead_peers(&self, retention: Duration) -> usize {
+        let now = std::time::Instant::now();
+        let mut pruned = 0usize;
+        self.states.retain(|_addr, peer| {
+            let dominated = matches!(peer.get_state(), PeerState::Dead | PeerState::NotNeeded);
+            if dominated && now.duration_since(peer.last_state_change) > retention {
+                // Decrement counters before removing.
+                for counter in [&self.session_stats, &self.stats] {
+                    counter.dec(peer.get_state());
+                }
+                pruned += 1;
+                false
+            } else {
+                true
+            }
+        });
+        if pruned > 0 {
+            debug!(pruned, remaining = self.states.len(), "pruned dead/not-needed peers");
+        }
+        pruned
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{Ipv4Addr, SocketAddr};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use super::*;
+
+    fn make_peer_states() -> PeerStates {
+        PeerStates {
+            session_stats: Arc::new(AggregatePeerStatsAtomic::default()),
+            stats: AggregatePeerStatsAtomic::default(),
+            states: DashMap::new(),
+            live_outgoing_peers: RwLock::new(HashSet::new()),
+        }
+    }
+
+    fn addr(port: u16) -> SocketAddr {
+        SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), port)
+    }
+
+    #[test]
+    fn test_dead_peer_pruning_removes_stale_dead_peers() {
+        let ps = make_peer_states();
+
+        // Add 5 peers, mark them Dead
+        for port in 1..=5 {
+            let a = addr(port);
+            ps.add_if_not_seen(a);
+            ps.with_peer_mut(a, "set_dead", |peer| {
+                peer.set_state(PeerState::Dead, &ps);
+            });
+        }
+        assert_eq!(ps.states.len(), 5);
+
+        // With a retention of 0, all dead peers should be pruned immediately
+        let pruned = ps.prune_dead_peers(Duration::ZERO);
+        assert_eq!(pruned, 5);
+        assert_eq!(ps.states.len(), 0);
+    }
+
+    #[test]
+    fn test_dead_peer_pruning_removes_stale_not_needed_peers() {
+        let ps = make_peer_states();
+
+        for port in 1..=3 {
+            let a = addr(port);
+            ps.add_if_not_seen(a);
+            ps.with_peer_mut(a, "set_not_needed", |peer| {
+                peer.set_not_needed(&ps);
+            });
+        }
+        assert_eq!(ps.states.len(), 3);
+
+        let pruned = ps.prune_dead_peers(Duration::ZERO);
+        assert_eq!(pruned, 3);
+        assert_eq!(ps.states.len(), 0);
+    }
+
+    #[test]
+    fn test_dead_peer_pruning_preserves_recent_peers() {
+        let ps = make_peer_states();
+
+        // Add peers and mark dead
+        for port in 1..=5 {
+            let a = addr(port);
+            ps.add_if_not_seen(a);
+            ps.with_peer_mut(a, "set_dead", |peer| {
+                peer.set_state(PeerState::Dead, &ps);
+            });
+        }
+
+        // With 1 hour retention, nothing should be pruned (peers just became dead)
+        let pruned = ps.prune_dead_peers(Duration::from_secs(3600));
+        assert_eq!(pruned, 0);
+        assert_eq!(ps.states.len(), 5);
+    }
+
+    #[test]
+    fn test_dead_peer_pruning_preserves_queued_and_connecting() {
+        let ps = make_peer_states();
+
+        // Queued peer (default state from add_if_not_seen)
+        let queued_addr = addr(1);
+        ps.add_if_not_seen(queued_addr);
+
+        // Dead peer
+        let dead_addr = addr(2);
+        ps.add_if_not_seen(dead_addr);
+        ps.with_peer_mut(dead_addr, "set_dead", |peer| {
+            peer.set_state(PeerState::Dead, &ps);
+        });
+
+        assert_eq!(ps.states.len(), 2);
+
+        // Zero retention should only prune the dead peer, not the queued one
+        let pruned = ps.prune_dead_peers(Duration::ZERO);
+        assert_eq!(pruned, 1);
+        assert_eq!(ps.states.len(), 1);
+        assert!(ps.states.contains_key(&queued_addr));
+        assert!(!ps.states.contains_key(&dead_addr));
+    }
+
+    #[test]
+    fn test_dead_peer_pruning_counters_are_decremented() {
+        let ps = make_peer_states();
+
+        // Add 3 peers, mark them dead
+        for port in 1..=3 {
+            let a = addr(port);
+            ps.add_if_not_seen(a);
+            ps.with_peer_mut(a, "set_dead", |peer| {
+                peer.set_state(PeerState::Dead, &ps);
+            });
+        }
+
+        let stats_before = ps.stats.snapshot();
+        assert_eq!(stats_before.dead, 3);
+
+        ps.prune_dead_peers(Duration::ZERO);
+
+        let stats_after = ps.stats.snapshot();
+        assert_eq!(stats_after.dead, 0);
+    }
+
+    #[test]
+    fn test_semaphore_permit_returned_on_drop() {
+        // Verify that OwnedSemaphorePermit releases on drop (RAII behavior).
+        // This confirms our _permit_guard pattern works correctly.
+        let sem = Arc::new(tokio::sync::Semaphore::new(2));
+
+        // Acquire 2 permits
+        let p1 = sem.clone().try_acquire_owned().unwrap();
+        let p2 = sem.clone().try_acquire_owned().unwrap();
+        assert!(sem.clone().try_acquire_owned().is_err());
+
+        // Drop one - should free a slot
+        drop(p1);
+        assert!(sem.clone().try_acquire_owned().is_ok());
+
+        // Rename to _guard (simulating our pattern) and let it drop naturally
+        let _guard = p2;
+        // p2 is moved into _guard, will be dropped at end of scope
+
+        drop(_guard);
+        assert_eq!(sem.available_permits(), 2);
     }
 }

@@ -69,6 +69,10 @@ impl TorrentStateLive {
         rx: PeerRx,
         permit: OwnedSemaphorePermit,
     ) -> crate::Result<()> {
+        // Hold the permit as an RAII guard so it is always released,
+        // even if we return early via `?` or panic.
+        let _permit_guard = permit;
+
         let handler = PeerHandler {
             addr: checked_peer.addr,
             incoming: true,
@@ -118,7 +122,6 @@ impl TorrentStateLive {
                 handler.on_peer_died(Some(e))?;
             }
         };
-        drop(permit);
         Ok(())
     }
 
@@ -127,6 +130,10 @@ impl TorrentStateLive {
         addr: SocketAddr,
         permit: OwnedSemaphorePermit,
     ) -> crate::Result<()> {
+        // Hold the permit as an RAII guard so it is always released,
+        // even if we return early via `?` or panic.
+        let _permit_guard = permit;
+
         let state = self;
         let (rx, tx) = state.peers.mark_peer_connecting(addr)?;
         let counters = state
@@ -193,7 +200,6 @@ impl TorrentStateLive {
                 handler.on_peer_died(Some(e))?;
             }
         }
-        drop(permit);
         Ok(())
     }
 

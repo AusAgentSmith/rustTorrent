@@ -3,7 +3,12 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use anyhow::{Context, bail};
 use futures::{StreamExt, TryFutureExt, stream::FuturesUnordered};
 use librqbit_utp::BindDevice;
+use tokio::sync::Semaphore;
 use tracing::{Instrument, debug, debug_span, trace, warn};
+
+/// Maximum number of incoming connection handshakes that can run concurrently.
+/// This prevents FD exhaustion during connection bursts.
+const MAX_CONCURRENT_HANDSHAKES: usize = 64;
 
 use crate::{
     listen::Accept,
@@ -86,6 +91,7 @@ impl Session {
     pub(super) async fn task_listener<A: Accept>(self: Arc<Self>, l: A) -> anyhow::Result<()> {
         let mut futs = FuturesUnordered::new();
         let session = Arc::downgrade(&self);
+        let handshake_sem = Arc::new(Semaphore::new(MAX_CONCURRENT_HANDSHAKES));
         drop(self);
 
         loop {
@@ -93,16 +99,28 @@ impl Session {
                 r = l.accept() => {
                     match r {
                         Ok((addr, (read, write))) => {
+                            let permit = match handshake_sem.clone().try_acquire_owned() {
+                                Ok(p) => p,
+                                Err(_) => {
+                                    debug!("max concurrent handshakes ({MAX_CONCURRENT_HANDSHAKES}) reached, dropping connection from {addr}");
+                                    continue;
+                                }
+                            };
                             trace!("accepted connection from {addr}");
                             let session = session.upgrade().context("session is dead")?;
                             let span = debug_span!(parent: session.rs(), "incoming", addr=%addr);
                             futs.push(
-                                session.check_incoming_connection(addr, A::KIND, Box::new(read), Box::new(write))
-                                    .map_err(|e| {
-                                        debug!("error checking incoming connection: {e:#}");
-                                        e
-                                    })
-                                    .instrument(span)
+                                async move {
+                                    let result = session.check_incoming_connection(addr, A::KIND, Box::new(read), Box::new(write))
+                                        .map_err(|e| {
+                                            debug!("error checking incoming connection: {e:#}");
+                                            e
+                                        })
+                                        .await;
+                                    drop(permit);
+                                    result
+                                }
+                                .instrument(span)
                             );
                         }
                         Err(e) => {
