@@ -195,6 +195,33 @@ pub struct ManagedTorrentShared {
 
     /// Category assigned to this torrent.
     pub category: RwLock<Option<String>>,
+
+    /// Per-torrent cancellation token, child of session token.
+    /// Used to cancel init tasks, checking, etc. when the torrent is deleted/forgotten.
+    /// Wrapped in a Mutex so it can be reset after a pause-during-init.
+    pub(crate) cancellation_token: parking_lot::Mutex<CancellationToken>,
+}
+
+impl ManagedTorrentShared {
+    /// Cancel the per-torrent token and replace it with a fresh child of the session token.
+    /// Returns the old (now-cancelled) token. Used when pausing during initialization.
+    pub(crate) fn cancel_and_reset_token(&self) {
+        let mut guard = self.cancellation_token.lock();
+        guard.cancel();
+        if let Some(session) = self.session.upgrade() {
+            *guard = session.cancellation_token().child_token();
+        }
+    }
+
+    /// Cancel the per-torrent token permanently. Used when deleting/forgetting a torrent.
+    pub(crate) fn cancel_token(&self) {
+        self.cancellation_token.lock().cancel();
+    }
+
+    /// Create a child token from the per-torrent token for spawning tasks.
+    pub(crate) fn child_token(&self) -> CancellationToken {
+        self.cancellation_token.lock().child_token()
+    }
 }
 
 pub struct ManagedTorrent {
@@ -431,7 +458,7 @@ impl ManagedTorrent {
             .context("session is dead, cannot start torrent")?;
         let mut g = self.locked.write();
         g.paused = start_paused;
-        let cancellation_token = session.cancellation_token().child_token();
+        let cancellation_token = self.shared.child_token();
 
         _start(
             self,
@@ -447,7 +474,7 @@ impl ManagedTorrent {
         self.locked.read().paused
     }
 
-    /// Pause the torrent if it's live.
+    /// Pause the torrent if it's live or initializing.
     pub(crate) fn pause(&self) -> anyhow::Result<()> {
         let mut g = self.locked.write();
         match &g.state {
@@ -459,7 +486,15 @@ impl ManagedTorrent {
                 Ok(())
             }
             ManagedTorrentState::Initializing(_) => {
-                bail!("torrent is initializing, can't pause");
+                // Cancel the init task via the per-torrent cancellation token,
+                // then reset the token so the torrent can be restarted later.
+                // Transition to Error state so it can be re-initialized on unpause.
+                self.shared.cancel_and_reset_token();
+                g.state =
+                    ManagedTorrentState::Error(anyhow::anyhow!("paused during initialization"));
+                g.paused = true;
+                self.state_change_notify.notify_waiters();
+                Ok(())
             }
             ManagedTorrentState::Paused(_) => {
                 bail!("torrent is already paused");

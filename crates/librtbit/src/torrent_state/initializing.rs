@@ -11,6 +11,7 @@ use anyhow::Context;
 use itertools::Itertools;
 use rand::Rng;
 use size_format::SizeFormatterBinary as SF;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, trace, warn};
 
 use crate::{
@@ -60,8 +61,12 @@ impl TorrentStateInitializing {
         &self,
         bitv_factory: &dyn BitVFactory,
         have_pieces: Option<Box<dyn BitV>>,
-    ) -> Option<Box<dyn BitV>> {
-        let hp = have_pieces?;
+        cancellation_token: &CancellationToken,
+    ) -> anyhow::Result<Option<Box<dyn BitV>>> {
+        let hp = match have_pieces {
+            Some(hp) => hp,
+            None => return Ok(None),
+        };
         let actual = hp.as_bytes().len();
         let expected = self.metadata.lengths().piece_bitfield_bytes();
         if actual != expected {
@@ -70,10 +75,11 @@ impl TorrentStateInitializing {
                 expected,
                 "the bitfield loaded isn't of correct length, ignoring it, will do full check"
             );
-            return None;
+            return Ok(None);
         }
 
-        let is_broken = self
+        let token = cancellation_token.clone();
+        let result: anyhow::Result<bool> = self
             .shared
             .spawner
             .block_in_place_with_semaphore(|| {
@@ -141,8 +147,12 @@ impl TorrentStateInitializing {
                     })
                     .enumerate()
                 {
+                    if token.is_cancelled() {
+                        anyhow::bail!("fastresume validation cancelled");
+                    }
+
                     if fo.check_piece(piece_id).is_err() {
-                        return true;
+                        return Ok(true);
                     }
 
                     #[allow(clippy::cast_possible_truncation)]
@@ -153,9 +163,11 @@ impl TorrentStateInitializing {
                     self.checked_bytes.store(progress, Ordering::Relaxed);
                 }
 
-                false
+                Ok(false)
             })
             .await;
+
+        let is_broken = result?;
 
         if is_broken {
             warn!(
@@ -167,13 +179,14 @@ impl TorrentStateInitializing {
                 warn!(id=?self.shared.id, info_hash = ?self.shared.info_hash, "error clearing bitfield: {e:#}");
             }
             self.checked_bytes.store(0, Ordering::Relaxed);
-            return None;
+            return Ok(None);
         }
 
-        Some(hp)
+        Ok(Some(hp))
     }
 
     pub async fn check(&self) -> anyhow::Result<TorrentStatePaused> {
+        let cancellation_token = self.shared.child_token();
         let id: TorrentIdOrHash = self.shared.info_hash.into();
         let bitv_factory = self
             .shared
@@ -194,18 +207,21 @@ impl TorrentStateInitializing {
                 .context("error loading have_pieces")?
         };
 
-        let have_pieces = self.validate_fastresume(&*bitv_factory, have_pieces).await;
+        let have_pieces = self
+            .validate_fastresume(&*bitv_factory, have_pieces, &cancellation_token)
+            .await?;
 
         let have_pieces = match have_pieces {
             Some(h) => h,
             None => {
                 info!("Doing initial checksum validation, this might take a while...");
+                let token = cancellation_token.clone();
                 let have_pieces = self
                     .shared
                     .spawner
                     .block_in_place_with_semaphore(|| {
                         FileOps::new(&self.metadata.info, &self.files, &self.metadata.file_infos)
-                            .initial_check(&self.checked_bytes)
+                            .initial_check(&self.checked_bytes, Some(&token))
                     })
                     .await?;
                 bitv_factory

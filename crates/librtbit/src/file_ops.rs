@@ -11,6 +11,7 @@ use librqbit_core::{
 };
 use peer_binary_protocol::{DoubleBufHelper, Piece};
 use sha1w::{ISha1, Sha1};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, trace, warn};
 
 use crate::{
@@ -70,7 +71,11 @@ impl<'a> FileOps<'a> {
     }
 
     // Returns the bitvector with pieces we have.
-    pub fn initial_check(&self, progress: &AtomicU64) -> anyhow::Result<BF> {
+    pub fn initial_check(
+        &self,
+        progress: &AtomicU64,
+        cancellation_token: Option<&CancellationToken>,
+    ) -> anyhow::Result<BF> {
         let mut have_pieces =
             BF::from_boxed_slice(vec![0u8; self.torrent.lengths().piece_bitfield_bytes()].into());
         let mut piece_files = Vec::<usize>::new();
@@ -106,6 +111,13 @@ impl<'a> FileOps<'a> {
         let mut read_buffer = vec![0u8; 65536];
 
         for piece_info in self.torrent.lengths().iter_piece_infos() {
+            // Check for cancellation periodically (every piece).
+            if let Some(token) = cancellation_token
+                && token.is_cancelled()
+            {
+                anyhow::bail!("initial check cancelled");
+            }
+
             piece_files.clear();
             let mut computed_hash = Sha1::new();
             let mut piece_remaining = piece_info.len as usize;

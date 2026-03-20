@@ -816,6 +816,9 @@ impl Session {
                 session: Arc::downgrade(self),
                 magnet_name: name,
                 category: RwLock::new(opts.category.clone()),
+                cancellation_token: parking_lot::Mutex::new(
+                    self.cancellation_token.child_token(),
+                ),
             });
 
             let initializing = Arc::new(TorrentStateInitializing::new(
@@ -902,6 +905,10 @@ impl Session {
             .torrents
             .remove(&id)
             .with_context(|| format!("torrent with id {id} did not exist"))?;
+
+        // Cancel the per-torrent token to stop any running init/check tasks.
+        // This must happen before pause() so initializing torrents are promptly cancelled.
+        removed.shared.cancel_token();
 
         if let Err(e) = removed.pause() {
             debug!("error pausing torrent before deletion: {e:#}")
