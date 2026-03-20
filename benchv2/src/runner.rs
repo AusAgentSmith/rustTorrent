@@ -102,6 +102,20 @@ async fn wait_for_mock_seeder_torrents(min_torrents: usize, timeout_secs: u64) -
     }
 }
 
+/// Trigger a fresh announce on the mock seeder so the tracker has current peer entries.
+async fn trigger_mock_seeder_announce() {
+    let client = reqwest::Client::new();
+    match client
+        .get("http://mock-seeder:8080/reload")
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+    {
+        Ok(_) => tracing::info!("  mock-seeder: re-announced peers to tracker"),
+        Err(e) => tracing::warn!("  mock-seeder: re-announce failed: {e}"),
+    }
+}
+
 pub async fn run(
     scenario_selector: String,
     data_dir: PathBuf,
@@ -252,13 +266,19 @@ pub async fn run(
 
         tracing::info!("Seeding ready. Running downloads sequentially.");
 
-        // Run rqbit
+        // Run rqbit — re-announce mock peers so tracker has fresh entries
+        if sc.mock_peers > 0 {
+            trigger_mock_seeder_announce().await;
+        }
         let rqbit_result =
             run_client("rqbit", sc, &tpaths, &rqbit, &qbt, &metrics).await;
         cleanup_rqbit(&rqbit).await;
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-        // Run qBittorrent
+        // Run qBittorrent — re-announce again for fresh tracker entries
+        if sc.mock_peers > 0 {
+            trigger_mock_seeder_announce().await;
+        }
         let qbt_result =
             run_client("qbittorrent", sc, &tpaths, &rqbit, &qbt, &metrics).await;
         cleanup_qbt(&qbt).await;

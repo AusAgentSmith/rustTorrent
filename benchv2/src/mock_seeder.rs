@@ -271,9 +271,11 @@ async fn do_reload(
     }
     let after = map.len();
     if after > before {
-        tracing::info!("Reload: {} -> {} torrent(s), re-announcing", before, after);
-        announce_all(&map, tracker_url, num_peers, base_port).await;
+        tracing::info!("Reload: {} -> {} torrent(s)", before, after);
     }
+    // Always re-announce — peers expire on the tracker after 120s
+    tracing::info!("Re-announcing {} torrent(s) to tracker", after);
+    announce_all(&map, tracker_url, num_peers, base_port).await;
     after
 }
 
