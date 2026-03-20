@@ -17,6 +17,7 @@ import {
   isTorrentVisible,
 } from "../helper/torrentFilters";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { TorrentContextMenu, ContextMenuState } from "./TorrentContextMenu";
 
 const DEFAULT_SORT_COLUMN: TorrentSortColumn = "id";
 const DEFAULT_SORT_DIRECTION: SortDirection = "desc";
@@ -43,6 +44,8 @@ export const CardLayout = (props: {
   const [sortDirection, setSortDirection] = useState<SortDirection>(
     DEFAULT_SORT_DIRECTION,
   );
+  const [torrentContextMenu, setTorrentContextMenu] =
+    useState<ContextMenuState | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const debouncedSetSearch = useCallback(
@@ -91,7 +94,18 @@ export const CardLayout = (props: {
     (index: number) => {
       const torrent = filteredTorrents![index];
       return (
-        <div className="pb-1.5 sm:pb-2 px-2 sm:px-7 max-w-4xl mx-auto w-full">
+        <div
+          className="pb-1.5 sm:pb-2 px-2 sm:px-7 max-w-4xl mx-auto w-full"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setTorrentContextMenu({
+              x: e.clientX,
+              y: e.clientY,
+              torrent,
+              selectedTorrents: [torrent],
+            });
+          }}
+        >
           <TorrentCard key={torrent.id} torrent={torrent} />
         </div>
       );
@@ -178,6 +192,12 @@ export const CardLayout = (props: {
           torrentId={detailsModalTorrentId}
           isOpen={true}
           onClose={closeDetailsModal}
+        />
+      )}
+      {torrentContextMenu && (
+        <TorrentContextMenu
+          menu={torrentContextMenu}
+          onClose={() => setTorrentContextMenu(null)}
         />
       )}
     </div>

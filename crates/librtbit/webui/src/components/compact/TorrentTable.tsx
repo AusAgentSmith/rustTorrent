@@ -8,6 +8,7 @@ import { Spinner } from "../Spinner";
 import { SortIcon } from "../SortIcon";
 import { isTorrentVisible, SortDirection } from "../../helper/torrentFilters";
 import { ColumnMenu } from "./ColumnMenu";
+import { TorrentContextMenu, ContextMenuState } from "../TorrentContextMenu";
 
 // Sort columns: all sortable column IDs
 export type TableSortColumn =
@@ -134,6 +135,10 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     y: number;
   } | null>(null);
 
+  // Torrent right-click context menu
+  const [torrentContextMenu, setTorrentContextMenu] =
+    useState<ContextMenuState | null>(null);
+
   const setSortColumn = useCallback((column: TableSortColumn) => {
     setSortColumnState((prevColumn) => {
       setSortDirectionState((prevDir) => {
@@ -240,6 +245,34 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
     [selectRange, selectTorrent],
   );
 
+  // Row right-click handler
+  const handleRowContextMenu = useCallback(
+    (id: number, e: React.MouseEvent) => {
+      const torrent = filteredTorrents?.find((t) => t.id === id);
+      if (!torrent) return;
+
+      let selected: TorrentListItem[];
+      if (selectedTorrentIds.has(id)) {
+        // Right-clicked on an already-selected torrent: operate on all selected
+        selected = filteredTorrents!.filter((t) =>
+          selectedTorrentIds.has(t.id),
+        );
+      } else {
+        // Right-clicked on an unselected torrent: select only this one
+        selectTorrent(id);
+        selected = [torrent];
+      }
+
+      setTorrentContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        torrent,
+        selectedTorrents: selected,
+      });
+    },
+    [filteredTorrents, selectedTorrentIds, selectTorrent],
+  );
+
   // Column resize handlers
   useEffect(() => {
     if (!resizing) return;
@@ -292,6 +325,7 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
           torrent={torrent}
           isSelected={selectedTorrentIds.has(torrent.id)}
           onRowClick={handleRowClick}
+          onContextMenu={handleRowContextMenu}
           onCheckboxChange={toggleSelection}
           visibleColumns={visibleColumns}
         />
@@ -301,6 +335,7 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
       filteredTorrents,
       selectedTorrentIds,
       handleRowClick,
+      handleRowContextMenu,
       toggleSelection,
       visibleColumns,
     ],
@@ -417,6 +452,14 @@ export const TorrentTable: React.FC<TorrentTableProps> = ({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Torrent right-click context menu */}
+      {torrentContextMenu && (
+        <TorrentContextMenu
+          menu={torrentContextMenu}
+          onClose={() => setTorrentContextMenu(null)}
         />
       )}
     </div>

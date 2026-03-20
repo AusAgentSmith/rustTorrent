@@ -9,6 +9,7 @@ interface TorrentTableRowProps {
   torrent: TorrentListItem;
   isSelected: boolean;
   onRowClick: (id: number, e: React.MouseEvent) => void;
+  onContextMenu: (id: number, e: React.MouseEvent) => void;
   onCheckboxChange: (id: number) => void;
   visibleColumns: ColumnDef[];
 }
@@ -32,6 +33,7 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
   torrent,
   isSelected,
   onRowClick,
+  onContextMenu,
   onCheckboxChange,
   visibleColumns,
 }) => {
@@ -63,6 +65,11 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
 
   const handleRowClick = (e: React.MouseEvent) => {
     onRowClick(torrent.id, e);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onContextMenu(torrent.id, e);
   };
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
@@ -260,6 +267,7 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
       <tbody>
         <tr
           onMouseDown={handleRowClick}
+          onContextMenu={handleContextMenu}
           className={`cursor-pointer border-b border-divider text-sm h-8 ${
             isSelected ? "bg-primary/10" : "hover:bg-surface-raised"
           }`}
