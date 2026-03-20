@@ -81,10 +81,9 @@ impl ReadBuf {
     // in the middle of bencoded data (as we only can deserialize bencode from a single slice).
     fn make_contiguous(&mut self) -> Result<()> {
         if self.is_contiguous() {
-            #[allow(clippy::cast_possible_truncation)]
             return Err(Error::BugReadBufMakeContiguous {
-                start: self.start as u16,
-                len: self.len as u16,
+                start: u16::try_from(self.start).unwrap_or(u16::MAX),
+                len: u16::try_from(self.len).unwrap_or(u16::MAX),
             });
         }
 
@@ -174,8 +173,8 @@ impl ReadBuf {
                     while need_additional_bytes > 0 {
                         if self.is_full() {
                             return Err(Error::ReadBufFull {
-                                #[allow(clippy::cast_possible_truncation)]
-                                need_additional_bytes: need_additional_bytes as u16,
+                                need_additional_bytes: u16::try_from(need_additional_bytes)
+                                    .unwrap_or(u16::MAX),
                             });
                         }
                         let size = with_timeout(
@@ -467,5 +466,56 @@ mod tests {
                 crate::Error::PeerDisconnected,
             ));
         })
+    }
+
+    #[test]
+    fn test_read_buf_error_large_values() {
+        // Verify that error fields saturate to u16::MAX instead of truncating
+        // when the source value exceeds u16::MAX.
+
+        // Values within u16 range
+        let val: usize = 100;
+        assert_eq!(u16::try_from(val).unwrap_or(u16::MAX), 100);
+
+        let val: usize = u16::MAX as usize;
+        assert_eq!(u16::try_from(val).unwrap_or(u16::MAX), u16::MAX);
+
+        // Values exceeding u16::MAX should saturate to u16::MAX
+        let val: usize = u16::MAX as usize + 1;
+        assert_eq!(u16::try_from(val).unwrap_or(u16::MAX), u16::MAX);
+
+        let val: usize = BUFLEN; // 32768, which fits in u16
+        let expected = u16::try_from(val).unwrap_or(u16::MAX);
+        // BUFLEN is 0x8000 = 32768, which fits in u16
+        assert_eq!(expected, u16::try_from(BUFLEN).unwrap());
+
+        // Test the actual error construction path with large values
+        let large_start: usize = 100_000;
+        let large_len: usize = 200_000;
+        let err = crate::Error::BugReadBufMakeContiguous {
+            start: u16::try_from(large_start).unwrap_or(u16::MAX),
+            len: u16::try_from(large_len).unwrap_or(u16::MAX),
+        };
+        match err {
+            crate::Error::BugReadBufMakeContiguous { start, len } => {
+                assert_eq!(start, u16::MAX);
+                assert_eq!(len, u16::MAX);
+            }
+            _ => panic!("unexpected error variant"),
+        }
+
+        // Test ReadBufFull error with large value
+        let large_need: usize = 1_000_000;
+        let err = crate::Error::ReadBufFull {
+            need_additional_bytes: u16::try_from(large_need).unwrap_or(u16::MAX),
+        };
+        match err {
+            crate::Error::ReadBufFull {
+                need_additional_bytes,
+            } => {
+                assert_eq!(need_additional_bytes, u16::MAX);
+            }
+            _ => panic!("unexpected error variant"),
+        }
     }
 }

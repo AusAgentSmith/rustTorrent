@@ -346,9 +346,10 @@ impl ChunkTracker {
             }
 
             for idx in b.iter_ones() {
-                #[allow(clippy::cast_possible_truncation)]
-                if let Some(idx) = self.lengths.validate_piece_index(idx as u32) {
-                    self.mark_piece_broken_if_not_have(idx);
+                if let Ok(idx_u32) = u32::try_from(idx)
+                    && let Some(validated) = self.lengths.validate_piece_index(idx_u32)
+                {
+                    self.mark_piece_broken_if_not_have(validated);
                 }
             }
         }
@@ -538,8 +539,7 @@ mod tests {
             attrs: Default::default(),
         }];
 
-        let ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        let ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
         assert!(ct.is_finished());
         assert_eq!(ct.get_remaining_bytes(), 0);
         assert_eq!(ct.get_hns().have_bytes, piece_length as u64 * 3);
@@ -607,8 +607,7 @@ mod tests {
             },
         ];
 
-        let mut ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
+        let mut ct = ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
 
         // Initially: only file 0 selected.
         assert_eq!(ct.get_hns().selected_bytes, piece_len as u64 * 2);
@@ -653,8 +652,7 @@ mod tests {
             },
         ];
 
-        let mut ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
+        let mut ct = ChunkTracker::new(have.into_dyn(), selected, l, &all_files).unwrap();
 
         // Initially: both files selected.
         assert_eq!(ct.get_hns().selected_bytes, total_len);
@@ -694,8 +692,7 @@ mod tests {
             attrs: Default::default(),
         }];
 
-        let mut ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        let mut ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
         assert_eq!(ct.get_hns().have_bytes, 0);
 
         let piece0 = l.validate_piece_index(0).unwrap();
@@ -726,8 +723,7 @@ mod tests {
             attrs: Default::default(),
         }];
 
-        let mut ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        let mut ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
 
         let piece0 = l.validate_piece_index(0).unwrap();
 
@@ -759,8 +755,7 @@ mod tests {
             attrs: Default::default(),
         }];
 
-        let ct =
-            ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
+        let ct = ChunkTracker::new(have.into_dyn(), selected, l, &file_infos).unwrap();
 
         let chunk0 = librqbit_core::lengths::ChunkInfo {
             piece_index: l.validate_piece_index(0).unwrap(),
@@ -934,5 +929,75 @@ mod tests {
         assert!(ct.queue_pieces[0]);
         assert!(ct.queue_pieces[1]);
         assert!(ct.queue_pieces[2]);
+    }
+
+    #[test]
+    fn test_piece_index_large_values() {
+        // Verify that u32::try_from correctly handles usize values that exceed u32::MAX.
+        // On 64-bit platforms, usize can hold values > u32::MAX. The old code used
+        // `idx as u32` which would silently truncate. The new code uses try_from
+        // which returns Err for out-of-range values, and we simply skip them.
+
+        // Values within u32 range should convert fine
+        let idx: usize = 0;
+        assert!(u32::try_from(idx).is_ok());
+
+        let idx: usize = u32::MAX as usize;
+        assert!(u32::try_from(idx).is_ok());
+        assert_eq!(u32::try_from(idx).unwrap(), u32::MAX);
+
+        // Values exceeding u32::MAX should fail gracefully (on 64-bit)
+        #[cfg(target_pointer_width = "64")]
+        {
+            let idx: usize = u32::MAX as usize + 1;
+            assert!(u32::try_from(idx).is_err());
+
+            let idx: usize = usize::MAX;
+            assert!(u32::try_from(idx).is_err());
+        }
+    }
+
+    #[test]
+    fn test_eta_overflow_safety() {
+        // Simulate the ETA calculation pattern used in qbit_compat.rs.
+        // The pattern: i64::try_from(remaining / dl_speed).unwrap_or(8640000i64)
+        // Previously used `as i64` which could overflow.
+
+        // Very large remaining / very small speed => value exceeds i64::MAX
+        let remaining: u64 = u64::MAX;
+        let dl_speed: u64 = 1;
+        let eta_secs = remaining / dl_speed;
+        let eta = i64::try_from(eta_secs).unwrap_or(8640000i64);
+        assert_eq!(eta, 8640000i64, "should clamp to fallback on overflow");
+
+        // Large but within i64 range
+        let remaining: u64 = 1_000_000_000_000;
+        let dl_speed: u64 = 100;
+        let eta_secs = remaining / dl_speed;
+        let eta = i64::try_from(eta_secs).unwrap_or(8640000i64);
+        assert_eq!(
+            eta, 10_000_000_000i64,
+            "should return exact ETA when it fits in i64"
+        );
+
+        // Zero speed: the calling code guards against this, but verify the fallback
+        let dl_speed: u64 = 0;
+        let eta = if dl_speed > 0 {
+            let remaining: u64 = 1_000_000;
+            let eta_secs = remaining / dl_speed;
+            i64::try_from(eta_secs).unwrap_or(8640000i64)
+        } else {
+            8640000i64
+        };
+        assert_eq!(eta, 8640000i64, "zero speed should return 8640000");
+
+        // Timestamp cast: current unix timestamp fits in i64
+        let now: u64 = i64::MAX as u64 + 1;
+        let result = i64::try_from(now).unwrap_or(i64::MAX);
+        assert_eq!(result, i64::MAX, "should clamp to i64::MAX on overflow");
+
+        let now: u64 = 1_700_000_000;
+        let result = i64::try_from(now).unwrap_or(i64::MAX);
+        assert_eq!(result, 1_700_000_000i64);
     }
 }

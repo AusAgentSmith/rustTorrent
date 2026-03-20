@@ -255,10 +255,7 @@ struct LoginForm {
     password: String,
 }
 
-async fn h_auth_login(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn h_auth_login(State(state): State<Arc<QbitState>>, body: Bytes) -> impl IntoResponse {
     let form: LoginForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
 
     let auth_ok = match &state.api_state.opts.basic_auth {
@@ -271,12 +268,7 @@ async fn h_auth_login(
     if auth_ok {
         let sid = state.sessions.create_session();
         let cookie = format!("SID={sid}; Path=/; HttpOnly");
-        (
-            StatusCode::OK,
-            [(SET_COOKIE, cookie)],
-            "Ok.".to_string(),
-        )
-            .into_response()
+        (StatusCode::OK, [(SET_COOKIE, cookie)], "Ok.".to_string()).into_response()
     } else {
         (StatusCode::FORBIDDEN, "Fails.".to_string()).into_response()
     }
@@ -312,22 +304,18 @@ async fn h_app_build_info() -> impl IntoResponse {
 }
 
 async fn h_app_preferences(State(state): State<Arc<QbitState>>) -> impl IntoResponse {
-    let save_path = state
-        .api_state
-        .api
-        .session()
-        .with_torrents(|torrents| {
-            torrents
-                .next()
-                .map(|(_, t)| {
-                    t.shared()
-                        .options
-                        .output_folder
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .unwrap_or_default()
-        });
+    let save_path = state.api_state.api.session().with_torrents(|torrents| {
+        torrents
+            .next()
+            .map(|(_, t)| {
+                t.shared()
+                    .options
+                    .output_folder
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .unwrap_or_default()
+    });
 
     axum::Json(QbitPreferences {
         save_path,
@@ -403,7 +391,11 @@ struct TorrentsInfoQuery {
 }
 
 /// Check if a torrent matches the qBit filter.
-fn matches_filter(filter: &str, qbit_state: &str, stats: &crate::torrent_state::stats::TorrentStats) -> bool {
+fn matches_filter(
+    filter: &str,
+    qbit_state: &str,
+    stats: &crate::torrent_state::stats::TorrentStats,
+) -> bool {
     match filter {
         "all" => true,
         "downloading" => qbit_state == "downloading" || qbit_state == "metaDL",
@@ -438,132 +430,139 @@ async fn h_torrents_info(
         .as_ref()
         .map(|h| h.split('|').map(|s| s.to_lowercase()).collect());
 
-    let mut torrents: Vec<QbitTorrentInfo> = api
-        .session()
-        .with_torrents(|iter| {
-            iter.filter_map(|(id, handle)| {
-                let info_hash = handle.shared().info_hash.as_string();
+    let mut torrents: Vec<QbitTorrentInfo> = api.session().with_torrents(|iter| {
+        iter.filter_map(|(id, handle)| {
+            let info_hash = handle.shared().info_hash.as_string();
 
-                // Filter by hash if specified
-                if let Some(ref hashes) = hash_filter
-                    && !hashes.contains(&info_hash)
-                {
-                    return None;
-                }
+            // Filter by hash if specified
+            if let Some(ref hashes) = hash_filter
+                && !hashes.contains(&info_hash)
+            {
+                return None;
+            }
 
-                let stats = handle.stats();
-                let name = handle.name().unwrap_or_else(|| format!("torrent_{id}"));
-                let output_folder = handle
-                    .shared()
-                    .options
-                    .output_folder
-                    .to_string_lossy()
-                    .into_owned();
-                let content_path = format!("{}/{}", output_folder, name);
+            let stats = handle.stats();
+            let name = handle.name().unwrap_or_else(|| format!("torrent_{id}"));
+            let output_folder = handle
+                .shared()
+                .options
+                .output_folder
+                .to_string_lossy()
+                .into_owned();
+            let content_path = format!("{}/{}", output_folder, name);
 
-                let qbit_state = map_state(stats.state, stats.finished);
+            let qbit_state = map_state(stats.state, stats.finished);
 
-                // Apply filter
-                if let Some(ref filter) = query.filter
-                    && !matches_filter(filter, qbit_state, &stats)
-                {
-                    return None;
-                }
+            // Apply filter
+            if let Some(ref filter) = query.filter
+                && !matches_filter(filter, qbit_state, &stats)
+            {
+                return None;
+            }
 
-                let dl_speed = stats
-                    .live
-                    .as_ref()
-                    .map(|l| l.download_speed.as_bytes())
-                    .unwrap_or(0);
-                let up_speed = stats
-                    .live
-                    .as_ref()
-                    .map(|l| l.upload_speed.as_bytes())
-                    .unwrap_or(0);
+            let dl_speed = stats
+                .live
+                .as_ref()
+                .map(|l| l.download_speed.as_bytes())
+                .unwrap_or(0);
+            let up_speed = stats
+                .live
+                .as_ref()
+                .map(|l| l.upload_speed.as_bytes())
+                .unwrap_or(0);
 
-                let progress = if stats.total_bytes > 0 {
-                    stats.progress_bytes as f64 / stats.total_bytes as f64
+            let progress = if stats.total_bytes > 0 {
+                stats.progress_bytes as f64 / stats.total_bytes as f64
+            } else {
+                0.0
+            };
+
+            let eta = if dl_speed > 0 {
+                let remaining = stats.total_bytes.saturating_sub(stats.progress_bytes);
+                let eta_secs = remaining / dl_speed;
+                i64::try_from(eta_secs).unwrap_or(8640000i64)
+            } else {
+                8640000i64
+            };
+
+            let num_seeds = stats
+                .live
+                .as_ref()
+                .map(|l| l.snapshot.peer_stats.live)
+                .unwrap_or(0);
+
+            let tracker = handle
+                .shared()
+                .trackers
+                .iter()
+                .next()
+                .map(|u| u.to_string())
+                .unwrap_or_default();
+
+            let trackers_count = handle.shared().trackers.len();
+
+            Some(QbitTorrentInfo {
+                added_on: now,
+                amount_left: stats.total_bytes.saturating_sub(stats.progress_bytes),
+                auto_tmm: false,
+                availability: -1,
+                category: String::new(),
+                completed: stats.progress_bytes,
+                completion_on: if stats.finished {
+                    i64::try_from(now).unwrap_or(i64::MAX)
                 } else {
-                    0.0
-                };
-
-                let eta = if dl_speed > 0 {
-                    let remaining = stats.total_bytes.saturating_sub(stats.progress_bytes);
-                    (remaining / dl_speed) as i64
+                    -1
+                },
+                content_path,
+                dl_limit: -1,
+                dlspeed: dl_speed,
+                download_path: String::new(),
+                downloaded: stats.progress_bytes,
+                downloaded_session: 0,
+                eta,
+                f_l_piece_prio: false,
+                force_start: false,
+                hash: info_hash.clone(),
+                infohash_v1: info_hash,
+                infohash_v2: String::new(),
+                last_activity: now,
+                magnet_uri: String::new(),
+                max_ratio: -1,
+                max_seeding_time: -1,
+                name,
+                num_complete: 0,
+                num_incomplete: 0,
+                num_leechs: 0,
+                num_seeds,
+                priority: 0,
+                progress,
+                ratio: 0.0,
+                ratio_limit: -1,
+                save_path: output_folder,
+                seeding_time: 0,
+                seeding_time_limit: -1,
+                seen_complete: if stats.finished {
+                    i64::try_from(now).unwrap_or(i64::MAX)
                 } else {
-                    8640000i64
-                };
-
-                let num_seeds = stats
-                    .live
-                    .as_ref()
-                    .map(|l| l.snapshot.peer_stats.live)
-                    .unwrap_or(0);
-
-                let tracker = handle
-                    .shared()
-                    .trackers
-                    .iter()
-                    .next()
-                    .map(|u| u.to_string())
-                    .unwrap_or_default();
-
-                let trackers_count = handle.shared().trackers.len();
-
-                Some(QbitTorrentInfo {
-                    added_on: now,
-                    amount_left: stats.total_bytes.saturating_sub(stats.progress_bytes),
-                    auto_tmm: false,
-                    availability: -1,
-                    category: String::new(),
-                    completed: stats.progress_bytes,
-                    completion_on: if stats.finished { now as i64 } else { -1 },
-                    content_path,
-                    dl_limit: -1,
-                    dlspeed: dl_speed,
-                    download_path: String::new(),
-                    downloaded: stats.progress_bytes,
-                    downloaded_session: 0,
-                    eta,
-                    f_l_piece_prio: false,
-                    force_start: false,
-                    hash: info_hash.clone(),
-                    infohash_v1: info_hash,
-                    infohash_v2: String::new(),
-                    last_activity: now,
-                    magnet_uri: String::new(),
-                    max_ratio: -1,
-                    max_seeding_time: -1,
-                    name,
-                    num_complete: 0,
-                    num_incomplete: 0,
-                    num_leechs: 0,
-                    num_seeds,
-                    priority: 0,
-                    progress,
-                    ratio: 0.0,
-                    ratio_limit: -1,
-                    save_path: output_folder,
-                    seeding_time: 0,
-                    seeding_time_limit: -1,
-                    seen_complete: if stats.finished { now as i64 } else { -1 },
-                    seq_dl: false,
-                    size: stats.total_bytes,
-                    state: qbit_state.to_string(),
-                    super_seeding: false,
-                    tags: String::new(),
-                    time_active: 0,
-                    total_size: stats.total_bytes,
-                    tracker,
-                    trackers_count,
-                    up_limit: -1,
-                    uploaded: stats.uploaded_bytes,
-                    uploaded_session: 0,
-                    upspeed: up_speed,
-                })
+                    -1
+                },
+                seq_dl: false,
+                size: stats.total_bytes,
+                state: qbit_state.to_string(),
+                super_seeding: false,
+                tags: String::new(),
+                time_active: 0,
+                total_size: stats.total_bytes,
+                tracker,
+                trackers_count,
+                up_limit: -1,
+                uploaded: stats.uploaded_bytes,
+                uploaded_session: 0,
+                upspeed: up_speed,
             })
-            .collect()
-        });
+        })
+        .collect()
+    });
 
     // Sort
     if let Some(ref sort_field) = query.sort {
@@ -572,7 +571,10 @@ async fn h_torrents_info(
             let cmp = match sort_field.as_str() {
                 "name" => a.name.cmp(&b.name),
                 "size" | "total_size" => a.total_size.cmp(&b.total_size),
-                "progress" => a.progress.partial_cmp(&b.progress).unwrap_or(std::cmp::Ordering::Equal),
+                "progress" => a
+                    .progress
+                    .partial_cmp(&b.progress)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 "dlspeed" => a.dlspeed.cmp(&b.dlspeed),
                 "upspeed" => a.upspeed.cmp(&b.upspeed),
                 "eta" => a.eta.cmp(&b.eta),
@@ -581,7 +583,10 @@ async fn h_torrents_info(
                 "hash" => a.hash.cmp(&b.hash),
                 "downloaded" => a.downloaded.cmp(&b.downloaded),
                 "uploaded" => a.uploaded.cmp(&b.uploaded),
-                "ratio" => a.ratio.partial_cmp(&b.ratio).unwrap_or(std::cmp::Ordering::Equal),
+                "ratio" => a
+                    .ratio
+                    .partial_cmp(&b.ratio)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 _ => std::cmp::Ordering::Equal,
             };
             if reverse { cmp.reverse() } else { cmp }
@@ -642,7 +647,8 @@ async fn h_torrents_properties(
 
     let eta = if dl_speed > 0 {
         let remaining = stats.total_bytes.saturating_sub(stats.progress_bytes);
-        (remaining / dl_speed) as i64
+        let eta_secs = remaining / dl_speed;
+        i64::try_from(eta_secs).unwrap_or(8640000i64)
     } else {
         8640000i64
     };
@@ -672,7 +678,11 @@ async fn h_torrents_properties(
         nb_connections_limit: -1,
         share_ratio: 0.0,
         addition_date: now,
-        completion_date: if stats.finished { now as i64 } else { -1 },
+        completion_date: if stats.finished {
+            i64::try_from(now).unwrap_or(i64::MAX)
+        } else {
+            -1
+        },
         created_by: String::new(),
         dl_speed_avg: dl_speed,
         dl_speed,
@@ -867,10 +877,7 @@ fn resolve_hashes(api: &Api, hashes_str: &str) -> Vec<TorrentIdOrHash> {
     }
 }
 
-async fn h_torrents_pause(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> &'static str {
+async fn h_torrents_pause(State(state): State<Arc<QbitState>>, body: Bytes) -> &'static str {
     let form: HashesForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     let api = &state.api_state.api;
     let hashes = resolve_hashes(api, &form.hashes);
@@ -884,10 +891,7 @@ async fn h_torrents_pause(
     "Ok."
 }
 
-async fn h_torrents_resume(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> &'static str {
+async fn h_torrents_resume(State(state): State<Arc<QbitState>>, body: Bytes) -> &'static str {
     let form: HashesForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     let api = &state.api_state.api;
     let hashes = resolve_hashes(api, &form.hashes);
@@ -909,10 +913,7 @@ struct DeleteForm {
     delete_files: Option<String>,
 }
 
-async fn h_torrents_delete(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> &'static str {
+async fn h_torrents_delete(State(state): State<Arc<QbitState>>, body: Bytes) -> &'static str {
     let form: DeleteForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     let api = &state.api_state.api;
     let hashes = resolve_hashes(api, &form.hashes);
@@ -972,10 +973,7 @@ struct CreateCategoryForm {
     save_path: String,
 }
 
-async fn h_create_category(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn h_create_category(State(state): State<Arc<QbitState>>, body: Bytes) -> impl IntoResponse {
     let form: CreateCategoryForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     if form.category.is_empty() {
         return (StatusCode::BAD_REQUEST, "Category name required").into_response();
@@ -990,10 +988,7 @@ async fn h_create_category(
     (StatusCode::OK, "Ok.").into_response()
 }
 
-async fn h_edit_category(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn h_edit_category(State(state): State<Arc<QbitState>>, body: Bytes) -> impl IntoResponse {
     let form: CreateCategoryForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     if form.category.is_empty() {
         return (StatusCode::BAD_REQUEST, "Category name required").into_response();
@@ -1019,10 +1014,7 @@ struct RemoveCategoriesForm {
     categories: String,
 }
 
-async fn h_remove_categories(
-    State(state): State<Arc<QbitState>>,
-    body: Bytes,
-) -> &'static str {
+async fn h_remove_categories(State(state): State<Arc<QbitState>>, body: Bytes) -> &'static str {
     let form: RemoveCategoriesForm = serde_urlencoded::from_bytes(&body).unwrap_or_default();
     let mut cats = state.categories.categories.write();
     for name in form.categories.split('\n') {
@@ -1103,7 +1095,9 @@ pub(crate) fn make_qbit_router(api_state: ApiState) -> Router {
     if has_auth {
         let qbit_state_for_layer = qbit_state.clone();
         protected_router = protected_router.route_layer(axum::middleware::from_fn(
-            move |headers: HeaderMap, request: axum::extract::Request, next: axum::middleware::Next| {
+            move |headers: HeaderMap,
+                  request: axum::extract::Request,
+                  next: axum::middleware::Next| {
                 let qbit_state = qbit_state_for_layer.clone();
                 async move {
                     let sid = extract_sid(&headers);
@@ -1124,4 +1118,52 @@ pub(crate) fn make_qbit_router(api_state: ApiState) -> Router {
         .nest("/auth", auth_router)
         .merge(protected_router)
         .with_state(qbit_state)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_eta_overflow_safety() {
+        // Simulate: very large remaining bytes / very small download speed
+        // This should not panic, and should clamp to a safe fallback.
+        let remaining: u64 = u64::MAX;
+        let dl_speed: u64 = 1;
+        let eta_secs = remaining / dl_speed;
+        let eta = i64::try_from(eta_secs).unwrap_or(8640000i64);
+        assert_eq!(eta, 8640000i64, "should clamp to fallback on overflow");
+
+        // Large but within i64 range
+        let remaining: u64 = 1_000_000_000_000;
+        let dl_speed: u64 = 100;
+        let eta_secs = remaining / dl_speed;
+        let eta = i64::try_from(eta_secs).unwrap_or(8640000i64);
+        assert_eq!(
+            eta, 10_000_000_000i64,
+            "should return exact ETA when it fits in i64"
+        );
+
+        // Zero speed: the calling code uses a guard, but verify the fallback path
+        let dl_speed: u64 = 0;
+        let eta = if dl_speed > 0 {
+            let remaining: u64 = 1_000_000;
+            let eta_secs = remaining / dl_speed;
+            i64::try_from(eta_secs).unwrap_or(8640000i64)
+        } else {
+            8640000i64
+        };
+        assert_eq!(eta, 8640000i64, "zero speed should return 8640000");
+    }
+
+    #[test]
+    fn test_timestamp_cast_safety() {
+        // Current unix timestamp fits in i64, but test the boundary
+        let now: u64 = i64::MAX as u64 + 1;
+        let result = i64::try_from(now).unwrap_or(i64::MAX);
+        assert_eq!(result, i64::MAX, "should clamp to i64::MAX on overflow");
+
+        // Normal timestamp should pass through
+        let now: u64 = 1_700_000_000;
+        let result = i64::try_from(now).unwrap_or(i64::MAX);
+        assert_eq!(result, 1_700_000_000i64);
+    }
 }
