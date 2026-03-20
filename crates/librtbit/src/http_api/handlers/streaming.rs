@@ -25,6 +25,18 @@ pub struct StreamPathParams {
     _filename: Option<Arc<str>>,
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/stream/{file_id}",
+    params(
+        ("id" = String, Path, description = "Torrent ID or info hash"),
+        ("file_id" = usize, Path, description = "File index")
+    ),
+    responses(
+        (status = 200, description = "File stream with Range header support"),
+        (status = 206, description = "Partial content (range request)")
+    )
+))]
 pub async fn h_torrent_stream_file(
     State(state): State<ApiState>,
     Path(StreamPathParams { id, file_id, .. }): Path<StreamPathParams>,

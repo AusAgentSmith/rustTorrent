@@ -21,7 +21,7 @@ export const Footer: React.FC = () => {
       <FooterPiece>up {formatSecondsToTime(stats.uptime_seconds)}</FooterPiece>
       <FooterPiece>
         <a
-          href="openapi.json"
+          href="/swagger/"
           target="_blank"
           className="text-blue-600 dark:text-blue-400 hover:underline"
         >

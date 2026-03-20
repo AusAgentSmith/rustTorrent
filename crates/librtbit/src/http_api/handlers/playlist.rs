@@ -74,6 +74,14 @@ fn build_playlist_content<I: IntoIterator<Item = (TorrentIdOrHash, usize, String
     )
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/playlist",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "M3U8 playlist for this torrent", content_type = "application/mpegurl")
+    )
+))]
 pub async fn h_torrent_playlist(
     State(state): State<ApiState>,
     headers: HeaderMap,
@@ -89,6 +97,13 @@ pub async fn h_torrent_playlist(
     ))
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/playlist",
+    responses(
+        (status = 200, description = "M3U8 playlist for all torrents", content_type = "application/mpegurl")
+    )
+))]
 pub async fn h_global_playlist(
     State(state): State<ApiState>,
     headers: HeaderMap,

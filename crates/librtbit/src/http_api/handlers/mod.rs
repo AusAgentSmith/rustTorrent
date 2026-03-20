@@ -1,10 +1,10 @@
-mod configure;
-mod dht;
-mod logging;
-mod other;
-mod playlist;
-mod streaming;
-mod torrents;
+pub(crate) mod configure;
+pub(crate) mod dht;
+pub(crate) mod logging;
+pub(crate) mod other;
+pub(crate) mod playlist;
+pub(crate) mod streaming;
+pub(crate) mod torrents;
 
 use std::sync::Arc;
 

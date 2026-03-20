@@ -38,13 +38,4 @@ pub fn make_webui_router() -> Router {
                 )
             }),
         )
-        .route(
-            "/openapi.json",
-            get(|| async {
-                (
-                    [("Content-Type", "application/json")],
-                    include_str!("../../webui/public/openapi.json"),
-                )
-            }),
-        )
 }

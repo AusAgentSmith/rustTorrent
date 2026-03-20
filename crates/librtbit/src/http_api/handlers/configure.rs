@@ -6,6 +6,14 @@ use crate::{
     limits::LimitsConfig,
 };
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/limits",
+    request_body(content = LimitsConfig, description = "Rate limits configuration"),
+    responses(
+        (status = 200, description = "Rate limits updated", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_update_session_ratelimits(
     State(state): State<ApiState>,
     Json(limits): Json<LimitsConfig>,
@@ -23,6 +31,13 @@ pub async fn h_update_session_ratelimits(
     Ok(Json(EmptyJsonResponse {}))
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/limits",
+    responses(
+        (status = 200, description = "Current rate limits", body = LimitsConfig)
+    )
+))]
 pub async fn h_get_session_ratelimits(State(state): State<ApiState>) -> Result<impl IntoResponse> {
     let config = state.api.session().ratelimits.get_config();
     Ok(Json(config))

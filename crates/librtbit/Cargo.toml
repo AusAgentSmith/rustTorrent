@@ -35,6 +35,7 @@ postgres = ["sqlx", "home"]
 async-bt = ["async-backtrace"]
 watch = ["notify"]
 disable-upload = []
+swagger = ["utoipa", "utoipa-axum", "utoipa-swagger-ui"]
 
 # These are absolutely useless for people, just for debugging / testing / benchmarking
 _disable_disk_write_net_benchmark = []
@@ -111,6 +112,9 @@ librqbit-dualstack-sockets = { workspace = true, features = ["axum"] }
 socket2.workspace = true
 nix = { workspace = true, features = ["uio"] }
 thiserror.workspace = true
+utoipa = { workspace = true, optional = true }
+utoipa-axum = { workspace = true, optional = true }
+utoipa-swagger-ui = { workspace = true, features = ["axum"], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32", "Win32_System", "Win32_System_IO", "Win32_System_Ioctl"] }
@@ -126,4 +130,4 @@ pollster.workspace = true
 
 [[example]]
 name = "simulate_traffic"
-required-features = ["http-api", "webui", "tracing-subscriber-utils", "prometheus"]
+required-features = ["http-api", "webui", "tracing-subscriber-utils", "prometheus", "swagger"]

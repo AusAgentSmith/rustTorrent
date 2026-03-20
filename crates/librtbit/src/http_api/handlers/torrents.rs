@@ -14,6 +14,10 @@ use librqbit_core::magnet::Magnet;
 use serde::{Deserialize, Serialize};
 
 use super::ApiState;
+#[cfg(feature = "swagger")]
+use crate::api::{
+    ApiAddTorrentResponse, EmptyJsonResponse, TorrentDetailsResponse, TorrentListResponse,
+};
 use crate::{
     AddTorrent, ApiError, CreateTorrentOptions, SUPPORTED_SCHEMES,
     api::{ApiTorrentListOpts, Result, TorrentIdOrHash},
@@ -24,6 +28,14 @@ use crate::{
     type_aliases::BF,
 };
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents",
+    params(ApiTorrentListOpts),
+    responses(
+        (status = 200, description = "List of torrents", body = TorrentListResponse)
+    )
+))]
 pub async fn h_torrents_list(
     State(state): State<ApiState>,
     Query(opts): Query<ApiTorrentListOpts>,
@@ -31,6 +43,15 @@ pub async fn h_torrents_list(
     axum::Json(state.api.api_torrent_list_ext(opts))
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents",
+    params(TorrentAddQueryParams),
+    request_body(content = Vec<u8>, description = "Torrent file bytes, magnet link, or URL"),
+    responses(
+        (status = 200, description = "Torrent added successfully", body = ApiAddTorrentResponse)
+    )
+))]
 pub async fn h_torrents_post(
     State(state): State<ApiState>,
     Query(params): Query<TorrentAddQueryParams>,
@@ -74,6 +95,14 @@ pub async fn h_torrents_post(
         .map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent details", body = TorrentDetailsResponse)
+    )
+))]
 pub async fn h_torrent_details(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -81,6 +110,14 @@ pub async fn h_torrent_details(
     state.api.api_torrent_details(idx).map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/haves",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Bitfield of pieces (SVG or binary depending on Accept header)")
+    )
+))]
 pub async fn h_torrent_haves(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -165,6 +202,14 @@ pub async fn h_torrent_haves(
     }
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/stats",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent stats (v0, deprecated)")
+    )
+))]
 pub async fn h_torrent_stats_v0(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -172,6 +217,14 @@ pub async fn h_torrent_stats_v0(
     state.api.api_stats_v0(idx).map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/stats/v1",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent stats (current)")
+    )
+))]
 pub async fn h_torrent_stats_v1(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -179,6 +232,17 @@ pub async fn h_torrent_stats_v1(
     state.api.api_stats_v1(idx).map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/peer_stats",
+    params(
+        ("id" = String, Path, description = "Torrent ID or info hash"),
+        ("state" = Option<String>, Query, description = "Filter peer state (all or live)")
+    ),
+    responses(
+        (status = 200, description = "Per-peer statistics")
+    )
+))]
 pub async fn h_peer_stats(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -187,6 +251,14 @@ pub async fn h_peer_stats(
     state.api.api_peer_stats(idx, filter).map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/pause",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent paused", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_torrent_action_pause(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -198,6 +270,14 @@ pub async fn h_torrent_action_pause(
         .map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/start",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent started", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_torrent_action_start(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -209,6 +289,14 @@ pub async fn h_torrent_action_start(
         .map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/forget",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent forgotten (files kept)", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_torrent_action_forget(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -220,6 +308,14 @@ pub async fn h_torrent_action_forget(
         .map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/delete",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Torrent deleted (files removed)", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_torrent_action_delete(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -232,10 +328,20 @@ pub async fn h_torrent_action_delete(
 }
 
 #[derive(Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct UpdateOnlyFilesRequest {
     only_files: Vec<usize>,
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/update_only_files",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    request_body(content = UpdateOnlyFilesRequest, description = "File indices to download"),
+    responses(
+        (status = 200, description = "File selection updated", body = EmptyJsonResponse)
+    )
+))]
 pub async fn h_torrent_action_update_only_files(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -248,10 +354,25 @@ pub async fn h_torrent_action_update_only_files(
         .map(axum::Json)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/stats",
+    responses(
+        (status = 200, description = "Global session stats")
+    )
+))]
 pub async fn h_session_stats(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(state.api.api_session_stats())
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/peer_stats/prometheus",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Per-peer stats in Prometheus format", body = String)
+    )
+))]
 pub async fn h_peer_stats_prometheus(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -288,6 +409,14 @@ pub async fn h_peer_stats_prometheus(
     Ok(buf)
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    get,
+    path = "/torrents/{id}/metadata",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    responses(
+        (status = 200, description = "Download .torrent file", content_type = "application/x-bittorrent")
+    )
+))]
 pub async fn h_metadata(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -319,6 +448,15 @@ struct AddPeersResult {
     added: usize,
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/add_peers",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    request_body(content = String, description = "Newline-delimited peer socket addresses"),
+    responses(
+        (status = 200, description = "Peers added")
+    )
+))]
 pub async fn h_add_peers(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,
@@ -362,6 +500,14 @@ pub struct HttpCreateTorrentOptions {
     name: Option<String>,
 }
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/create",
+    request_body(content = String, description = "Local folder path to create torrent from"),
+    responses(
+        (status = 200, description = "Torrent created and seeding")
+    )
+))]
 pub async fn h_create_torrent(
     State(state): State<ApiState>,
     axum_extra::extract::Query(opts): axum_extra::extract::Query<HttpCreateTorrentOptions>,

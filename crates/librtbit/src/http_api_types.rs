@@ -11,17 +11,20 @@ pub struct InitialPeers(pub Vec<SocketAddr>);
 pub use crate::torrent_state::peer::stats::snapshot::{PeerStatsFilter, PeerStatsSnapshot};
 
 #[derive(Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "swagger", derive(utoipa::IntoParams))]
 pub struct TorrentAddQueryParams {
     pub overwrite: Option<bool>,
     pub output_folder: Option<String>,
     pub sub_folder: Option<String>,
     pub only_files_regex: Option<String>,
+    #[cfg_attr(feature = "swagger", param(value_type = Option<String>))]
     pub only_files: Option<OnlyFiles>,
     pub peer_connect_timeout: Option<u64>,
     pub peer_read_write_timeout: Option<u64>,
+    #[cfg_attr(feature = "swagger", param(value_type = Option<String>))]
     pub initial_peers: Option<InitialPeers>,
     pub paused: Option<bool>,
-    // Will force interpreting the content as a URL.
+    /// Will force interpreting the content as a URL.
     pub is_url: Option<bool>,
     pub list_only: Option<bool>,
 }

@@ -7,8 +7,11 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 #[derive(Default, Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct LimitsConfig {
+    #[cfg_attr(feature = "swagger", schema(value_type = Option<u32>))]
     pub upload_bps: Option<NonZeroU32>,
+    #[cfg_attr(feature = "swagger", schema(value_type = Option<u32>))]
     pub download_bps: Option<NonZeroU32>,
 }
 

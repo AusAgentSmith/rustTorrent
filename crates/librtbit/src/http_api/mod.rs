@@ -25,6 +25,50 @@ mod timeout;
 #[cfg(feature = "webui")]
 mod webui;
 
+#[cfg(feature = "swagger")]
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    paths(
+        handlers::torrents::h_torrents_list,
+        handlers::torrents::h_torrents_post,
+        handlers::torrents::h_torrent_details,
+        handlers::torrents::h_torrent_haves,
+        handlers::torrents::h_torrent_stats_v0,
+        handlers::torrents::h_torrent_stats_v1,
+        handlers::torrents::h_peer_stats,
+        handlers::torrents::h_torrent_action_pause,
+        handlers::torrents::h_torrent_action_start,
+        handlers::torrents::h_torrent_action_forget,
+        handlers::torrents::h_torrent_action_delete,
+        handlers::torrents::h_torrent_action_update_only_files,
+        handlers::torrents::h_session_stats,
+        handlers::torrents::h_peer_stats_prometheus,
+        handlers::torrents::h_metadata,
+        handlers::torrents::h_add_peers,
+        handlers::torrents::h_create_torrent,
+        handlers::configure::h_update_session_ratelimits,
+        handlers::configure::h_get_session_ratelimits,
+        handlers::dht::h_dht_stats,
+        handlers::dht::h_dht_table,
+        handlers::logging::h_set_rust_log,
+        handlers::logging::h_stream_logs,
+        handlers::streaming::h_torrent_stream_file,
+        handlers::playlist::h_torrent_playlist,
+        handlers::playlist::h_global_playlist,
+        handlers::other::h_resolve_magnet,
+    ),
+    components(schemas(
+        crate::api::TorrentListResponse,
+        crate::api::TorrentDetailsResponse,
+        crate::api::TorrentDetailsResponseFile,
+        crate::api::EmptyJsonResponse,
+        crate::api::ApiAddTorrentResponse,
+        crate::limits::LimitsConfig,
+        handlers::torrents::UpdateOnlyFilesRequest,
+    ))
+)]
+struct ApiDoc;
+
 /// An HTTP server for the API.
 pub struct HttpApi {
     api: Api,
@@ -105,6 +149,16 @@ impl HttpApi {
             let webui_router = webui::make_webui_router();
             main_router = main_router.nest("/web/", webui_router);
             main_router = main_router.route("/web", get(|| async { Redirect::permanent("./web/") }))
+        }
+
+        #[cfg(feature = "swagger")]
+        {
+            use utoipa::OpenApi;
+            use utoipa_swagger_ui::SwaggerUi;
+            main_router = main_router.merge(
+                SwaggerUi::new("/swagger/{tail:.*}")
+                    .url("/api-docs/openapi.json", ApiDoc::openapi()),
+            );
         }
 
         #[cfg(feature = "prometheus")]

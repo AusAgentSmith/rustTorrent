@@ -170,6 +170,7 @@ impl TorrentIdOrHash {
 }
 
 #[derive(Deserialize, Default)]
+#[cfg_attr(feature = "swagger", derive(utoipa::IntoParams))]
 pub struct ApiTorrentListOpts {
     #[serde(default)]
     pub with_stats: bool,
@@ -514,23 +515,28 @@ impl Api {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct TorrentListResponse {
     pub torrents: Vec<TorrentDetailsResponse>,
 }
 
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct TorrentDetailsResponseFile {
     pub name: String,
     pub components: Vec<String>,
     pub length: u64,
     pub included: bool,
+    #[cfg_attr(feature = "swagger", schema(value_type = Object))]
     pub attributes: FileDetailsAttrs,
 }
 
 #[derive(Default, Serialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct EmptyJsonResponse {}
 
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct TorrentDetailsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<usize>,
@@ -544,14 +550,17 @@ pub struct TorrentDetailsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub files: Option<Vec<TorrentDetailsResponseFile>>,
     #[serde(skip_serializing_if = "Option::is_none", skip_deserializing)]
+    #[cfg_attr(feature = "swagger", schema(value_type = Object))]
     pub stats: Option<TorrentStats>,
 }
 
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
 pub struct ApiAddTorrentResponse {
     pub id: Option<usize>,
     pub details: TorrentDetailsResponse,
     pub output_folder: String,
+    #[cfg_attr(feature = "swagger", schema(value_type = Option<Vec<String>>))]
     pub seen_peers: Option<Vec<SocketAddr>>,
 }
 

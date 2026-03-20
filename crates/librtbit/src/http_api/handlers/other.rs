@@ -9,6 +9,14 @@ use crate::{
     AddTorrent, AddTorrentOptions, ListOnlyResponse, api::Result, http_api::timeout::Timeout,
 };
 
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/resolve_magnet",
+    request_body(content = String, description = "Magnet link or URL to resolve"),
+    responses(
+        (status = 200, description = "Resolved torrent file bytes", content_type = "application/x-bittorrent")
+    )
+))]
 pub async fn h_resolve_magnet(
     State(state): State<ApiState>,
     Timeout(timeout): Timeout<600_000, 3_600_000>,
