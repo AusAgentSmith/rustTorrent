@@ -1,11 +1,24 @@
-.bacon-locations
+# Build artifacts
 /target
 /crates/*/target
 /crates/*/Cargo.lock
 /desktop/src-tauri/gen/
-.DS_Store
-/perf.data*
-/flamegraph.svg
+node_modules
+
+# IDE / editor configs
+/.vscode/
+/.zed/
+/.gemini/
 .claude
 .serena/
-node_modules
+
+# OS files
+.DS_Store
+
+# Dev tools
+.bacon-locations
+/perf.data*
+/flamegraph.svg
+
+# Fetched test data
+/linux-torrents/
