@@ -14,15 +14,17 @@ import { APIContext } from "./context";
 import { RootContent } from "./components/RootContent";
 import { customSetInterval } from "./helper/customSetInterval";
 import { LogStreamModal } from "./components/modal/LogStreamModal";
-import { Header } from "./components/Header";
+import { Toolbar } from "./components/Toolbar";
+import { Sidebar } from "./components/Sidebar";
 import { useTorrentStore } from "./stores/torrentStore";
 import { useErrorStore } from "./stores/errorStore";
 import { AlertModal } from "./components/modal/AlertModal";
 import { useStatsStore } from "./stores/statsStore";
 import { Footer } from "./components/Footer";
-import { SettingsButtons } from "./components/SettingsButtons";
 import { FileSelectionModal } from "./components/modal/FileSelectionModal";
 import { MultiTorrentUploadModal } from "./components/modal/MultiTorrentUploadModal";
+import { useIsLargeScreen } from "./hooks/useIsLargeScreen";
+import { useUIStore } from "./stores/uiStore";
 
 export interface ErrorWithLabel {
   text: string;
@@ -48,6 +50,10 @@ export const RqbitWebUI = (props: {
   const setOtherError = useErrorStore((state) => state.setOtherError);
 
   const API = useContext(APIContext);
+
+  const isLargeScreen = useIsLargeScreen();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
+  const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
 
   const setTorrents = useTorrentStore((state) => state.setTorrents);
   const setTorrentsLoading = useTorrentStore(
@@ -200,7 +206,7 @@ export const RqbitWebUI = (props: {
     }
   }, []);
 
-  // Handler for FileInput multi-file selection (via Header)
+  // Handler for FileInput multi-file selection (via Toolbar)
   const handleMultiFileSelect = useCallback((files: File[]) => {
     if (files.length === 1) {
       setPendingUpload({ type: "single", file: files[0] });
@@ -211,36 +217,51 @@ export const RqbitWebUI = (props: {
 
   return (
     <div className="bg-surface h-dvh flex flex-col overflow-hidden">
-      <Header
+      <Toolbar
         title={props.title}
         version={props.version}
         onMultiFileSelect={handleMultiFileSelect}
-        settingsSlot={
-          <SettingsButtons
-            onLogsClick={() => setLogsOpened(true)}
-            menuButtons={props.menuButtons}
-          />
-        }
+        onLogsClick={() => setLogsOpened(true)}
+        menuButtons={props.menuButtons}
       />
 
-      <div
-        className="grow min-h-0 relative"
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
-        <RootContent />
-        {isDragging && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm">
-            <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center">
-              <p className="text-lg font-semibold text-primary">
-                Drop .torrent files here
-              </p>
+      <div className="flex-1 min-h-0 flex flex-row">
+        {/* Sidebar - only on large screens */}
+        {isLargeScreen && <Sidebar />}
+
+        {/* Main content area */}
+        <div
+          className="flex-1 min-h-0 relative"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          <RootContent />
+          {isDragging && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm">
+              <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center">
+                <p className="text-lg font-semibold text-primary">
+                  Drop .torrent files here
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Mobile sidebar drawer */}
+      {!isLargeScreen && sidebarOpen && (
+        <div className="fixed inset-0 z-40">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="absolute left-0 top-0 bottom-0 w-64 bg-surface shadow-xl">
+            <Sidebar />
+          </div>
+        </div>
+      )}
 
       <Footer />
 
