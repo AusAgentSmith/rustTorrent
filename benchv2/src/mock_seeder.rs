@@ -1,5 +1,6 @@
 use crate::bencode::{self, BValue};
 use anyhow::Result;
+use memmap2::Mmap;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ struct TorrentMeta {
     piece_length: u64,
     total_length: u64,
     num_pieces: usize,
+    mmap: Mmap,
     data_path: PathBuf,
 }
 
@@ -57,11 +59,23 @@ impl TorrentMeta {
             anyhow::bail!("data file missing: {}", data_path.display());
         }
 
+        let file = std::fs::File::open(&data_path)?;
+        let mmap = unsafe { Mmap::map(&file)? };
+        // Advise the OS we'll access sequentially — enables aggressive prefetch.
+        mmap.advise(memmap2::Advice::Sequential)?;
+
+        tracing::info!(
+            "mmap'd {} ({:.1} GB)",
+            data_path.display(),
+            total_length as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
+
         Ok(Self {
             info_hash,
             piece_length,
             total_length,
             num_pieces,
+            mmap,
             data_path,
         })
     }
@@ -75,14 +89,29 @@ impl TorrentMeta {
         bf
     }
 
-    fn read_block(&self, piece: u32, offset: u32, length: u32) -> Result<Vec<u8>> {
-        use std::io::{Read, Seek, SeekFrom};
+    /// Slice a block directly from the memory-mapped file — zero syscalls.
+    fn read_block(&self, piece: u32, offset: u32, length: u32) -> Result<&[u8]> {
         let file_offset = piece as u64 * self.piece_length + offset as u64;
-        let mut f = std::fs::File::open(&self.data_path)?;
-        f.seek(SeekFrom::Start(file_offset))?;
-        let mut buf = vec![0u8; length as usize];
-        f.read_exact(&mut buf)?;
-        Ok(buf)
+        let end = file_offset + length as u64;
+        if end > self.total_length {
+            anyhow::bail!(
+                "block out of range: offset {file_offset} + len {length} > {}",
+                self.total_length
+            );
+        }
+        Ok(&self.mmap[file_offset as usize..end as usize])
+    }
+
+    /// Advise the OS to drop page cache for this file's mmap region.
+    /// Used between benchmark runs to ensure fair cold-cache conditions.
+    /// Safety: MADV_DONTNEED on a file-backed mmap just evicts pages from cache;
+    /// subsequent reads re-fault from disk. No data loss.
+    fn drop_page_cache(&self) {
+        unsafe {
+            if let Err(e) = self.mmap.unchecked_advise(memmap2::UncheckedAdvice::DontNeed) {
+                tracing::warn!("MADV_DONTNEED failed for {}: {e}", self.data_path.display());
+            }
+        }
     }
 }
 
@@ -167,19 +196,18 @@ async fn handle_peer_inner(
                 let offset = u32::from_be_bytes(msg_buf[5..9].try_into()?);
                 let block_len = u32::from_be_bytes(msg_buf[9..13].try_into()?);
 
-                // Read block in blocking task to not hold the async runtime
-                let t = torrent.clone();
-                let data = tokio::task::spawn_blocking(move || t.read_block(piece, offset, block_len)).await??;
+                // Slice directly from mmap — no syscalls, no allocation
+                let data = torrent.read_block(piece, offset, block_len)?;
 
                 // Send piece message
                 let total_len = 9 + data.len();
-                let mut resp = Vec::with_capacity(4 + total_len);
-                resp.extend_from_slice(&(total_len as u32).to_be_bytes());
-                resp.push(MSG_PIECE);
-                resp.extend_from_slice(&piece.to_be_bytes());
-                resp.extend_from_slice(&offset.to_be_bytes());
-                resp.extend_from_slice(&data);
-                stream.write_all(&resp).await?;
+                let mut header = [0u8; 13];
+                header[0..4].copy_from_slice(&(total_len as u32).to_be_bytes());
+                header[4] = MSG_PIECE;
+                header[5..9].copy_from_slice(&piece.to_be_bytes());
+                header[9..13].copy_from_slice(&offset.to_be_bytes());
+                stream.write_all(&header).await?;
+                stream.write_all(data).await?;
             }
             MSG_INTERESTED => {
                 // Re-unchoke
@@ -326,6 +354,29 @@ async fn run_control_server(
                         &tracker_url, num_peers, base_port,
                     ).await;
                     let body = format!("{{\"torrents\":{count}}}");
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    )
+                }
+                "/drop-cache" => {
+                    // Advise DONTNEED on all mmap'd files to evict them from page cache.
+                    // This ensures fair cold-cache conditions between benchmark runs.
+                    let map = torrents.read().await;
+                    let mut dropped = 0usize;
+                    let mut total_bytes = 0u64;
+                    for meta in map.values() {
+                        meta.drop_page_cache();
+                        total_bytes += meta.total_length;
+                        dropped += 1;
+                    }
+                    let gb = total_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+                    tracing::info!(
+                        "Dropped page cache for {dropped} file(s), {gb:.1} GB"
+                    );
+                    let body = format!(
+                        "{{\"dropped\":{dropped},\"total_gb\":{gb:.1}}}"
+                    );
                     format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
                         body.len()

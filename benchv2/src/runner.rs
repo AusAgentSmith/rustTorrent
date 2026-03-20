@@ -116,6 +116,21 @@ async fn trigger_mock_seeder_announce() {
     }
 }
 
+/// Drop the OS page cache for all mmap'd test data on the mock seeder.
+/// This ensures neither client gets an unfair advantage from warm cache.
+async fn drop_mock_seeder_cache() {
+    let client = reqwest::Client::new();
+    match client
+        .get("http://mock-seeder:8080/drop-cache")
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+    {
+        Ok(_) => tracing::info!("  mock-seeder: page cache dropped"),
+        Err(e) => tracing::warn!("  mock-seeder: drop-cache failed: {e}"),
+    }
+}
+
 pub async fn run(
     scenario_selector: String,
     data_dir: PathBuf,
@@ -263,7 +278,8 @@ pub async fn run(
 
         tracing::info!("Seeding ready. Running downloads sequentially.");
 
-        // Run rtbit — re-announce mock peers so tracker has fresh entries
+        // Run rtbit — drop page cache + re-announce for fair cold-cache start
+        drop_mock_seeder_cache().await;
         if sc.mock_peers > 0 {
             trigger_mock_seeder_announce().await;
         }
@@ -272,7 +288,8 @@ pub async fn run(
         cleanup_rtbit(&rtbit).await;
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-        // Run qBittorrent — re-announce again for fresh tracker entries
+        // Run qBittorrent — drop page cache again for equal footing
+        drop_mock_seeder_cache().await;
         if sc.mock_peers > 0 {
             trigger_mock_seeder_announce().await;
         }
