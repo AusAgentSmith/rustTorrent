@@ -142,6 +142,16 @@ impl PeerStates {
         Some(prev)
     }
 
+    #[cfg(test)]
+    fn new_for_test() -> Self {
+        Self {
+            session_stats: Arc::new(AggregatePeerStatsAtomic::default()),
+            live_outgoing_peers: Default::default(),
+            stats: Default::default(),
+            states: Default::default(),
+        }
+    }
+
     pub(crate) fn on_steal(
         &self,
         from_peer: SocketAddr,
@@ -172,5 +182,176 @@ impl PeerStates {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+
+    use super::*;
+
+    fn addr(port: u16) -> SocketAddr {
+        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port))
+    }
+
+    /// Test that aggregate stats correctly track peer state transitions.
+    #[test]
+    fn test_peer_stats_tracking() {
+        let peers = PeerStates::new_for_test();
+
+        // Add 3 peers (all start in Queued state).
+        for port in 1..=3 {
+            peers.add_if_not_seen(addr(port));
+        }
+        let stats = peers.stats();
+        assert_eq!(stats.queued, 3);
+        assert_eq!(stats.live, 0);
+        assert_eq!(stats.dead, 0);
+    }
+
+    /// Test that peers in Dead state can be transitioned to Queued.
+    #[test]
+    fn test_dead_peer_requeue() {
+        let peers = PeerStates::new_for_test();
+        let a = addr(1);
+        peers.add_if_not_seen(a);
+
+        // Transition to Dead.
+        peers.with_peer_mut(a, "set_dead", |p| {
+            p.set_state(PeerState::Dead, &peers);
+        });
+
+        let stats = peers.stats();
+        assert_eq!(stats.dead, 1);
+        assert_eq!(stats.queued, 0);
+
+        // Re-queue the dead peer (simulating what requeue_dead_peers does).
+        peers.with_peer_mut(a, "requeue", |p| {
+            if matches!(p.get_state(), PeerState::Dead) {
+                p.stats.reset_backoff();
+                p.set_state(PeerState::Queued, &peers);
+            }
+        });
+
+        let stats = peers.stats();
+        assert_eq!(stats.dead, 0);
+        assert_eq!(stats.queued, 1);
+    }
+
+    /// Test that peers in Dead state are retained in the states table
+    /// and can be recovered via backoff reset (simulating what happens
+    /// when backoff exhaustion triggers our "frozen peer" reset logic).
+    #[test]
+    fn test_peers_not_permanently_dropped() {
+        let peers = PeerStates::new_for_test();
+        let a = addr(1);
+        peers.add_if_not_seen(a);
+
+        // Transition to Dead (as on_peer_died would do).
+        peers.with_peer_mut(a, "set_dead", |p| {
+            p.set_state(PeerState::Dead, &peers);
+        });
+
+        // The peer should exist in the states table in Dead state.
+        assert!(
+            peers.states.contains_key(&a),
+            "peer should still exist in Dead state"
+        );
+
+        let stats = peers.stats();
+        assert_eq!(stats.dead, 1);
+
+        // Simulate what our code does on backoff exhaustion: reset backoff
+        // and schedule a long retry rather than dropping.
+        peers.with_peer_mut(a, "reset_after_exhaust", |p| {
+            p.stats.reset_backoff();
+            assert!(
+                p.stats.backoff.next().is_some(),
+                "backoff should produce delays after reset"
+            );
+        });
+
+        // Peer should still be in the table.
+        assert!(
+            peers.states.contains_key(&a),
+            "peer should still exist after backoff reset"
+        );
+    }
+
+    /// Test that after setting peers to Dead and calling reset_backoff,
+    /// they can be re-queued (simulating the rediscovery trigger behavior).
+    #[test]
+    fn test_backoff_reset_on_rediscovery() {
+        let peers = PeerStates::new_for_test();
+
+        // Add several peers and set them all to Dead with advanced backoffs.
+        for port in 1..=5 {
+            let a = addr(port);
+            peers.add_if_not_seen(a);
+            peers.with_peer_mut(a, "set_dead", |p| {
+                p.set_state(PeerState::Dead, &peers);
+                // Advance backoff significantly.
+                for _ in 0..20 {
+                    p.stats.backoff.next();
+                }
+            });
+        }
+
+        let stats = peers.stats();
+        assert_eq!(stats.dead, 5);
+        assert_eq!(stats.queued, 0);
+
+        // Simulate rediscovery: reset backoffs and re-queue all dead peers.
+        let mut requeued = 0u32;
+        for mut entry in peers.states.iter_mut() {
+            let peer = entry.value_mut();
+            if matches!(peer.get_state(), PeerState::Dead) {
+                peer.stats.reset_backoff();
+                peer.set_state(PeerState::Queued, &peers);
+                requeued += 1;
+            }
+        }
+
+        assert_eq!(requeued, 5);
+        let stats = peers.stats();
+        assert_eq!(stats.dead, 0);
+        assert_eq!(stats.queued, 5);
+
+        // Verify all peers have functional backoffs.
+        for mut entry in peers.states.iter_mut() {
+            let peer = entry.value_mut();
+            assert!(
+                peer.stats.backoff.next().is_some(),
+                "peer should have functional backoff after reset"
+            );
+        }
+    }
+
+    /// Test that the active peer count (live + connecting) is correctly computed.
+    #[test]
+    fn test_active_peer_count() {
+        let peers = PeerStates::new_for_test();
+
+        // Initially: no peers.
+        let stats = peers.stats();
+        assert_eq!(stats.live + stats.connecting, 0);
+
+        // Add 3 peers (Queued state).
+        for port in 1..=3 {
+            peers.add_if_not_seen(addr(port));
+        }
+
+        // All in Queued, none are "active".
+        let stats = peers.stats();
+        assert_eq!(stats.live + stats.connecting, 0);
+        assert_eq!(stats.queued, 3);
+
+        // Transition peer 1 to Connecting.
+        let a1 = addr(1);
+        peers.mark_peer_connecting(a1).unwrap();
+        let stats = peers.stats();
+        assert_eq!(stats.connecting, 1);
+        assert_eq!(stats.live + stats.connecting, 1);
     }
 }

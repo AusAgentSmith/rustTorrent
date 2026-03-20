@@ -45,7 +45,7 @@ impl Session {
     }
 
     // Get a peer stream from both DHT and trackers.
-    pub(super) fn make_peer_rx(
+    pub(crate) fn make_peer_rx(
         self: &Arc<Self>,
         info_hash: Id20,
         mut trackers: Vec<url::Url>,

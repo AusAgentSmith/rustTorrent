@@ -404,7 +404,10 @@ impl ManagedTorrent {
                     Ok(())
                 }
                 ManagedTorrentState::Error(_) => {
-                    let metadata = t.metadata.load_full().context("torrent metadata was not loaded")?;
+                    let metadata = t
+                        .metadata
+                        .load_full()
+                        .context("torrent metadata was not loaded")?;
                     let initializing = Arc::new(TorrentStateInitializing::new(
                         t.shared.clone(),
                         metadata.clone(),
@@ -650,7 +653,7 @@ fn spawn_fatal_errors_receiver(
     );
 }
 
-fn spawn_peer_adder(live: &Arc<TorrentStateLive>, mut peer_rx: PeerStream) {
+fn spawn_peer_adder(live: &Arc<TorrentStateLive>, peer_rx: PeerStream) {
     live.spawn(
         debug_span!(parent: live.torrent().span.clone(), "external_peer_adder"),
         format!("[{}]external_peer_adder", live.shared.id),
@@ -663,29 +666,83 @@ fn spawn_peer_adder(live: &Arc<TorrentStateLive>, mut peer_rx: PeerStream) {
                     weak
                 };
 
+                drain_peer_stream(&live, peer_rx).await?;
+
+                // The initial peer stream is exhausted. Now wait for rediscovery
+                // signals and create new peer streams on demand.
+                debug!("initial peer_rx exhausted, waiting for rediscovery signals");
                 loop {
-                    match timeout(Duration::from_secs(5), peer_rx.next()).await {
-                        Ok(Some(peer)) => {
-                            trace!(?peer, "received peer");
-                            let live = match live.upgrade() {
-                                Some(live) => live,
-                                None => return Ok(()),
-                            };
-                            live.add_peer_if_not_seen(peer)?;
-                        }
-                        Ok(None) => {
-                            debug!("peer_rx closed, closing peer adder");
-                            return Ok(());
-                        }
-                        // If timeout, check if the torrent is live.
-                        Err(_) if live.strong_count() == 0 => {
-                            debug!("timed out waiting for peers, torrent isn't live, closing peer adder");
-                            return Ok(());
-                        }
-                        Err(_) => continue,
+                    let state = match live.upgrade() {
+                        Some(s) => s,
+                        None => return Ok(()),
+                    };
+
+                    // Wait for rediscovery_notify to be signaled by the health monitor.
+                    // We must hold the Arc alive while awaiting since Notified borrows Notify.
+                    state.rediscovery_notify.notified().await;
+
+                    // Don't re-discover if we're finished.
+                    if state.is_finished_and_no_active_streams() {
+                        continue;
+                    }
+
+                    debug!(
+                        id = state.shared.id,
+                        "rediscovery signal received, requesting new peers from DHT/trackers"
+                    );
+
+                    let session = match state.shared.session.upgrade() {
+                        Some(s) => s,
+                        None => return Ok(()),
+                    };
+
+                    // Create a fresh peer stream from DHT and trackers.
+                    let is_private = state.metadata.info.info().private;
+                    let new_peer_rx = session.make_peer_rx(
+                        state.shared.info_hash,
+                        state.shared.trackers.iter().cloned().collect(),
+                        true, // announce
+                        state.shared.options.force_tracker_interval,
+                        Vec::new(), // no initial peers on re-discovery
+                        is_private,
+                    );
+                    drop(state);
+
+                    if let Some(rx) = new_peer_rx {
+                        drain_peer_stream(&live, rx).await?;
+                        debug!("rediscovery peer stream exhausted");
                     }
                 }
             }
         },
     );
+}
+
+/// Drains a peer stream, adding each discovered peer to the torrent.
+/// Returns when the stream ends or the torrent is no longer live.
+async fn drain_peer_stream(
+    live: &std::sync::Weak<TorrentStateLive>,
+    mut peer_rx: PeerStream,
+) -> crate::Result<()> {
+    loop {
+        match timeout(Duration::from_secs(5), peer_rx.next()).await {
+            Ok(Some(peer)) => {
+                trace!(?peer, "received peer");
+                let state = match live.upgrade() {
+                    Some(state) => state,
+                    None => return Ok(()),
+                };
+                state.add_peer_if_not_seen(peer)?;
+            }
+            Ok(None) => {
+                return Ok(());
+            }
+            // If timeout, check if the torrent is live.
+            Err(_) if live.strong_count() == 0 => {
+                debug!("timed out waiting for peers, torrent isn't live");
+                return Ok(());
+            }
+            Err(_) => continue,
+        }
+    }
 }

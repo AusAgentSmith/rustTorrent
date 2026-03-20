@@ -164,6 +164,19 @@ pub enum AddIncomingPeerResult {
     ConcurrencyLimitReached,
 }
 
+/// Minimum number of active (live + connecting) peers before triggering re-discovery.
+const MIN_PEERS_THRESHOLD: u32 = 5;
+
+/// Minimum interval between re-discovery attempts to prevent spamming.
+const REDISCOVERY_COOLDOWN: Duration = Duration::from_secs(30);
+
+/// How often the peer health monitor checks peer counts.
+const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+
+/// Long backoff duration assigned to peers whose backoff was exhausted,
+/// so they are retried eventually rather than dropped permanently.
+const FROZEN_PEER_RETRY_INTERVAL: Duration = Duration::from_secs(600);
+
 pub struct TorrentStateLive {
     pub(crate) peers: PeerStates,
     pub(crate) shared: Arc<ManagedTorrentShared>,
@@ -185,6 +198,10 @@ pub struct TorrentStateLive {
 
     pub(crate) finished_notify: Notify,
     pub(crate) new_pieces_notify: Notify,
+
+    /// Notified when active peer count drops below threshold,
+    /// signaling that new peer discovery should be triggered.
+    pub(crate) rediscovery_notify: Notify,
 
     pub(crate) down_speed_estimator: SpeedEstimator,
     pub(crate) up_speed_estimator: SpeedEstimator,
@@ -270,6 +287,7 @@ impl TorrentStateLive {
             new_pieces_notify: Notify::new(),
             peer_queue_tx,
             finished_notify: Notify::new(),
+            rediscovery_notify: Notify::new(),
             down_speed_estimator,
             up_speed_estimator,
             cancellation_token,
@@ -324,6 +342,13 @@ impl TorrentStateLive {
             format!("[{}]upload_scheduler", state.shared.id),
             state.clone().task_upload_scheduler(ratelimit_upload_rx),
         );
+
+        state.spawn(
+            debug_span!(parent: state.shared.span.clone(), "peer_health_monitor"),
+            format!("[{}]peer_health_monitor", state.shared.id),
+            state.clone().task_peer_health_monitor(),
+        );
+
         Ok(state)
     }
 
@@ -664,5 +689,37 @@ impl TorrentStateLive {
             .map(|socket_addr| self.peer_queue_tx.send(socket_addr))
             .take_while(|r| r.is_ok())
             .last();
+    }
+
+    /// Returns the number of active peers (live + connecting).
+    pub(crate) fn get_active_peer_count(&self) -> u32 {
+        let stats = self.peers.stats();
+        stats.live + stats.connecting
+    }
+
+    /// Reset backoff timers for all dead peers and re-queue them.
+    /// This is called during re-discovery to give dead peers another chance.
+    pub(crate) fn requeue_dead_peers(&self) {
+        let mut requeued = 0u32;
+        for mut entry in self.peers.states.iter_mut() {
+            let peer = entry.value_mut();
+            if matches!(peer.get_state(), PeerState::Dead) {
+                peer.stats.reset_backoff();
+                peer.set_state(PeerState::Queued, &self.peers);
+                let addr = peer.addr;
+                // Don't hold the lock while sending
+                drop(entry);
+                if self.peer_queue_tx.send(addr).is_err() {
+                    break;
+                }
+                requeued += 1;
+            }
+        }
+        if requeued > 0 {
+            debug!(
+                id = self.shared.id,
+                requeued, "re-queued dead peers during rediscovery"
+            );
+        }
     }
 }

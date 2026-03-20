@@ -11,10 +11,7 @@ use std::{
 
 use parking_lot::RwLock;
 use peer_binary_protocol::extended;
-use tokio::sync::{
-    OwnedSemaphorePermit, Semaphore,
-    mpsc::UnboundedReceiver,
-};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc::UnboundedReceiver};
 use tracing::{Instrument, debug, debug_span, trace};
 
 use crate::{
@@ -256,6 +253,65 @@ impl TorrentStateLive {
                 format!("[{}][addr={addr}]manage_peer", state.shared.id),
                 aframe!(state.clone().task_manage_outgoing_peer(addr, permit)),
             );
+        }
+    }
+
+    /// Periodically checks the number of active peers. When the count drops
+    /// below [`super::MIN_PEERS_THRESHOLD`] and the torrent is not finished,
+    /// it triggers re-discovery by notifying `rediscovery_notify`, which in
+    /// turn causes the external peer adder to request new peers from DHT and
+    /// trackers. It also re-queues dead peers so they can be retried.
+    pub(crate) async fn task_peer_health_monitor(self: Arc<Self>) -> crate::Result<()> {
+        use super::{MIN_PEERS_THRESHOLD, PEER_HEALTH_CHECK_INTERVAL, REDISCOVERY_COOLDOWN};
+        use std::time::Instant;
+
+        let mut last_rediscovery: Option<Instant> = None;
+
+        loop {
+            tokio::time::sleep(PEER_HEALTH_CHECK_INTERVAL).await;
+
+            // Don't bother with re-discovery if the torrent is finished.
+            if self.is_finished_and_no_active_streams() {
+                trace!("peer health monitor: torrent finished, skipping check");
+                continue;
+            }
+
+            let active_peers = self.get_active_peer_count();
+            if active_peers >= MIN_PEERS_THRESHOLD {
+                trace!(
+                    active_peers,
+                    threshold = MIN_PEERS_THRESHOLD,
+                    "peer health monitor: sufficient peers"
+                );
+                continue;
+            }
+
+            // Enforce cooldown to prevent spamming.
+            if let Some(last) = last_rediscovery
+                && last.elapsed() < REDISCOVERY_COOLDOWN
+            {
+                trace!(
+                    active_peers,
+                    cooldown_remaining_ms = (REDISCOVERY_COOLDOWN - last.elapsed()).as_millis(),
+                    "peer health monitor: rediscovery cooldown active"
+                );
+                continue;
+            }
+
+            debug!(
+                id = self.shared.id,
+                active_peers,
+                threshold = MIN_PEERS_THRESHOLD,
+                "peer health monitor: low peer count, triggering re-discovery"
+            );
+
+            last_rediscovery = Some(Instant::now());
+
+            // Re-queue dead peers so they get another chance.
+            self.requeue_dead_peers();
+
+            // Signal to the external peer adder that we need new peers.
+            self.rediscovery_notify.notify_waiters();
         }
     }
 
