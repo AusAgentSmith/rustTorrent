@@ -74,7 +74,7 @@ pub async fn exec_in_container(
         .await?;
 
     let mut output = String::new();
-    if let bollard::exec::StartExecResults::Attached { mut output: stream, .. } =
+    if let bollard::exec::StartExecResults::Attached { output: mut stream, .. } =
         docker.start_exec(&exec.id, None).await?
     {
         while let Some(Ok(chunk)) = stream.next().await {
