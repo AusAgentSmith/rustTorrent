@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TorrentListItem } from "../../api-types";
-import { ActionBar } from "./ActionBar";
 import { TorrentTable } from "./TorrentTable";
 import { DetailPane } from "./DetailPane";
 
@@ -60,7 +59,6 @@ export const CompactLayout: React.FC<CompactLayoutProps> = ({
 
   return (
     <div ref={containerRef} className="flex flex-col h-full">
-      {hasTorrents && <ActionBar />}
       <div className="flex-1 overflow-auto min-h-0">
         <TorrentTable torrents={torrents} loading={loading} />
       </div>

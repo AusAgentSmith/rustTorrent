@@ -32,6 +32,13 @@ export interface UIStore {
   selectAll: (ids: number[]) => void;
   selectRelative: (direction: "up" | "down", orderedIds: number[]) => void;
 
+  sidebarCollapsed: boolean;
+  sidebarOpen: boolean; // for mobile drawer
+  trackerFilter: string | null;
+  toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
+  setTrackerFilter: (tracker: string | null) => void;
+
   detailsModalTorrentId: number | null;
   openDetailsModal: (id: number) => void;
   closeDetailsModal: () => void;
@@ -173,6 +180,14 @@ export const useUIStore = create<UIStore>((set, get) => ({
     const newId = orderedIds[newIdx];
     set({ selectedTorrentIds: new Set([newId]), lastSelectedId: newId });
   },
+
+  sidebarCollapsed: false,
+  sidebarOpen: false,
+  trackerFilter: null,
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setTrackerFilter: (tracker) => set({ trackerFilter: tracker }),
 
   detailsModalTorrentId: null,
   openDetailsModal: (id) =>
