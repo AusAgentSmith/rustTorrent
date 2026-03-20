@@ -18,6 +18,7 @@ jobs:
           script: |
             cd ~/rustTorrent || { git clone https://gitea.sprooty.com/sprooty/rustTorrent.git ~/rustTorrent && cd ~/rustTorrent; }
             git pull
+            docker stop rqbit 2>/dev/null; docker rm rqbit 2>/dev/null
             docker compose up --build -d
             echo "Waiting for rtbit to start..."
             for i in $(seq 1 12); do
