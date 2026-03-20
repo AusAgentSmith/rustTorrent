@@ -3,6 +3,7 @@ pub(crate) mod dht;
 pub(crate) mod logging;
 pub(crate) mod other;
 pub(crate) mod playlist;
+pub(crate) mod qbit_compat;
 pub(crate) mod streaming;
 pub(crate) mod torrents;
 

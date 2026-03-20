@@ -216,6 +216,13 @@ impl HttpApi {
             ));
         }
 
+        // qBittorrent WebUI API v2 compatibility layer.
+        // Mounted after basic auth so it handles its own cookie-based auth.
+        {
+            let qbit_router = handlers::qbit_compat::make_qbit_router(state.clone());
+            main_router = main_router.nest("/api/v2", qbit_router);
+        }
+
         if let Some(upnp_router) = upnp_router {
             main_router = main_router.nest("/upnp", upnp_router);
         }
