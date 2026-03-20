@@ -1,5 +1,11 @@
 import { createContext } from "react";
-import { DhtStats, LimitsConfig, RqbitAPI, SessionStats } from "./api-types";
+import {
+  CategoryInfo,
+  DhtStats,
+  LimitsConfig,
+  RqbitAPI,
+  SessionStats,
+} from "./api-types";
 
 export const APIContext = createContext<RqbitAPI>({
   listTorrents: () => {
@@ -60,6 +66,21 @@ export const APIContext = createContext<RqbitAPI>({
     throw new Error("Function not implemented.");
   },
   getMetadata: function (index: number): Promise<Uint8Array> {
+    throw new Error("Function not implemented.");
+  },
+  getCategories: function (): Promise<Record<string, CategoryInfo>> {
+    throw new Error("Function not implemented.");
+  },
+  createCategory: function (name: string, savePath?: string): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  deleteCategory: function (name: string): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  setTorrentCategory: function (
+    torrentId: number,
+    category: string | null,
+  ): Promise<void> {
     throw new Error("Function not implemented.");
   },
 });

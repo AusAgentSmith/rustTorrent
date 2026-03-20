@@ -4,6 +4,7 @@ import {
   SortDirection,
   StatusFilter,
 } from "../helper/torrentFilters";
+import { CategoryInfo } from "../api-types";
 
 const LARGE_SCREEN_BREAKPOINT = 1024;
 
@@ -35,9 +36,15 @@ export interface UIStore {
   sidebarCollapsed: boolean;
   sidebarOpen: boolean; // for mobile drawer
   trackerFilter: string | null;
+  categoryFilter: string | null; // null = show all, "" = uncategorized, string = filter to category
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setTrackerFilter: (tracker: string | null) => void;
+  setCategoryFilter: (category: string | null) => void;
+
+  // Category management
+  categories: Record<string, CategoryInfo>;
+  setCategories: (categories: Record<string, CategoryInfo>) => void;
 
   detailsModalTorrentId: number | null;
   openDetailsModal: (id: number) => void;
@@ -184,10 +191,15 @@ export const useUIStore = create<UIStore>((set, get) => ({
   sidebarCollapsed: false,
   sidebarOpen: false,
   trackerFilter: null,
+  categoryFilter: null,
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setTrackerFilter: (tracker) => set({ trackerFilter: tracker }),
+  setCategoryFilter: (category) => set({ categoryFilter: category }),
+
+  categories: {},
+  setCategories: (categories) => set({ categories }),
 
   detailsModalTorrentId: null,
   openDetailsModal: (id) =>

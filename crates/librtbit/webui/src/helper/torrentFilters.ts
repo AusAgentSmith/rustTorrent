@@ -10,7 +10,8 @@ export type TorrentSortColumn =
   | "progress"
   | "downSpeed"
   | "upSpeed"
-  | "eta";
+  | "eta"
+  | "category";
 
 export type SortDirection = "asc" | "desc";
 
@@ -31,6 +32,7 @@ export const SORT_COLUMN_LABELS: Record<TorrentSortColumn, string> = {
   downSpeed: "Down Speed",
   upSpeed: "Up Speed",
   eta: "ETA",
+  category: "Category",
 };
 
 // Status filter display labels
@@ -70,6 +72,8 @@ export function getSortValue(
       if (speed <= 0 || remaining <= 0) return remaining <= 0 ? 0 : Infinity;
       return remaining / (speed * 1024 * 1024);
     }
+    case "category":
+      return (t.category ?? "").toLowerCase();
   }
 }
 
@@ -93,6 +97,16 @@ export function compareTorrents(
 export function matchesSearch(name: string | null, query: string): boolean {
   if (!query) return true;
   return (name ?? "").toLowerCase().includes(query);
+}
+
+// Check if torrent matches category filter
+export function matchesCategory(
+  torrent: TorrentListItem,
+  categoryFilter: string | null,
+): boolean {
+  if (categoryFilter === null) return true;
+  if (categoryFilter === "") return !torrent.category; // uncategorized
+  return torrent.category === categoryFilter;
 }
 
 // Check if torrent matches status filter
@@ -122,6 +136,11 @@ export function isTorrentVisible(
   t: TorrentListItem,
   searchQuery: string,
   statusFilter: StatusFilter,
+  categoryFilter?: string | null,
 ): boolean {
-  return matchesSearch(t.name, searchQuery) && matchesStatus(t, statusFilter);
+  return (
+    matchesSearch(t.name, searchQuery) &&
+    matchesStatus(t, statusFilter) &&
+    matchesCategory(t, categoryFilter ?? null)
+  );
 }

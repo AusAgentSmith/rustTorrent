@@ -9,6 +9,7 @@ import { BsChevronLeft, BsChevronRight, BsCollection } from "react-icons/bs";
 import { useUIStore } from "../stores/uiStore";
 import { useTorrentStore } from "../stores/torrentStore";
 import { StatusFilter } from "../helper/torrentFilters";
+import { CategoryFilter } from "./compact/CategoryFilter";
 
 interface FilterItem {
   key: StatusFilter;
@@ -146,6 +147,9 @@ export const Sidebar: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {/* Categories section */}
+        <CategoryFilter />
       </div>
       <button
         onClick={toggleSidebar}

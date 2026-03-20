@@ -1,5 +1,6 @@
 import {
   AddTorrentResponse,
+  CategoryInfo,
   DhtStats,
   ErrorDetails,
   LimitsConfig,
@@ -148,6 +149,9 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
     if (opts?.output_folder) {
       url += `&output_folder=${opts.output_folder}`;
     }
+    if (opts?.category) {
+      url += `&category=${encodeURIComponent(opts.category)}`;
+    }
     if (typeof data === "string") {
       url += "&is_url=true";
     }
@@ -217,6 +221,34 @@ export const API: RqbitAPI & { getVersion: () => Promise<string> } = {
   getMetadata: async (index: number): Promise<Uint8Array> => {
     return new Uint8Array(
       await makeBinaryRequest(`/torrents/${index}/metadata`),
+    );
+  },
+  getCategories: (): Promise<Record<string, CategoryInfo>> => {
+    return makeRequest("GET", "/torrents/categories");
+  },
+  createCategory: (name: string, savePath?: string): Promise<void> => {
+    return makeRequest(
+      "POST",
+      "/torrents/categories",
+      { name, save_path: savePath },
+      true,
+    );
+  },
+  deleteCategory: (name: string): Promise<void> => {
+    return makeRequest(
+      "DELETE",
+      `/torrents/categories/${encodeURIComponent(name)}`,
+    );
+  },
+  setTorrentCategory: (
+    torrentId: number,
+    category: string | null,
+  ): Promise<void> => {
+    return makeRequest(
+      "POST",
+      `/torrents/${torrentId}/set_category`,
+      { category },
+      true,
     );
   },
 };

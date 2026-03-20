@@ -1,3 +1,4 @@
+import { useContext, useEffect, useState } from "react";
 import {
   TorrentListItem,
   STATE_INITIALIZING,
@@ -7,6 +8,9 @@ import {
 import { formatBytes } from "../../helper/formatBytes";
 import { getCompletionETA } from "../../helper/getCompletionETA";
 import { PiecesCanvas } from "./PiecesCanvas";
+import { APIContext } from "../../context";
+import { useUIStore } from "../../stores/uiStore";
+import { useTorrentStore } from "../../stores/torrentStore";
 
 interface OverviewTabProps {
   torrent: TorrentListItem | null;
@@ -25,7 +29,23 @@ const LV: React.FC<{
 );
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ torrent }) => {
+  const API = useContext(APIContext);
+  const categories = useUIStore((state) => state.categories);
+  const setCategories = useUIStore((state) => state.setCategories);
+  const refreshTorrents = useTorrentStore((state) => state.refreshTorrents);
+  const [editingCategory, setEditingCategory] = useState(false);
+  const [categoryValue, setCategoryValue] = useState("");
+
   const statsResponse = torrent?.stats ?? null;
+
+  // Fetch categories if not loaded yet
+  useEffect(() => {
+    if (Object.keys(categories).length === 0) {
+      API.getCategories()
+        .then((cats) => setCategories(cats))
+        .catch(() => {});
+    }
+  }, [API, categories, setCategories]);
 
   if (!torrent || !statsResponse) {
     return <div className="p-3 text-tertiary">Loading...</div>;
@@ -158,6 +178,44 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ torrent }) => {
         </div>
         <div className="truncate">
           <LV label="Output" value={torrent.output_folder} mono />
+        </div>
+        <div className="flex items-center gap-2">
+          <LV label="Category" value="" />
+          {editingCategory ? (
+            <select
+              value={categoryValue}
+              onChange={(e) => {
+                const newCat = e.target.value;
+                setCategoryValue(newCat);
+                API.setTorrentCategory(torrent.id, newCat || null)
+                  .then(() => refreshTorrents())
+                  .catch(() => {});
+                setEditingCategory(false);
+              }}
+              onBlur={() => setEditingCategory(false)}
+              autoFocus
+              className="px-1 py-0.5 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary"
+            >
+              <option value="">None</option>
+              {Object.keys(categories)
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <button
+              onClick={() => {
+                setCategoryValue(torrent.category ?? "");
+                setEditingCategory(true);
+              }}
+              className="text-sm text-primary hover:underline cursor-pointer"
+            >
+              {torrent.category || "None"}
+            </button>
+          )}
         </div>
       </div>
 

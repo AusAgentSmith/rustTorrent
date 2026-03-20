@@ -15,7 +15,8 @@ export type ColumnId =
   | "peers"
   | "state"
   | "info_hash"
-  | "ratio";
+  | "ratio"
+  | "category";
 
 export interface ColumnDef {
   id: ColumnId;
@@ -175,6 +176,16 @@ export const COLUMN_DEFS: ColumnDef[] = [
     defaultWidth: 64,
     minWidth: 50,
     align: "right",
+    defaultVisible: false,
+    configurable: true,
+    sortable: true,
+  },
+  {
+    id: "category",
+    label: "Category",
+    defaultWidth: 120,
+    minWidth: 60,
+    align: "left",
     defaultVisible: false,
     configurable: true,
     sortable: true,

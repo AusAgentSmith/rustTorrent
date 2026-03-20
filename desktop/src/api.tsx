@@ -1,6 +1,7 @@
 import { RqbitDesktopConfig } from "./configuration";
 import {
   AddTorrentResponse,
+  CategoryInfo,
   LimitsConfig,
   ListTorrentsResponse,
   RqbitAPI,
@@ -176,6 +177,22 @@ export const makeAPI = (configuration: RqbitDesktopConfig): RqbitAPI => {
       return new Uint8Array(
         await invokeAPI<ArrayBuffer>("torrent_metadata", { id: index }),
       );
+    },
+    getCategories: (): Promise<Record<string, CategoryInfo>> => {
+      // Desktop category support requires backend implementation
+      return Promise.resolve({});
+    },
+    createCategory: (_name: string, _savePath?: string): Promise<void> => {
+      return Promise.resolve();
+    },
+    deleteCategory: (_name: string): Promise<void> => {
+      return Promise.resolve();
+    },
+    setTorrentCategory: (
+      _torrentId: number,
+      _category: string | null,
+    ): Promise<void> => {
+      return Promise.resolve();
     },
   };
 };
