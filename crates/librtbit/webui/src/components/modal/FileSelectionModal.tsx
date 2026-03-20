@@ -33,7 +33,7 @@ export const FileSelectionModal = (props: {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<ErrorWithLabel | null>(null);
   const [unpopularTorrent, setUnpopularTorrent] = useState(false);
-  const [outputFolder, setOutputFolder] = useState<string>("/downloads");
+  const [outputFolder, setOutputFolder] = useState<string>("");
   const refreshTorrents = useTorrentStore((state) => state.refreshTorrents);
   const API = useContext(APIContext);
 
@@ -49,7 +49,7 @@ export const FileSelectionModal = (props: {
         }),
       ),
     );
-    setOutputFolder(listTorrentResponse?.output_folder || "/downloads");
+    setOutputFolder(listTorrentResponse?.output_folder || "");
   }, [listTorrentResponse]);
 
   const clear = () => {
@@ -117,6 +117,7 @@ export const FileSelectionModal = (props: {
             label="Output folder"
             name="output_folder"
             inputType="text"
+            placeholder="Server default"
             value={outputFolder}
             onChange={(e) => setOutputFolder(e.target.value)}
           />

@@ -29,7 +29,7 @@ export const MultiTorrentUploadModal = ({
   const API = useContext(APIContext);
   const refreshTorrents = useTorrentStore((state) => state.refreshTorrents);
 
-  const [outputFolder, setOutputFolder] = useState("/downloads");
+  const [outputFolder, setOutputFolder] = useState("");
   const [startTorrent, setStartTorrent] = useState(true);
   const [entries, setEntries] = useState<FileEntry[]>(
     files.map((file) => ({ file, status: "pending" })),
@@ -88,6 +88,7 @@ export const MultiTorrentUploadModal = ({
             label="Output folder"
             name="multi_output_folder"
             inputType="text"
+            placeholder="Server default"
             value={outputFolder}
             onChange={(e) => setOutputFolder(e.target.value)}
           />
