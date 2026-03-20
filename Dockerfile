@@ -10,6 +10,9 @@ WORKDIR /src/
 
 ENV OPENSSL_STATIC=1
 
+# Remove desktop workspace member (excluded by .dockerignore, needs glib)
+RUN sed -i '/"desktop\/src-tauri"/d' Cargo.toml
+
 RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/cache \
     --mount=type=cache,target=/usr/local/cargo/registry/index \
