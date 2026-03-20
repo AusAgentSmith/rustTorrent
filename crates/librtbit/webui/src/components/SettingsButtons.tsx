@@ -8,11 +8,13 @@ import { ConfigModal } from "./config/ConfigModal";
 interface SettingsButtonsProps {
   onLogsClick: () => void;
   menuButtons?: JSX.Element[];
+  version?: string;
 }
 
 export const SettingsButtons: React.FC<SettingsButtonsProps> = ({
   onLogsClick,
   menuButtons,
+  version,
 }) => {
   const [isDark, setIsDark] = useState(DarkMode.isDark());
   const [configOpen, setConfigOpen] = useState(false);
@@ -39,6 +41,7 @@ export const SettingsButtons: React.FC<SettingsButtonsProps> = ({
           <ConfigModal
             isOpen={configOpen}
             onClose={() => setConfigOpen(false)}
+            version={version}
           />
         </>
       )}

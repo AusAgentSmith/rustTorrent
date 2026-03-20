@@ -219,6 +219,7 @@ export const RqbitWebUI = (props: {
           <SettingsButtons
             onLogsClick={() => setLogsOpened(true)}
             menuButtons={props.menuButtons}
+            version={props.version}
           />
         }
       />

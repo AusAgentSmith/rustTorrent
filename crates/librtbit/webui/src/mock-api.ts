@@ -3,6 +3,7 @@
 
 import {
   AddTorrentResponse,
+  DhtStats,
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
@@ -593,5 +594,19 @@ export const MockAPI: RqbitAPI & { getVersion: () => Promise<string> } = {
 
   setLimits: async (): Promise<void> => {
     await new Promise((r) => setTimeout(r, 50));
+  },
+
+  getDhtStats: async (): Promise<DhtStats> => {
+    return {
+      id: "mock-dht-node-id-abc123def456",
+      outstanding_requests: 5,
+      seen_peers: 1234,
+      have_peers: 567,
+      inflight_peers: 12,
+    };
+  },
+
+  setRustLog: async (): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 100));
   },
 };
