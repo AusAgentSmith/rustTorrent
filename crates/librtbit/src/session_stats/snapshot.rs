@@ -94,7 +94,7 @@ impl SessionStatsSnapshot {
         m!(gauge, rqbit_peers_dead, self.peers.dead);
         m!(gauge, rqbit_peers_not_needed, self.peers.not_needed);
         m!(gauge, rqbit_peers_queued, self.peers.queued);
-        m!(gauge, rqbit_peers_queued, self.peers.seen);
+        m!(gauge, rqbit_peers_seen, self.peers.seen);
         m!(gauge, rqbit_peers_steals, self.peers.steals);
     }
 }
