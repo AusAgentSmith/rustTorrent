@@ -1,5 +1,7 @@
 use anyhow::Result;
 use bollard::Docker;
+use bollard::exec::{CreateExecOptions, StartExecResults};
+use futures_util::StreamExt;
 use std::collections::HashMap;
 
 /// Connect to the Docker daemon via the Unix socket.
@@ -36,4 +38,49 @@ pub async fn get_service_ips(docker: &Docker, service: &str) -> Result<Vec<Strin
         }
     }
     Ok(ips)
+}
+
+/// Find the container ID for a compose service.
+pub async fn get_container_id(docker: &Docker, service: &str) -> Option<String> {
+    let filters = HashMap::from([(
+        "label".to_string(),
+        vec![format!("com.docker.compose.service={service}")],
+    )]);
+    let containers = docker
+        .list_containers(Some(bollard::container::ListContainersOptions {
+            filters,
+            ..Default::default()
+        }))
+        .await
+        .ok()?;
+    containers.first()?.id.clone()
+}
+
+/// Execute a command in a running container and return stdout.
+pub async fn exec_in_container(
+    docker: &Docker,
+    container_id: &str,
+    cmd: Vec<&str>,
+) -> Result<String> {
+    let exec = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+    let mut output = String::new();
+    if let StartExecResults::Attached { mut output: stream, .. } =
+        docker.start_exec(&exec.id, None).await?
+    {
+        while let Some(Ok(chunk)) = stream.next().await {
+            output.push_str(&chunk.to_string());
+        }
+    }
+    Ok(output)
 }

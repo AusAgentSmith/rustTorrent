@@ -76,7 +76,7 @@ impl MetricsCollector {
                 ("query", query),
                 ("start", &start.to_string()),
                 ("end", &end.to_string()),
-                ("step", "2s"),
+                ("step", "1s"),
             ])
             .timeout(std::time::Duration::from_secs(30))
             .send()
@@ -131,13 +131,13 @@ impl MetricsCollector {
         let cpu_f = format!("{f},cpu=\"total\"");
 
         // Pre-build query strings (need stable borrows for tokio::join!)
-        let q_cpu = format!("rate(container_cpu_usage_seconds_total{{{cpu_f}}}[10s]) * 100");
+        let q_cpu = format!("rate(container_cpu_usage_seconds_total{{{cpu_f}}}[2s]) * 100");
         let q_mem = format!("container_memory_working_set_bytes{{{f}}}");
-        let q_rx = format!("rate(container_network_receive_bytes_total{{{f}}}[10s])");
-        let q_tx = format!("rate(container_network_transmit_bytes_total{{{f}}}[10s])");
-        let q_dr = format!("rate(container_fs_reads_bytes_total{{{f}}}[10s])");
-        let q_dw = format!("rate(container_fs_writes_bytes_total{{{f}}}[10s])");
-        let q_io = r#"avg(rate(node_cpu_seconds_total{mode="iowait"}[10s])) * 100"#;
+        let q_rx = format!("rate(container_network_receive_bytes_total{{{f}}}[2s])");
+        let q_tx = format!("rate(container_network_transmit_bytes_total{{{f}}}[2s])");
+        let q_dr = format!("rate(container_fs_reads_bytes_total{{{f}}}[2s])");
+        let q_dw = format!("rate(container_fs_writes_bytes_total{{{f}}}[2s])");
+        let q_io = r#"avg(rate(node_cpu_seconds_total{mode="iowait"}[2s])) * 100"#;
 
         // Fire all queries concurrently
         let (cpu, mem, net_rx, net_tx, disk_r, disk_w, iowait) = tokio::join!(
@@ -158,7 +158,7 @@ impl MetricsCollector {
             }
         }
         all_ts.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        all_ts.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+        all_ts.dedup_by(|a, b| (*a - *b).abs() < 0.8);
 
         let lookup = |series: &[(f64, f64)], ts: f64| -> f64 {
             series

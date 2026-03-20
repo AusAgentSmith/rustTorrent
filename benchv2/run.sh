@@ -19,8 +19,8 @@ usage() {
     echo "  --help              Show this help"
     echo ""
     echo "Scenario groups:"
-    echo "  quick    - 2 GB x 1 file x 3 peers (~5 min)"
-    echo "  medium   - 6 scenarios, all axes (~15-20 min)"
+    echo "  quick    - 8 GB x 1 file x 3 peers (~5 min)"
+    echo "  medium   - 6 scenarios 8-16 GB, all axes (~30-45 min)"
     echo "  all      - Full 280-scenario matrix"
     exit 0
 }

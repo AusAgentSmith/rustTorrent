@@ -200,6 +200,12 @@ pub async fn run(
         tracing::info!("SCENARIO: {} — {}", sc.name, sc.description);
         tracing::info!("============================================================");
 
+        // Clean download directories to prevent stale data
+        tracing::info!("Cleaning download directories...");
+        clean_download_dir(&docker_client, "rqbit", "/home/rqbit/downloads").await;
+        clean_download_dir(&docker_client, "qbittorrent", "/downloads").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
         let tpaths = datagen::torrent_paths(sc, &torrent_dir);
 
         // Setup seeders
@@ -373,7 +379,20 @@ async fn run_client(
         }
 
         if finished {
-            tracing::info!("  [{client_name}] Complete!");
+            tracing::info!("  [{client_name}] Reported complete — verifying...");
+            // Verify the download actually happened
+            let verified = if client_name == "rqbit" {
+                verify_rqbit_download(rqbit, &rqbit_ids, sc.total_bytes()).await
+            } else {
+                verify_qbt_download(qbt, sc.total_bytes()).await
+            };
+            if !verified {
+                tracing::error!(
+                    "  [{client_name}] VERIFICATION FAILED — client reported finished but \
+                     downloaded bytes don't match expected {} MB",
+                    sc.total_bytes() / MB
+                );
+            }
             break;
         }
 
@@ -438,6 +457,87 @@ async fn run_client(
         result.avg_speed_mbps
     );
     result
+}
+
+/// Verify rqbit actually downloaded the expected bytes (not stale/cached data).
+async fn verify_rqbit_download(rqbit: &RqbitClient, ids: &[u64], expected_bytes: u64) -> bool {
+    let mut total_progress = 0u64;
+    for &id in ids {
+        if let Ok(s) = rqbit.stats(id).await {
+            let progress = s
+                .get("progress_bytes")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let total = s
+                .get("total_bytes")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if progress < total {
+                tracing::warn!(
+                    "  [rqbit] Torrent {id}: {progress}/{total} bytes — incomplete!"
+                );
+                return false;
+            }
+            total_progress += progress;
+        }
+    }
+    if total_progress < expected_bytes {
+        tracing::warn!(
+            "  [rqbit] Total downloaded {total_progress} < expected {expected_bytes}"
+        );
+        return false;
+    }
+    tracing::info!(
+        "  [rqbit] Verified: {} MB downloaded",
+        total_progress / MB
+    );
+    true
+}
+
+/// Verify qBittorrent actually downloaded the expected bytes.
+async fn verify_qbt_download(qbt: &QBittorrentClient, expected_bytes: u64) -> bool {
+    let torrents = qbt.get_torrents().await.unwrap_or_default();
+    let mut total_downloaded = 0u64;
+    for t in &torrents {
+        let progress = t
+            .get("progress")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let size = t
+            .get("total_size")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        if progress < 1.0 {
+            tracing::warn!("  [qbt] Torrent incomplete: {:.1}%", progress * 100.0);
+            return false;
+        }
+        total_downloaded += size;
+    }
+    if total_downloaded < expected_bytes {
+        tracing::warn!(
+            "  [qbt] Total downloaded {total_downloaded} < expected {expected_bytes}"
+        );
+        return false;
+    }
+    tracing::info!(
+        "  [qbt] Verified: {} MB downloaded",
+        total_downloaded / MB
+    );
+    true
+}
+
+/// Clean downloaded files from a container's directory via Docker exec.
+async fn clean_download_dir(docker_client: &bollard::Docker, service: &str, dir: &str) {
+    if let Some(cid) = docker::get_container_id(docker_client, service).await {
+        match docker::exec_in_container(
+            docker_client,
+            &cid,
+            vec!["sh", "-c", &format!("rm -rf {dir}/* {dir}/.[!.]* 2>/dev/null; echo ok")],
+        ).await {
+            Ok(_) => tracing::info!("  [{service}] Cleaned {dir}"),
+            Err(e) => tracing::warn!("  [{service}] Failed to clean {dir}: {e}"),
+        }
+    }
 }
 
 async fn cleanup_rqbit(rqbit: &RqbitClient) {

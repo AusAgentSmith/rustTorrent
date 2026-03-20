@@ -97,16 +97,16 @@ pub fn resolve_scenarios(selector: &str) -> Vec<Scenario> {
 
     match sel.as_str() {
         "all" => all,
-        "quick" => pick(&all, &["sz2g_f1_3p"]),
+        "quick" => pick(&all, &["sz8g_f1_3p"]),
         "medium" => pick(
             &all,
             &[
-                "sz2g_f1_3p",
-                "sz4g_f1_3p",
-                "sz2g_f10_3p",
-                "sz2g_f100_3p",
-                "sz2g_f1_100p",
-                "sz2g_f1_500p",
+                "sz8g_f1_3p",
+                "sz16g_f1_3p",
+                "sz8g_f10_3p",
+                "sz8g_f100_3p",
+                "sz8g_f1_100p",
+                "sz8g_f1_500p",
             ],
         ),
         "size_ramp" => all

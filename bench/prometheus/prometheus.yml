@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 2s
-  evaluation_interval: 2s
+  scrape_interval: 250ms
+  evaluation_interval: 1s
 
 scrape_configs:
   - job_name: "cadvisor"
@@ -15,4 +15,3 @@ scrape_configs:
     static_configs:
       - targets: ["rqbit:3030"]
     metrics_path: "/metrics"
-    scrape_interval: 2s
