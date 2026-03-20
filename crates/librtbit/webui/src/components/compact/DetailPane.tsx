@@ -7,8 +7,9 @@ import { OverviewTab } from "./OverviewTab";
 import { FilesTab } from "./FilesTab";
 import { PeersTab } from "./PeersTab";
 import { TabButton, TabList } from "../Tabs";
+import { LogStream } from "../LogStream";
 
-type TabId = "overview" | "files" | "peers";
+type TabId = "overview" | "files" | "peers" | "logs";
 
 export const DetailPane: React.FC = () => {
   const selectedTorrentIds = useUIStore((state) => state.selectedTorrentIds);
@@ -56,8 +57,14 @@ export const DetailPane: React.FC = () => {
           active={activeTab === "peers"}
           onClick={() => setActiveTab("peers")}
         />
+        <TabButton
+          id="logs"
+          label="Logs"
+          active={activeTab === "logs"}
+          onClick={() => setActiveTab("logs")}
+        />
       </TabList>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
         <DetailPaneContent torrentId={selectedId} activeTab={activeTab} />
       </div>
     </div>
@@ -108,6 +115,8 @@ const DetailPaneContent: React.FC<DetailPaneContentProps> = ({
 
   const statsResponse = torrent?.stats ?? null;
 
+  const logsUrl = API.getStreamLogsUrl();
+
   return (
     <>
       {activeTab === "overview" && <OverviewTab torrent={torrent ?? null} />}
@@ -120,6 +129,15 @@ const DetailPaneContent: React.FC<DetailPaneContentProps> = ({
         />
       )}
       {activeTab === "peers" && <PeersTab torrent={torrent ?? null} />}
+      {activeTab === "logs" && (
+        <div className="h-full">
+          {logsUrl ? (
+            <LogStream url={logsUrl} maxLines={500} />
+          ) : (
+            <p className="text-tertiary p-3">Log streaming not available</p>
+          )}
+        </div>
+      )}
     </>
   );
 };

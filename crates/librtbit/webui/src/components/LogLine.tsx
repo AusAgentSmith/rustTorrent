@@ -60,6 +60,8 @@ export const LogLine: React.FC<{ line: JSONLogLine }> = React.memo(
 
     const classNameByLevel = (level: string) => {
       switch (level) {
+        case "TRACE":
+          return "text-slate-400 dark:text-slate-500";
         case "DEBUG":
           return "text-blue-500";
         case "INFO":

@@ -1,12 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ErrorWithLabel } from "../rqbit-web";
 import { ErrorComponent } from "./ErrorComponent";
 import { loopUntilSuccess } from "../helper/loopUntilSuccess";
 import debounce from "lodash.debounce";
 import { LogLine } from "./LogLine";
 import { JSONLogLine } from "../api-types";
-import { Form } from "./forms/Form";
-import { FormInput } from "./forms/FormInput";
+import { Virtuoso } from "react-virtuoso";
 
 interface LogStreamProps {
   url: string;
@@ -19,6 +24,25 @@ export interface Line {
   parsed: JSONLogLine;
   show: boolean;
 }
+
+const LOG_LEVELS = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] as const;
+
+const levelButtonActiveClass = (level: string): string => {
+  switch (level) {
+    case "TRACE":
+      return "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300";
+    case "DEBUG":
+      return "bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400";
+    case "INFO":
+      return "bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400";
+    case "WARN":
+      return "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400";
+    case "ERROR":
+      return "bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400";
+    default:
+      return "bg-surface-sunken text-tertiary";
+  }
+};
 
 const mergeBuffers = (
   a1: Uint8Array<ArrayBuffer>,
@@ -135,8 +159,20 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
   const [error, setError] = useState<ErrorWithLabel | null>(null);
   const [filter, setFilter] = useState<string>("");
   const filterRegex = useRef<RegExp | null>(null);
+  const [enabledLevels, setEnabledLevels] = useState<Set<string>>(
+    new Set(["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]),
+  );
 
   const maxL = maxLines ?? 1000;
+
+  const toggleLevel = useCallback((level: string) => {
+    setEnabledLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
+  }, []);
 
   const addLine = useCallback(
     (text: string) => {
@@ -191,26 +227,95 @@ export const LogStream: React.FC<LogStreamProps> = ({ url, maxLines }) => {
     return streamLogs(url, (line) => addLineRef.current(line), setError);
   }, [url]);
 
-  return (
-    <div>
-      <ErrorComponent error={error} />
-      <div className="mb-3">
-        Showing last {maxL} logs since this window was opened
-      </div>
-      <Form>
-        <FormInput
-          value={filter}
-          name="filter"
-          placeholder="Enter filter (regex)"
-          onChange={(e) => handleFilterChange(e.target.value)}
-        />
-      </Form>
+  const filteredLines = useMemo(
+    () =>
+      logLines.filter(
+        (line) => line.show && enabledLevels.has(line.parsed.level),
+      ),
+    [logLines, enabledLevels],
+  );
 
-      {logLines.map((line) => (
-        <div key={line.id} hidden={!line.show}>
-          <LogLine line={line.parsed} />
-        </div>
-      ))}
+  const copyLogs = useCallback(() => {
+    const text = filteredLines.map((l) => l.content).join("\n");
+    navigator.clipboard.writeText(text);
+  }, [filteredLines]);
+
+  const downloadLogs = useCallback(() => {
+    const text = filteredLines.map((l) => l.content).join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = `rqbit-logs-${new Date().toISOString().slice(0, 19)}.log`;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  }, [filteredLines]);
+
+  const levelBtnInactive = "bg-surface-sunken text-tertiary";
+
+  return (
+    <div className="flex flex-col h-full">
+      <ErrorComponent error={error} />
+
+      {/* Controls bar */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        {/* Level filter buttons */}
+        {LOG_LEVELS.map((level) => (
+          <button
+            key={level}
+            onClick={() => toggleLevel(level)}
+            className={`px-2 py-0.5 text-xs font-mono rounded cursor-pointer ${
+              enabledLevels.has(level)
+                ? levelButtonActiveClass(level)
+                : levelBtnInactive
+            }`}
+          >
+            {level}
+          </button>
+        ))}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Copy/Download */}
+        <button
+          onClick={copyLogs}
+          className="text-xs text-secondary hover:text-primary cursor-pointer"
+        >
+          Copy
+        </button>
+        <button
+          onClick={downloadLogs}
+          className="text-xs text-secondary hover:text-primary cursor-pointer"
+        >
+          Download
+        </button>
+      </div>
+
+      {/* Regex filter */}
+      <div className="mb-2">
+        <input
+          value={filter}
+          onChange={(e) => handleFilterChange(e.target.value)}
+          placeholder="Filter (regex)..."
+          className="w-full px-3 py-1.5 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary"
+        />
+      </div>
+
+      {/* Info line */}
+      <div className="text-xs text-tertiary mb-1">
+        Showing {filteredLines.length} of {logLines.length} lines (last {maxL}{" "}
+        since window opened)
+      </div>
+
+      {/* Virtualized log output */}
+      <div className="flex-1 min-h-0" style={{ minHeight: "300px" }}>
+        <Virtuoso
+          data={filteredLines}
+          followOutput="smooth"
+          itemContent={(_, line) => <LogLine line={line.parsed} />}
+        />
+      </div>
     </div>
   );
 };
