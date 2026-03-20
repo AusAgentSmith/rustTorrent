@@ -5,3 +5,10 @@
 /*.md
 /Makefile
 /LICENSE
+.git
+.github
+.gitea
+bench/
+benchv2/
+desktop/
+systemd/
