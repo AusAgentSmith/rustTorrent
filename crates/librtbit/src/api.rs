@@ -479,6 +479,12 @@ impl Api {
         Ok(response)
     }
 
+    pub fn api_completed_folder(&self) -> Option<String> {
+        self.session
+            .completed_folder()
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+
     pub fn api_dht_stats(&self) -> Result<DhtStats> {
         self.session
             .get_dht()

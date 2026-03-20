@@ -123,6 +123,8 @@ pub struct Session {
 
     /// Configurable cap for probabilistic fastresume validation denominator.
     pub(crate) fastresume_validation_denom: Option<u32>,
+    // Move-on-complete: destination folder for finished torrents
+    completed_folder: Option<PathBuf>,
 }
 
 impl Session {
@@ -389,6 +391,7 @@ impl Session {
                 lsd,
                 fastresume_validation_denom: opts.fastresume_validation_denom,
                 category_manager,
+                completed_folder: opts.completed_folder,
             });
 
             if let Some(mut listen) = listen_result {
@@ -855,6 +858,11 @@ impl Session {
             info!(?name, "added torrent");
         }
 
+        // Spawn a completion watcher if a completed_folder is configured
+        if self.completed_folder.is_some() {
+            self.spawn_completion_watcher(id, managed_torrent.clone());
+        }
+
         Ok(AddTorrentResponse::Added(id, managed_torrent))
     }
 
@@ -987,6 +995,161 @@ impl Session {
     ) -> anyhow::Result<()> {
         handle.update_only_files(only_files)?;
         self.try_update_persistence_metadata(handle).await;
+        Ok(())
+    }
+
+    /// Get the configured completed folder.
+    pub fn completed_folder(&self) -> Option<&Path> {
+        self.completed_folder.as_deref()
+    }
+
+    /// Spawn a task that watches for a torrent to complete and moves its files
+    /// to the completed folder.
+    fn spawn_completion_watcher(
+        self: &Arc<Self>,
+        id: TorrentId,
+        handle: ManagedTorrentHandle,
+    ) {
+        let session = Arc::downgrade(self);
+        let handle_weak = Arc::downgrade(&handle);
+        let span = handle.shared.span.clone();
+        self.spawn(
+            debug_span!(parent: span, "completion_watcher", id),
+            format!("[{id}]completion_watcher"),
+            async move {
+                // Wait for the torrent to finish downloading
+                if let Err(e) = handle.wait_until_completed().await {
+                    debug!(id, "torrent errored while waiting for completion: {e:#}");
+                    return Ok(());
+                }
+
+                let session = match session.upgrade() {
+                    Some(s) => s,
+                    None => return Ok(()),
+                };
+
+                let completed_folder = match &session.completed_folder {
+                    Some(f) => f.clone(),
+                    None => return Ok(()),
+                };
+
+                let handle = match handle_weak.upgrade() {
+                    Some(h) => h,
+                    None => return Ok(()),
+                };
+
+                info!(id, target_folder=?completed_folder, "torrent completed, moving to completed folder");
+
+                if let Err(e) = session
+                    .move_completed_torrent(id, &handle, completed_folder)
+                    .await
+                {
+                    error!(id, "error moving completed torrent: {e:#}");
+                }
+                Ok(())
+            },
+        );
+    }
+
+    /// Move all files of a completed torrent from its current output folder
+    /// to the target folder.
+    async fn move_completed_torrent(
+        &self,
+        id: TorrentId,
+        handle: &ManagedTorrentHandle,
+        target_folder: PathBuf,
+    ) -> anyhow::Result<()> {
+        let current_output = handle.shared().options.output_folder.clone();
+
+        // Don't move if already in the target folder
+        if current_output == target_folder {
+            debug!(id, "torrent is already in the completed folder, skipping move");
+            return Ok(());
+        }
+
+        let metadata = handle
+            .metadata
+            .load_full()
+            .context("torrent metadata not loaded")?;
+
+        // Determine the subfolder name: if the torrent's output_folder differs from
+        // the session's default output_folder, it means there's a subfolder (e.g. for
+        // multi-file torrents). We want to replicate the relative structure under the
+        // completed folder.
+        let relative_path = current_output
+            .strip_prefix(&self.output_folder)
+            .unwrap_or(Path::new(""));
+
+        let dest_base = if relative_path == Path::new("") {
+            target_folder.clone()
+        } else {
+            target_folder.join(relative_path)
+        };
+
+        // Create the destination base directory
+        tokio::fs::create_dir_all(&dest_base)
+            .await
+            .with_context(|| format!("error creating completed directory {dest_base:?}"))?;
+
+        // Move each file
+        for fi in metadata.file_infos.iter() {
+            if fi.attrs.padding {
+                continue;
+            }
+
+            let src = current_output.join(&fi.relative_filename);
+            let dst = dest_base.join(&fi.relative_filename);
+
+            // Create parent directories for the destination if needed
+            if let Some(parent) = dst.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .with_context(|| format!("error creating directory {parent:?}"))?;
+            }
+
+            // Try rename first (fast, same filesystem)
+            match tokio::fs::rename(&src, &dst).await {
+                Ok(()) => {
+                    debug!(id, ?src, ?dst, "moved file via rename");
+                }
+                Err(rename_err) => {
+                    // Rename failed (likely cross-device), fall back to copy + delete
+                    debug!(
+                        id,
+                        ?src,
+                        ?dst,
+                        "rename failed ({rename_err}), falling back to copy+delete"
+                    );
+                    tokio::fs::copy(&src, &dst)
+                        .await
+                        .with_context(|| format!("error copying {src:?} to {dst:?}"))?;
+                    tokio::fs::remove_file(&src)
+                        .await
+                        .with_context(|| format!("error removing source file {src:?} after copy"))?;
+                    debug!(id, ?src, ?dst, "moved file via copy+delete");
+                }
+            }
+        }
+
+        // Try to clean up empty source directories
+        if current_output != self.output_folder
+            && let Err(e) = tokio::fs::remove_dir(&current_output).await
+        {
+            debug!(
+                id,
+                ?current_output,
+                "could not remove source directory (may not be empty): {e}"
+            );
+        }
+
+        info!(id, ?dest_base, "completed torrent moved successfully");
+
+        // Note: we don't update the torrent's output_folder or persistence here because
+        // the torrent is already finished. The files are now in the completed folder.
+        // If we wanted to update persistence for the new location, the ManagedTorrentOptions
+        // output_folder would need to be mutable (wrapped in RwLock), which is a larger change.
+        // For now, the move is fire-and-forget from the torrent's perspective.
+
         Ok(())
     }
 

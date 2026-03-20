@@ -324,6 +324,11 @@ struct ServerStartOptions {
     /// to the session.
     #[arg(long = "watch-folder", env = "RQBIT_WATCH_FOLDER")]
     watch_folder: Option<String>,
+
+    /// Move completed torrents to this folder. When a torrent finishes downloading,
+    /// its files will be moved from the output folder to this folder.
+    #[arg(long = "completed-folder", env = "RQBIT_COMPLETED_FOLDER")]
+    completed_folder: Option<String>,
 }
 
 #[derive(Parser)]
@@ -672,6 +677,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         peer_limit: opts.peer_limit,
         runtime_worker_threads: Some(opts.max_blocking_threads as usize),
         ipv4_only: opts.ipv4_only,
+        completed_folder: None,
     };
 
     #[allow(clippy::needless_update)]
@@ -738,6 +744,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 http_api_opts.read_only = false;
                 sopts.fastresume = start_opts.fastresume;
                 sopts.fastresume_validation_denom = start_opts.fastresume_validation_denom;
+                sopts.completed_folder = start_opts.completed_folder.as_deref().map(PathBuf::from);
 
                 let session =
                     Session::new_with_opts(PathBuf::from(&start_opts.output_folder), sopts)
