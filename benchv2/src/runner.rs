@@ -140,14 +140,13 @@ pub async fn run(
     // Init clients
     let rqbit = RqbitClient::new(config::RQBIT_API);
     let qbt = QBittorrentClient::new(config::QBT_API);
-    let mut metrics = MetricsCollector::new(config::PROMETHEUS_API);
+    let mut metrics = MetricsCollector::new(docker::connect()?);
 
     // Wait for services
     tracing::info!("Waiting for services...");
     wait_for_service("tracker", "http://tracker:6969/health", 120).await?;
     wait_for_service("rqbit", &format!("{}/", config::RQBIT_API), 120).await?;
     wait_for_service("qBittorrent", &format!("{}/", config::QBT_API), 120).await?;
-    wait_for_service("prometheus", &format!("{}/-/healthy", config::PROMETHEUS_API), 120).await?;
     wait_for_service("mock-seeder", "http://mock-seeder:8080/health", 120).await?;
 
     // Discover seeders
@@ -168,11 +167,9 @@ pub async fn run(
     }
     tracing::info!("  Seeders: {ok}/{} RPC-ready", seeders.len());
 
-    // Resolve container IDs for Prometheus
-    metrics.resolve_container_id("rqbit", &docker_client).await;
-    metrics
-        .resolve_container_id("qbittorrent", &docker_client)
-        .await;
+    // Resolve container IDs for stats collection
+    metrics.resolve_container_id("rqbit").await;
+    metrics.resolve_container_id("qbittorrent").await;
 
     // Configure qBittorrent
     tracing::info!("Configuring qBittorrent...");
@@ -360,7 +357,12 @@ async fn run_client(
         }
     }
 
-    let start_time = now_unix();
+    // Start real-time stats collection via Docker stats API
+    let stats_handle = metrics.start_collecting(client_name);
+    if stats_handle.is_none() {
+        tracing::warn!("  [{client_name}] Could not start stats collection — container ID not resolved");
+    }
+
     let start_instant = tokio::time::Instant::now();
     let mut first_piece_time: Option<f64> = None;
     let mut peak_speed: f64 = 0.0;
@@ -430,7 +432,6 @@ async fn run_client(
     }
     eprintln!(); // newline after progress bar
 
-    let end_time = now_unix();
     result.duration_sec = start_instant.elapsed().as_secs_f64();
     result.time_to_first_piece = first_piece_time.unwrap_or(result.duration_sec);
     result.peak_speed_mbps = peak_speed * 8.0 / 1_000_000.0;
@@ -441,10 +442,14 @@ async fn run_client(
         result.avg_speed_mbps = result.total_bytes as f64 * 8.0 / result.duration_sec / 1_000_000.0;
     }
 
-    // Collect Prometheus metrics
+    // Stop real-time stats collection and retrieve samples
     tracing::info!("  [{client_name}] Collecting metrics...");
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    let samples = metrics.collect(client_name, start_time, end_time).await;
+    let samples = if let Some(handle) = stats_handle {
+        handle.stop().await
+    } else {
+        vec![]
+    };
+    tracing::info!("  [{client_name}] Got {} metric samples", samples.len());
 
     if !samples.is_empty() {
         let cpus: Vec<f64> = samples.iter().map(|s| s.cpu_pct).collect();

@@ -77,46 +77,6 @@ services:
     networks: [bench]
     depends_on: [tracker]
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-    networks: [bench]
-
-  node-exporter:
-    image: prom/node-exporter:v1.8.2
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - "--path.procfs=/host/proc"
-      - "--path.sysfs=/host/sys"
-      - "--path.rootfs=/rootfs"
-      - "--collector.disable-defaults"
-      - "--collector.cpu"
-      - "--collector.diskstats"
-      - "--collector.filesystem"
-      - "--collector.meminfo"
-      - "--collector.netdev"
-    networks: [bench]
-
-  prometheus:
-    image: prom/prometheus:v2.53.3
-    volumes:
-      - ../bench/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=1d"
-    networks: [bench]
-    depends_on: [cadvisor, node-exporter]
-
   orchestrator:
     build: .
     command:
@@ -134,9 +94,6 @@ services:
       - mock-seeder
       - rqbit
       - qbittorrent
-      - prometheus
-      - cadvisor
-      - node-exporter
 
 networks:
   bench:
@@ -150,4 +107,3 @@ volumes:
   qbt-config:
   rqbit-db:
   rqbit-cache:
-  prometheus-data:

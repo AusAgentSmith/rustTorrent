@@ -1,6 +1,9 @@
-use anyhow::Result;
+use bollard::Docker;
+use bollard::container::StatsOptions;
+use futures_util::StreamExt;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct MetricSample {
@@ -15,29 +18,28 @@ pub struct MetricSample {
 }
 
 pub struct MetricsCollector {
-    prom_url: String,
-    http: reqwest::Client,
+    docker: Docker,
     container_ids: HashMap<String, String>,
 }
 
 impl MetricsCollector {
-    pub fn new(prom_url: &str) -> Self {
+    pub fn new(docker: Docker) -> Self {
         Self {
-            prom_url: prom_url.to_string(),
-            http: reqwest::Client::new(),
+            docker,
             container_ids: HashMap::new(),
         }
     }
 
-    pub async fn resolve_container_id(&mut self, service: &str, docker: &bollard::Docker) {
+    pub async fn resolve_container_id(&mut self, service: &str) {
         if self.container_ids.contains_key(service) {
             return;
         }
-        let filters = std::collections::HashMap::from([(
+        let filters = HashMap::from([(
             "label".to_string(),
             vec![format!("com.docker.compose.service={service}")],
         )]);
-        if let Ok(containers) = docker
+        if let Ok(containers) = self
+            .docker
             .list_containers(Some(bollard::container::ListContainersOptions {
                 filters,
                 ..Default::default()
@@ -47,139 +49,175 @@ impl MetricsCollector {
             if let Some(c) = containers.first() {
                 if let Some(id) = &c.id {
                     self.container_ids.insert(service.to_string(), id.clone());
+                    tracing::info!("Resolved {service} -> {}", &id[..12]);
                 }
             }
         }
     }
 
-    fn container_filter(&self, service: &str) -> String {
-        if let Some(cid) = self.container_ids.get(service) {
-            format!(r#"id=~".*{}.*""#, &cid[..12])
-        } else {
-            format!(
-                r#"container_label_com_docker_compose_service="{}""#,
-                service
-            )
-        }
-    }
+    /// Start collecting Docker stats for a container in the background.
+    /// Returns a handle that can be stopped to retrieve the collected samples.
+    pub fn start_collecting(&self, service: &str) -> Option<StatsHandle> {
+        let container_id = self.container_ids.get(service)?.clone();
+        let samples = Arc::new(Mutex::new(Vec::<MetricSample>::new()));
+        let samples_clone = samples.clone();
+        let docker = self.docker.clone();
+        let service_name = service.to_string();
 
-    async fn query_range(
-        &self,
-        query: &str,
-        start: f64,
-        end: f64,
-    ) -> Vec<(f64, f64)> {
-        let resp = self
-            .http
-            .get(format!("{}/api/v1/query_range", self.prom_url))
-            .query(&[
-                ("query", query),
-                ("start", &start.to_string()),
-                ("end", &end.to_string()),
-                ("step", "1s"),
-            ])
-            .timeout(std::time::Duration::from_secs(30))
-            .send()
-            .await;
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel_clone = cancel.clone();
 
-        let resp = match resp {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("Prometheus query failed: {e}");
-                return vec![];
+        let task = tokio::spawn(async move {
+            let mut stream = docker.stats(
+                &container_id,
+                Some(StatsOptions {
+                    stream: true,
+                    one_shot: false,
+                }),
+            );
+
+            let mut prev_cpu_total: u64 = 0;
+            let mut prev_cpu_system: u64 = 0;
+            let mut prev_net_rx: u64 = 0;
+            let mut prev_net_tx: u64 = 0;
+            let mut prev_disk_read: u64 = 0;
+            let mut prev_disk_write: u64 = 0;
+            let mut prev_ts: f64 = 0.0;
+            let mut first = true;
+
+            loop {
+                tokio::select! {
+                    _ = cancel_clone.cancelled() => break,
+                    stat = stream.next() => {
+                        let Some(Ok(stat)) = stat else { break };
+
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64();
+
+                        // CPU usage: calculate percentage from cumulative counters
+                        let cpu_total = stat.cpu_stats.cpu_usage.total_usage;
+                        let cpu_system = stat.cpu_stats.system_cpu_usage.unwrap_or(0);
+                        let num_cpus = stat.cpu_stats.online_cpus.unwrap_or(
+                            stat.cpu_stats.cpu_usage.percpu_usage
+                                .as_ref()
+                                .map(|v| v.len() as u64)
+                                .unwrap_or(1)
+                        );
+
+                        // Memory
+                        let mem_bytes = stat.memory_stats.usage.unwrap_or(0)
+                            - stat.memory_stats.stats
+                                .as_ref()
+                                .and_then(|s| match s {
+                                    bollard::container::MemoryStatsStats::V1(v1) => Some(v1.total_inactive_file),
+                                    bollard::container::MemoryStatsStats::V2(v2) => Some(v2.inactive_file),
+                                })
+                                .unwrap_or(0);
+
+                        // Network (sum all interfaces)
+                        let mut net_rx: u64 = 0;
+                        let mut net_tx: u64 = 0;
+                        if let Some(networks) = &stat.networks {
+                            for net in networks.values() {
+                                net_rx += net.rx_bytes;
+                                net_tx += net.tx_bytes;
+                            }
+                        }
+
+                        // Block I/O
+                        let mut disk_read: u64 = 0;
+                        let mut disk_write: u64 = 0;
+                        if let Some(bio) = &stat.blkio_stats.io_service_bytes_recursive {
+                            for entry in bio {
+                                match entry.op.to_lowercase().as_str() {
+                                    "read" => disk_read += entry.value,
+                                    "write" => disk_write += entry.value,
+                                    _ => {}
+                                }
+                            }
+                        }
+
+                        if first {
+                            // Store initial values, skip first sample (no delta yet)
+                            prev_cpu_total = cpu_total;
+                            prev_cpu_system = cpu_system;
+                            prev_net_rx = net_rx;
+                            prev_net_tx = net_tx;
+                            prev_disk_read = disk_read;
+                            prev_disk_write = disk_write;
+                            prev_ts = now;
+                            first = false;
+                            continue;
+                        }
+
+                        let dt = now - prev_ts;
+                        if dt < 0.01 {
+                            continue;
+                        }
+
+                        // CPU % = (delta container CPU / delta system CPU) * num_cpus * 100
+                        let cpu_delta = cpu_total.saturating_sub(prev_cpu_total) as f64;
+                        let sys_delta = cpu_system.saturating_sub(prev_cpu_system) as f64;
+                        let cpu_pct = if sys_delta > 0.0 {
+                            (cpu_delta / sys_delta) * num_cpus as f64 * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        let sample = MetricSample {
+                            ts: now,
+                            cpu_pct,
+                            mem_bytes,
+                            net_rx_bps: (net_rx.saturating_sub(prev_net_rx)) as f64 / dt,
+                            net_tx_bps: (net_tx.saturating_sub(prev_net_tx)) as f64 / dt,
+                            disk_read_bps: (disk_read.saturating_sub(prev_disk_read)) as f64 / dt,
+                            disk_write_bps: (disk_write.saturating_sub(prev_disk_write)) as f64 / dt,
+                            iowait_pct: 0.0, // not available from Docker stats
+                        };
+
+                        if let Ok(mut vec) = samples_clone.lock() {
+                            vec.push(sample);
+                        }
+
+                        prev_cpu_total = cpu_total;
+                        prev_cpu_system = cpu_system;
+                        prev_net_rx = net_rx;
+                        prev_net_tx = net_tx;
+                        prev_disk_read = disk_read;
+                        prev_disk_write = disk_write;
+                        prev_ts = now;
+                    }
+                }
             }
-        };
 
-        let body: serde_json::Value = match resp.json().await {
-            Ok(b) => b,
-            Err(_) => return vec![],
-        };
+            tracing::debug!("[{service_name}] Stats collector stopped");
+        });
 
-        let results = body
-            .pointer("/data/result")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
+        Some(StatsHandle {
+            cancel,
+            task,
+            samples,
+        })
+    }
+}
 
-        if results.is_empty() {
-            return vec![];
-        }
+/// Handle to a running stats collection task.
+pub struct StatsHandle {
+    cancel: tokio_util::sync::CancellationToken,
+    task: tokio::task::JoinHandle<()>,
+    samples: Arc<Mutex<Vec<MetricSample>>>,
+}
 
-        results[0]
-            .get("values")
-            .and_then(|v| v.as_array())
-            .map(|vals| {
-                vals.iter()
-                    .filter_map(|pair| {
-                        let arr = pair.as_array()?;
-                        let ts = arr.first()?.as_f64()?;
-                        let val: f64 = arr.get(1)?.as_str()?.parse().ok()?;
-                        Some((ts, val))
-                    })
-                    .collect()
-            })
+impl StatsHandle {
+    /// Stop collection and return all collected samples.
+    pub async fn stop(self) -> Vec<MetricSample> {
+        self.cancel.cancel();
+        let _ = self.task.await;
+        Arc::try_unwrap(self.samples)
+            .unwrap_or_else(|arc| arc.lock().unwrap().clone().into())
+            .into_inner()
             .unwrap_or_default()
-    }
-
-    pub async fn collect(
-        &self,
-        service: &str,
-        start: f64,
-        end: f64,
-    ) -> Vec<MetricSample> {
-        let f = self.container_filter(service);
-        let cpu_f = format!("{f},cpu=\"total\"");
-
-        // Pre-build query strings (need stable borrows for tokio::join!)
-        let q_cpu = format!("rate(container_cpu_usage_seconds_total{{{cpu_f}}}[2s]) * 100");
-        let q_mem = format!("container_memory_working_set_bytes{{{f}}}");
-        let q_rx = format!("rate(container_network_receive_bytes_total{{{f}}}[2s])");
-        let q_tx = format!("rate(container_network_transmit_bytes_total{{{f}}}[2s])");
-        let q_dr = format!("rate(container_fs_reads_bytes_total{{{f}}}[2s])");
-        let q_dw = format!("rate(container_fs_writes_bytes_total{{{f}}}[2s])");
-        let q_io = r#"avg(rate(node_cpu_seconds_total{mode="iowait"}[2s])) * 100"#;
-
-        // Fire all queries concurrently
-        let (cpu, mem, net_rx, net_tx, disk_r, disk_w, iowait) = tokio::join!(
-            self.query_range(&q_cpu, start, end),
-            self.query_range(&q_mem, start, end),
-            self.query_range(&q_rx, start, end),
-            self.query_range(&q_tx, start, end),
-            self.query_range(&q_dr, start, end),
-            self.query_range(&q_dw, start, end),
-            self.query_range(q_io, start, end),
-        );
-
-        // Collect all timestamps
-        let mut all_ts: Vec<f64> = vec![];
-        for series in [&cpu, &mem, &net_rx, &net_tx, &disk_r, &disk_w, &iowait] {
-            for &(ts, _) in series {
-                all_ts.push(ts);
-            }
-        }
-        all_ts.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        all_ts.dedup_by(|a, b| (*a - *b).abs() < 0.8);
-
-        let lookup = |series: &[(f64, f64)], ts: f64| -> f64 {
-            series
-                .iter()
-                .find(|(t, _)| (t - ts).abs() < 3.0)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0)
-        };
-
-        all_ts
-            .iter()
-            .map(|&ts| MetricSample {
-                ts,
-                cpu_pct: lookup(&cpu, ts),
-                mem_bytes: lookup(&mem, ts) as u64,
-                net_rx_bps: lookup(&net_rx, ts),
-                net_tx_bps: lookup(&net_tx, ts),
-                disk_read_bps: lookup(&disk_r, ts),
-                disk_write_bps: lookup(&disk_w, ts),
-                iowait_pct: lookup(&iowait, ts),
-            })
-            .collect()
     }
 }

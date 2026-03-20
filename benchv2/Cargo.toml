@@ -19,6 +19,7 @@ anyhow = "1"
 dashmap = "6"
 percent-encoding = "2"
 futures-util = "0.3"
+tokio-util = "0.7"
 
 [profile.release]
 opt-level = 3
