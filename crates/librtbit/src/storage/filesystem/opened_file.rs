@@ -19,7 +19,10 @@ pub trait OurFileExt {
 impl OurFileExt for File {
     #[cfg(unix)]
     fn pwrite_all_vectored(&self, offset: u64, bufs: [IoSlice<'_>; 2]) -> anyhow::Result<usize> {
-        nix::sys::uio::pwritev(self, &bufs, offset.try_into()?).context("error calling pwritev")
+        let offset_i64: i64 = offset.try_into().with_context(|| {
+            format!("file write offset {offset} exceeds i64::MAX, cannot pass to pwritev")
+        })?;
+        nix::sys::uio::pwritev(self, &bufs, offset_i64).context("error calling pwritev")
     }
 
     #[cfg(not(unix))]
@@ -194,6 +197,45 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::storage::filesystem::opened_file::OurFileExt;
+
+    #[test]
+    fn test_write_path_large_file_offsets() {
+        // Test that offsets exceeding i64::MAX produce a descriptive error
+        // instead of panicking with "out of range integral type conversion attempted".
+        // This is the root cause of issue #477.
+        let td = TempDir::with_prefix("test_write_large_offset").unwrap();
+        let path = td.path().join("test_file");
+        let file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+
+        let buf = [42u8; 16];
+        let bufs = [std::io::IoSlice::new(&buf), std::io::IoSlice::new(&[])];
+
+        // An offset that exceeds i64::MAX should return an error, not panic
+        let huge_offset: u64 = i64::MAX as u64 + 1;
+        let result = file.pwrite_all_vectored(huge_offset, bufs);
+        assert!(result.is_err(), "offset > i64::MAX should return error");
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("exceeds i64::MAX"),
+            "error should contain descriptive message, got: {err_msg}"
+        );
+
+        // u64::MAX should also error
+        let result = file.pwrite_all_vectored(
+            u64::MAX,
+            [std::io::IoSlice::new(&buf), std::io::IoSlice::new(&[])],
+        );
+        assert!(result.is_err(), "u64::MAX offset should return error");
+
+        // A valid offset should succeed
+        let result =
+            file.pwrite_all_vectored(0, [std::io::IoSlice::new(&buf), std::io::IoSlice::new(&[])]);
+        assert!(result.is_ok(), "offset 0 should succeed");
+    }
 
     #[test]
     fn test_pwrite_all_vectored() {

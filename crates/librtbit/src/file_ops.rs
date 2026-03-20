@@ -126,7 +126,9 @@ impl<'a> FileOps<'a> {
 
             while piece_remaining > 0 {
                 let mut to_read_in_file: usize =
-                    std::cmp::min(current_file.remaining(), piece_remaining as u64).try_into()?;
+                    std::cmp::min(current_file.remaining(), piece_remaining as u64)
+                        .try_into()
+                        .context("read size exceeds usize::MAX")?;
 
                 // Keep changing the current file to next until we find a file that has greater than 0 length.
                 while to_read_in_file == 0 {
@@ -134,7 +136,8 @@ impl<'a> FileOps<'a> {
 
                     to_read_in_file =
                         std::cmp::min(current_file.remaining(), piece_remaining as u64)
-                            .try_into()?;
+                            .try_into()
+                            .context("read size exceeds usize::MAX")?;
                 }
 
                 piece_files.push(current_file.index);
@@ -208,7 +211,9 @@ impl<'a> FileOps<'a> {
             let file_remaining_len = file_len - absolute_offset;
 
             let to_read_in_file: usize =
-                std::cmp::min(file_remaining_len, piece_remaining_bytes as u64).try_into()?;
+                std::cmp::min(file_remaining_len, piece_remaining_bytes as u64)
+                    .try_into()
+                    .context("read size exceeds usize::MAX")?;
             trace!(
                 "piece={}, file_idx={}, seeking to {}",
                 piece_index, file_idx, absolute_offset,
@@ -283,7 +288,9 @@ impl<'a> FileOps<'a> {
                 continue;
             }
             let file_remaining_len = file_len - absolute_offset;
-            let to_read_in_file = std::cmp::min(file_remaining_len, buf.len() as u64).try_into()?;
+            let to_read_in_file: usize = std::cmp::min(file_remaining_len, buf.len() as u64)
+                .try_into()
+                .context("read size exceeds usize::MAX")?;
 
             trace!(
                 "piece={}, handle={}, file_idx={}, seeking to {}. To read chunk: {:?}",
@@ -328,7 +335,9 @@ impl<'a> FileOps<'a> {
             }
 
             let remaining_len = file_len - absolute_offset;
-            let to_write = std::cmp::min(data.len() as u64, remaining_len).try_into()?;
+            let to_write: usize = std::cmp::min(data.len() as u64, remaining_len)
+                .try_into()
+                .context("write size exceeds usize::MAX (likely a 32-bit platform limitation)")?;
 
             trace!(
                 "piece={}, chunk={:?}, handle={}, begin={}, file={}, writing {} bytes at {}",
