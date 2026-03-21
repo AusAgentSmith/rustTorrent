@@ -7,7 +7,7 @@ import {
 } from "react-icons/fa";
 import { BsChevronLeft, BsChevronRight, BsCollection } from "react-icons/bs";
 import { MdQueue } from "react-icons/md";
-import { useUIStore } from "../stores/uiStore";
+import { useUIStore, CurrentPage } from "../stores/uiStore";
 import { useTorrentStore } from "../stores/torrentStore";
 import { StatusFilter } from "../helper/torrentFilters";
 import { CategoryFilter } from "./compact/CategoryFilter";
@@ -23,8 +23,14 @@ export const Sidebar: React.FC = () => {
   const torrents = useTorrentStore((state) => state.torrents);
   const statusFilter = useUIStore((state) => state.statusFilter);
   const setStatusFilter = useUIStore((state) => state.setStatusFilter);
+  const setCurrentPage = useUIStore((state) => state.setCurrentPage);
   const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+
+  const handleFilterClick = (key: StatusFilter) => {
+    setStatusFilter(key);
+    setCurrentPage("torrents");
+  };
 
   const statusCounts = useMemo(() => {
     if (!torrents)
@@ -105,7 +111,7 @@ export const Sidebar: React.FC = () => {
           {filters.map((f) => (
             <button
               key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              onClick={() => handleFilterClick(f.key)}
               title={`${f.label} (${f.count})`}
               className={`w-full flex items-center justify-center py-2.5 cursor-pointer transition-colors ${
                 statusFilter === f.key ? activeItemClass : inactiveItemClass
@@ -139,7 +145,7 @@ export const Sidebar: React.FC = () => {
           {filters.map((f) => (
             <button
               key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              onClick={() => handleFilterClick(f.key)}
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded text-sm cursor-pointer transition-colors ${
                 statusFilter === f.key ? activeItemClass : inactiveItemClass
               }`}

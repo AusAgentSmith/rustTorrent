@@ -54,6 +54,7 @@ export const RtbitWebUI = (props: {
   const isLargeScreen = useIsLargeScreen();
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
+  const currentPage = useUIStore((state) => state.currentPage);
 
   const setTorrents = useTorrentStore((state) => state.setTorrents);
   const setTorrentsLoading = useTorrentStore(
@@ -226,8 +227,8 @@ export const RtbitWebUI = (props: {
       />
 
       <div className="flex-1 min-h-0 flex flex-row">
-        {/* Sidebar - only on large screens */}
-        {isLargeScreen && <Sidebar />}
+        {/* Sidebar - only on large screens, only on torrents page */}
+        {isLargeScreen && currentPage === "torrents" && <Sidebar />}
 
         {/* Main content area */}
         <div
