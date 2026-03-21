@@ -6,6 +6,11 @@ import {
   CategoryInfo,
   DhtStats,
   ErrorDetails,
+  IndexarrIdentityStatus,
+  IndexarrRecentResponse,
+  IndexarrSearchResponse,
+  IndexarrStatus,
+  IndexarrSyncPreferences,
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
@@ -488,5 +493,58 @@ export const API: RtbitAPI & { getVersion: () => Promise<string> } = {
   },
   queueMoveDown: (id: number): Promise<void> => {
     return makeRequest("POST", `/torrents/${id}/queue/down`);
+  },
+};
+
+// --- Indexarr API ---
+
+export const IndexarrAPI = {
+  getStatus: (): Promise<IndexarrStatus> => {
+    return makeRequest("GET", "/indexarr/status");
+  },
+
+  search: (
+    query: string,
+    filters?: Record<string, string>,
+    limit = 50,
+    offset = 0,
+  ): Promise<IndexarrSearchResponse> => {
+    const params = new URLSearchParams();
+    params.set("q", query);
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    if (filters) {
+      for (const [key, value] of Object.entries(filters)) {
+        if (value) params.set(key, value);
+      }
+    }
+    return makeRequest("GET", `/indexarr/search?${params.toString()}`);
+  },
+
+  getRecent: (limit = 50): Promise<IndexarrRecentResponse> => {
+    return makeRequest("GET", `/indexarr/recent?limit=${limit}`);
+  },
+
+  getTrending: (limit = 50): Promise<IndexarrSearchResponse> => {
+    return makeRequest("GET", `/indexarr/trending?limit=${limit}`);
+  },
+
+  getIdentityStatus: (): Promise<IndexarrIdentityStatus> => {
+    return makeRequest("GET", "/indexarr/identity/status");
+  },
+
+  acknowledgeIdentity: (): Promise<void> => {
+    return makeRequest("POST", "/indexarr/identity/acknowledge");
+  },
+
+  getSyncPreferences: (): Promise<IndexarrSyncPreferences> => {
+    return makeRequest("GET", "/indexarr/sync/preferences");
+  },
+
+  setSyncPreferences: (prefs: {
+    import_categories: string[];
+    sync_comments: boolean;
+  }): Promise<IndexarrSyncPreferences> => {
+    return makeRequest("POST", "/indexarr/sync/preferences", prefs, true);
   },
 };

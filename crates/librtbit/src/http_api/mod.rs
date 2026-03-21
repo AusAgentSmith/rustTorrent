@@ -85,6 +85,10 @@ pub struct HttpApiOptions {
     pub credential_store: Option<Arc<auth::CredentialStore>>,
     #[cfg(feature = "prometheus")]
     pub prometheus_handle: Option<metrics_exporter_prometheus::PrometheusHandle>,
+    /// Indexarr integration: base URL (e.g. "http://indexarr:8080"). None = disabled.
+    pub indexarr_url: Option<String>,
+    /// Indexarr API key for authenticated requests.
+    pub indexarr_api_key: Option<String>,
 }
 
 /// Constant-time byte comparison to prevent timing attacks on auth credentials.

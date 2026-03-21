@@ -323,6 +323,82 @@ export interface JSONLogLine {
   spans: Span[];
 }
 
+// --- Indexarr types ---
+
+export interface IndexarrStatus {
+  enabled: boolean;
+  reachable?: boolean;
+  error?: string;
+  indexarr?: {
+    status: string;
+    version: string;
+    ready: boolean;
+  };
+}
+
+export interface IndexarrSearchResult {
+  info_hash: string;
+  name: string | null;
+  size: number | null;
+  content_type: string | null;
+  resolution: string | null;
+  codec: string | null;
+  video_source: string | null;
+  year: number | null;
+  season: number | null;
+  episode: number | null;
+  seed_count: number;
+  peer_count: number;
+  discovered_at: string | null;
+  resolved_at: string | null;
+  tags: string[];
+  audio_codec: string | null;
+  hdr: string | null;
+  platform: string | null;
+  quality_score: number | null;
+  network: string | null;
+  edition: string | null;
+  trackers: string[] | null;
+}
+
+export interface IndexarrSearchResponse {
+  results: IndexarrSearchResult[];
+  total: number;
+  offset: number;
+  limit: number;
+  facets?: Record<string, { value: string; count: number }[]>;
+}
+
+export interface IndexarrRecentItem {
+  info_hash: string;
+  name: string | null;
+  size: number | null;
+  content_type: string | null;
+  resolution: string | null;
+  seed_count: number;
+  peer_count: number;
+  resolved_at: string | null;
+  source: string | null;
+  trackers: string[] | null;
+}
+
+export interface IndexarrRecentResponse {
+  results: IndexarrRecentItem[];
+}
+
+export interface IndexarrIdentityStatus {
+  initialized: boolean;
+  contributor_id?: string;
+  recovery_key?: string;
+  acknowledged?: boolean;
+}
+
+export interface IndexarrSyncPreferences {
+  import_categories: string[];
+  all_categories: string[];
+  sync_comments: boolean;
+}
+
 export interface RtbitAPI {
   getPlaylistUrl: (index: number) => string | null;
   getStreamLogsUrl: () => string | null;

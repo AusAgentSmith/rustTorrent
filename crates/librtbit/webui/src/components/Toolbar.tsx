@@ -1,5 +1,6 @@
-import { JSX, useCallback, useContext, useMemo, useState } from "react";
+import { JSX, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { FaPause, FaPlay, FaTrash } from "react-icons/fa";
+import { BsGlobe2 } from "react-icons/bs";
 import { GoSearch, GoX } from "react-icons/go";
 import {
   BsBodyText,
@@ -29,6 +30,8 @@ import {
 import { DarkMode } from "../helper/darkMode";
 import { useAuthStore } from "../stores/authStore";
 import { AuthAPI } from "../http-api";
+import { IndexarrAPI } from "../http-api";
+import { useIndexarrStore } from "../stores/indexarrStore";
 import { MagnetInput } from "./buttons/MagnetInput";
 import { FileInput } from "./buttons/FileInput";
 import { IconButton } from "./buttons/IconButton";
@@ -81,6 +84,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const authState = useAuthStore((s) => s.state);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const clearTokens = useAuthStore((s) => s.clearTokens);
+
+  // Indexarr integration
+  const currentPage = useUIStore((s) => s.currentPage);
+  const setCurrentPage = useUIStore((s) => s.setCurrentPage);
+  const indexarrEnabled = useIndexarrStore((s) => s.status?.enabled ?? false);
+  const setIndexarrStatus = useIndexarrStore((s) => s.setStatus);
+
+  useEffect(() => {
+    IndexarrAPI.getStatus()
+      .then(setIndexarrStatus)
+      .catch(() => setIndexarrStatus({ enabled: false }));
+  }, []);
 
   const handleLogout = async () => {
     if (refreshToken) {
@@ -205,6 +220,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         className="grow-0 justify-center"
         onMultiFileSelect={onMultiFileSelect}
       />
+
+      {/* Indexarr browse button */}
+      {indexarrEnabled && (
+        <button
+          onClick={() =>
+            setCurrentPage(currentPage === "indexarr" ? "torrents" : "indexarr")
+          }
+          className={`hidden lg:inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded cursor-pointer transition-colors ${
+            currentPage === "indexarr"
+              ? "bg-primary text-white"
+              : "text-secondary hover:text-text hover:bg-surface"
+          }`}
+          title="Browse Indexarr torrent index"
+        >
+          <BsGlobe2 className="w-3.5 h-3.5" />
+          <span>Browse Index</span>
+        </button>
+      )}
 
       <div className={divider} />
 

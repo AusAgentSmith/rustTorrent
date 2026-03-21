@@ -5,6 +5,7 @@ import { useErrorStore } from "../stores/errorStore";
 import { useUIStore } from "../stores/uiStore";
 import { useIsLargeScreen } from "../hooks/useIsLargeScreen";
 import { CompactLayout } from "./compact/CompactLayout";
+import { IndexarrBrowse } from "./IndexarrBrowse";
 
 export const RootContent = () => {
   const closeableError = useErrorStore((state) => state.closeableError);
@@ -16,9 +17,25 @@ export const RootContent = () => {
   );
 
   const viewMode = useUIStore((state) => state.viewMode);
+  const currentPage = useUIStore((state) => state.currentPage);
   const isLargeScreen = useIsLargeScreen();
 
   const useCompactLayout = viewMode === "compact" && isLargeScreen;
+
+  if (currentPage === "indexarr") {
+    return (
+      <div className="h-full flex flex-col">
+        <ErrorComponent
+          error={closeableError}
+          remove={() => setCloseableError(null)}
+        />
+        <ErrorComponent error={otherError} />
+        <div className="flex-1 min-h-0">
+          <IndexarrBrowse />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={useCompactLayout ? "h-full" : "h-full flex flex-col"}>

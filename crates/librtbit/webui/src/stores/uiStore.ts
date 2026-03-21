@@ -12,7 +12,12 @@ function getDefaultViewMode(): "full" | "compact" {
   return window.innerWidth >= LARGE_SCREEN_BREAKPOINT ? "compact" : "full";
 }
 
+export type CurrentPage = "torrents" | "indexarr";
+
 export interface UIStore {
+  currentPage: CurrentPage;
+  setCurrentPage: (page: CurrentPage) => void;
+
   viewMode: "full" | "compact";
   setViewMode: (mode: "full" | "compact") => void;
   toggleViewMode: () => void;
@@ -55,6 +60,9 @@ export interface UIStore {
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
+  currentPage: "torrents" as CurrentPage,
+  setCurrentPage: (page) => set({ currentPage: page }),
+
   viewMode: getDefaultViewMode(),
 
   setViewMode: (mode) => {

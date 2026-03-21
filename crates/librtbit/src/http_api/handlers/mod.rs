@@ -1,5 +1,6 @@
 pub(crate) mod configure;
 pub(crate) mod dht;
+pub(crate) mod indexarr;
 pub(crate) mod logging;
 pub(crate) mod other;
 pub(crate) mod playlist;
@@ -151,6 +152,33 @@ pub fn make_api_router(state: ApiState) -> Router {
                 post(torrents::h_set_torrent_category),
             );
     }
+
+    // Indexarr integration proxy endpoints
+    api_router = api_router
+        .route("/indexarr/status", get(indexarr::h_indexarr_status))
+        .route("/indexarr/search", get(indexarr::h_indexarr_search))
+        .route("/indexarr/recent", get(indexarr::h_indexarr_recent))
+        .route("/indexarr/trending", get(indexarr::h_indexarr_trending))
+        .route(
+            "/indexarr/torrent/{info_hash}",
+            get(indexarr::h_indexarr_torrent_detail),
+        )
+        .route(
+            "/indexarr/identity/status",
+            get(indexarr::h_indexarr_identity_status),
+        )
+        .route(
+            "/indexarr/identity/acknowledge",
+            post(indexarr::h_indexarr_identity_acknowledge),
+        )
+        .route(
+            "/indexarr/sync/preferences",
+            get(indexarr::h_indexarr_sync_preferences_get),
+        )
+        .route(
+            "/indexarr/sync/preferences",
+            post(indexarr::h_indexarr_sync_preferences_set),
+        );
 
     // Auth endpoints — status is always available; login/refresh/logout need token store;
     // setup and change_credentials need credential store.

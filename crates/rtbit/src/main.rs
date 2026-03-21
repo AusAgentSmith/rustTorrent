@@ -748,6 +748,18 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             }
         },
 
+        indexarr_url: {
+            let enabled = std::env::var("RTBIT_INDEXARR_ENABLED")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false);
+            if enabled {
+                std::env::var("RTBIT_INDEXARR_URL").ok()
+            } else {
+                None
+            }
+        },
+        indexarr_api_key: std::env::var("RTBIT_INDEXARR_API_KEY").ok(),
+
         ..Default::default()
     };
 
