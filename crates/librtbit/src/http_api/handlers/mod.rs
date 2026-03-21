@@ -67,6 +67,7 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "POST /torrents/{id_or_infohash}/delete": "Forget about the torrent, remove the files",
             "POST /torrents/{id_or_infohash}/add_peers": "Add peers (newline-delimited)",
             "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}",
+            "POST /torrents/{id_or_infohash}/sequential": "Toggle sequential download mode. POST json {\"enabled\": true/false}",
             "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
         },
         "server": "rtbit",
@@ -137,6 +138,10 @@ pub fn make_api_router(state: ApiState) -> Router {
                 post(torrents::h_torrent_action_update_only_files),
             )
             .route("/torrents/{id}/add_peers", post(torrents::h_add_peers))
+            .route(
+                "/torrents/{id}/sequential",
+                post(torrents::h_torrent_set_sequential),
+            )
             .route("/torrents/create", post(torrents::h_create_torrent))
             .route(
                 "/torrents/categories",

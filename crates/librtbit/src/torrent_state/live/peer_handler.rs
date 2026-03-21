@@ -31,7 +31,7 @@ use crate::{
     Error,
     chunk_tracker::ChunkMarkingResult,
     peer_connection::{PeerConnectionHandler, WriterRequest},
-    piece_tracker::{AcquireRequest, AcquireResult},
+    piece_tracker::{AcquireRequest, AcquireResult, PieceSelectionStrategy},
     stream_connect::ConnectionKind,
     torrent_state::utils::{TimedExistence, timeit},
     type_aliases::{BF, PeerHandle},
@@ -291,6 +291,11 @@ impl PeerHandler {
             PeerState::Live(live) => {
                 let mut g = self.state.lock_write("mark_chunk_requests_canceled");
 
+                // Decrement piece availability for all pieces this peer had
+                if !live.bitfield.is_empty() {
+                    g.piece_availability.remove_bitfield(&live.bitfield);
+                }
+
                 // Release all pieces owned by this peer (fixes the bug where pieces
                 // could be in both queue_pieces AND inflight_pieces after peer death)
                 let released = g.get_pieces_mut()?.release_pieces_owned_by(self.addr);
@@ -459,9 +464,17 @@ impl PeerHandler {
                 let TorrentStateLocked {
                     pieces,
                     file_priorities,
+                    sequential,
+                    piece_availability,
                     ..
                 } = &mut **g;
                 let pieces = pieces.as_mut().ok_or(Error::ChunkTrackerEmpty)?;
+                let strategy = if *sequential {
+                    PieceSelectionStrategy::Sequential
+                } else {
+                    PieceSelectionStrategy::RarestFirst
+                };
+                let avail_counts = piece_availability.counts();
                 let result = pieces.acquire_piece(AcquireRequest {
                     peer: self.addr,
                     peer_avg_time: self.counters.average_piece_download_time(),
@@ -474,6 +487,8 @@ impl PeerHandler {
                             .try_write()
                             .is_some()
                     },
+                    strategy,
+                    availability: Some(avail_counts),
                 });
 
                 match result {
@@ -557,6 +572,8 @@ impl PeerHandler {
                 if live.bitfield.is_empty() {
                     live.bitfield = make_piece_bitfield(&self.state.lengths);
                 }
+                // Check if the peer already had this piece (to avoid double-counting)
+                let already_had = live.bitfield.get(have as usize).map(|v| *v).unwrap_or(false);
                 match live.bitfield.get_mut(have as usize) {
                     Some(mut v) => *v = true,
                     None => {
@@ -570,6 +587,10 @@ impl PeerHandler {
                         return;
                     }
                 };
+                // Update piece availability if this is a new piece for this peer
+                if !already_had {
+                    self.state.lock_write("on_have_availability").piece_availability.inc(have);
+                }
                 trace!("updated bitfield with have={}", have);
                 if let Some(true) = live
                     .bitfield
@@ -597,6 +618,8 @@ impl PeerHandler {
         {
             debug!("peer has full torrent");
         }
+        // Update piece availability for all pieces this peer has
+        self.state.lock_write("on_bitfield_availability").piece_availability.add_bitfield(&bf);
         self.state.peers.update_bitfield(self.addr, bf);
         self.on_bitfield_notify.notify_waiters();
         Ok(())

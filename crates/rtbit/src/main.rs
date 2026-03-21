@@ -389,6 +389,10 @@ struct DownloadOpts {
     /// Disable HTTP API entirely.
     #[arg(long = "disable-http-api")]
     disable_http_api: bool,
+
+    /// Download pieces in sequential order (useful for media preview/playback).
+    #[arg(long)]
+    sequential: bool,
 }
 
 #[derive(Clone)]
@@ -842,6 +846,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 sub_folder: download_opts.sub_folder.clone(),
                 initial_peers: download_opts.initial_peers.as_ref().map(|p| &p.0).cloned(),
                 disable_trackers: opts.disable_trackers,
+                sequential: download_opts.sequential,
                 ..Default::default()
             };
             let session = Session::new_with_opts(

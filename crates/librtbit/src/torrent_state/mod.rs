@@ -117,6 +117,8 @@ pub(crate) struct ManagedTorrentOptions {
     pub ratelimits: LimitsConfig,
     pub initial_peers: Vec<SocketAddr>,
     pub peer_limit: Option<usize>,
+    /// Download pieces in sequential order (for media preview/playback).
+    pub sequential: bool,
     #[cfg(feature = "disable-upload")]
     pub _disable_upload: bool,
 }

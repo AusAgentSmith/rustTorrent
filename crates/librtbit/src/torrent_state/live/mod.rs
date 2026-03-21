@@ -80,7 +80,7 @@ use crate::{
     file_ops::FileOps,
     limits::Limits,
     peer_connection::WriterRequest,
-    piece_tracker::PieceTracker,
+    piece_tracker::{self, PieceTracker},
     session::CheckedIncomingConnection,
     session_stats::SessionStats,
     stream_connect::ConnectionKind,
@@ -120,6 +120,12 @@ pub(crate) struct TorrentStateLocked {
     fatal_errors_tx: Option<tokio::sync::oneshot::Sender<anyhow::Error>>,
 
     unflushed_bitv_bytes: u64,
+
+    /// When true, pieces are requested in sequential order (for media preview/playback).
+    pub(crate) sequential: bool,
+
+    /// Per-piece availability counts across all connected peers.
+    pub(crate) piece_availability: piece_tracker::PieceAvailability,
 }
 
 impl TorrentStateLocked {
@@ -283,6 +289,8 @@ impl TorrentStateLive {
                 file_priorities,
                 fatal_errors_tx: Some(fatal_errors_tx),
                 unflushed_bitv_bytes: 0,
+                sequential: paused.shared.options.sequential,
+                piece_availability: piece_tracker::PieceAvailability::new(lengths.total_pieces()),
             }),
             files: paused.files,
             stats: AtomicStats {
@@ -529,6 +537,25 @@ impl TorrentStateLive {
             .get_chunks()
             .ok()
             .map(|c| *c.get_hns())
+    }
+
+    /// Set whether sequential download mode is enabled.
+    pub fn set_sequential(&self, enabled: bool) {
+        self.lock_write("set_sequential").sequential = enabled;
+    }
+
+    /// Get whether sequential download mode is enabled.
+    pub fn get_sequential(&self) -> bool {
+        self.lock_read("get_sequential").sequential
+    }
+
+    /// Get piece availability stats: (min_availability, avg_availability).
+    pub fn get_availability_stats(&self) -> (u32, f64) {
+        let g = self.lock_read("get_availability_stats");
+        (
+            g.piece_availability.min_availability(),
+            g.piece_availability.avg_availability(),
+        )
     }
 
     fn transmit_haves(&self, index: ValidPieceIndex) {

@@ -375,6 +375,18 @@ impl Api {
         Ok(Default::default())
     }
 
+    /// Toggle sequential download mode for a torrent.
+    pub fn api_torrent_set_sequential(
+        &self,
+        idx: TorrentIdOrHash,
+        enabled: bool,
+    ) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        let live = handle.live().ok_or(crate::Error::TorrentIsNotLive)?;
+        live.set_sequential(enabled);
+        Ok(Default::default())
+    }
+
     pub fn api_set_rust_log(&self, new_value: String) -> Result<EmptyJsonResponse> {
         let tx = self
             .rust_log_reload_tx

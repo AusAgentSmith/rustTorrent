@@ -45,6 +45,21 @@ pub enum AcquireResult {
     NoneAvailable,
 }
 
+/// Piece selection strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PieceSelectionStrategy {
+    /// Rarest-first: prefer pieces with lowest availability (default).
+    RarestFirst,
+    /// Sequential: request pieces in order (piece 0, 1, 2, ...).
+    Sequential,
+}
+
+impl Default for PieceSelectionStrategy {
+    fn default() -> Self {
+        Self::RarestFirst
+    }
+}
+
 /// Parameters for acquiring a piece.
 pub struct AcquireRequest<'a, I, P, S>
 where
@@ -66,6 +81,82 @@ where
     pub peer_has_piece: P,
     /// Returns true if the piece can be stolen (e.g., not locked for writing).
     pub can_steal: S,
+    /// Piece selection strategy to use (rarest-first or sequential).
+    pub strategy: PieceSelectionStrategy,
+    /// Per-piece availability counts for rarest-first selection.
+    /// Index corresponds to piece index, value is the number of peers that have the piece.
+    pub availability: Option<&'a [u32]>,
+}
+
+/// Tracks per-piece availability across all connected peers.
+///
+/// Each entry counts how many peers currently have that piece.
+/// Incremented on HAVE messages and new peer bitfields.
+/// Decremented when a peer disconnects.
+pub struct PieceAvailability {
+    /// Per-piece count of peers that have it.
+    counts: Vec<u32>,
+}
+
+impl PieceAvailability {
+    /// Create a new availability tracker for the given number of pieces.
+    pub fn new(num_pieces: u32) -> Self {
+        Self {
+            counts: vec![0; num_pieces as usize],
+        }
+    }
+
+    /// Increment availability for a single piece (e.g., on HAVE message).
+    pub fn inc(&mut self, piece: u32) {
+        if let Some(c) = self.counts.get_mut(piece as usize) {
+            *c = c.saturating_add(1);
+        }
+    }
+
+    /// Decrement availability for a single piece.
+    #[allow(dead_code)]
+    pub fn dec(&mut self, piece: u32) {
+        if let Some(c) = self.counts.get_mut(piece as usize) {
+            *c = c.saturating_sub(1);
+        }
+    }
+
+    /// Increment availability for all pieces in a bitfield (e.g., on new peer connection).
+    pub fn add_bitfield(&mut self, bitfield: &crate::type_aliases::BS) {
+        for idx in bitfield.iter_ones() {
+            if let Some(c) = self.counts.get_mut(idx) {
+                *c = c.saturating_add(1);
+            }
+        }
+    }
+
+    /// Decrement availability for all pieces in a bitfield (e.g., on peer disconnect).
+    pub fn remove_bitfield(&mut self, bitfield: &crate::type_aliases::BS) {
+        for idx in bitfield.iter_ones() {
+            if let Some(c) = self.counts.get_mut(idx) {
+                *c = c.saturating_sub(1);
+            }
+        }
+    }
+
+    /// Get the per-piece availability counts.
+    pub fn counts(&self) -> &[u32] {
+        &self.counts
+    }
+
+    /// Get the minimum availability among pieces that are needed (have count > 0).
+    pub fn min_availability(&self) -> u32 {
+        self.counts.iter().copied().filter(|&c| c > 0).min().unwrap_or(0)
+    }
+
+    /// Get the average availability of all pieces.
+    pub fn avg_availability(&self) -> f64 {
+        if self.counts.is_empty() {
+            return 0.0;
+        }
+        let sum: u64 = self.counts.iter().map(|&c| c as u64).sum();
+        sum as f64 / self.counts.len() as f64
+    }
 }
 
 /// Coordinates piece download state.
@@ -115,8 +206,13 @@ impl PieceTracker {
     ///
     /// The acquisition strategy is:
     /// 1. Try to steal a piece from a peer that's 10x slower
-    /// 2. Try to reserve a piece from the queue (priority pieces first)
+    /// 2. Try to reserve a piece from the queue (priority pieces first, then strategy-based)
     /// 3. Try to steal a piece from a peer that's 3x slower
+    ///
+    /// Piece selection strategy (step 2) follows this priority:
+    /// - Priority pieces (highest) -- explicitly requested pieces (streaming/seek)
+    /// - Sequential (if enabled) -- next piece in order
+    /// - Rarest-first (default) -- least available piece among needed pieces
     ///
     /// If `Stolen` is returned, the caller MUST call `peers.on_steal()` to notify
     /// the old peer and update counters.
@@ -142,16 +238,58 @@ impl PieceTracker {
             }
         }
 
-        // Then check naturally ordered queued pieces
-        // Note: iter_queued_pieces only returns pieces in queue_pieces (not in-flight)
+        // Then check queued pieces using the selected strategy
         let queued: Vec<_> = self
             .chunks
             .iter_queued_pieces(req.file_priorities, req.file_infos)
             .collect();
 
-        for piece in queued {
-            if (req.peer_has_piece)(piece) {
-                return self.reserve_piece(piece, req.peer);
+        match req.strategy {
+            PieceSelectionStrategy::Sequential => {
+                // Sequential: pieces are already yielded in file-priority order
+                // (first/last/mid within each file). Just pick the lowest-index
+                // piece that the peer has.
+                let mut sorted = queued;
+                sorted.sort_unstable_by_key(|p| p.get());
+                for piece in sorted {
+                    if (req.peer_has_piece)(piece) {
+                        return self.reserve_piece(piece, req.peer);
+                    }
+                }
+            }
+            PieceSelectionStrategy::RarestFirst => {
+                if let Some(availability) = req.availability {
+                    // Rarest-first: sort by availability (ascending), break ties randomly
+                    let mut candidates: Vec<_> = queued
+                        .into_iter()
+                        .filter(|p| (req.peer_has_piece)(*p))
+                        .collect();
+
+                    if !candidates.is_empty() {
+                        // Sort by availability count (rarest first)
+                        // Use a simple random tiebreaker by shuffling first
+                        use rand::seq::SliceRandom;
+                        let mut rng = rand::rng();
+                        candidates.shuffle(&mut rng);
+                        candidates.sort_by_key(|p| {
+                            availability
+                                .get(p.get() as usize)
+                                .copied()
+                                .unwrap_or(u32::MAX)
+                        });
+
+                        if let Some(&piece) = candidates.first() {
+                            return self.reserve_piece(piece, req.peer);
+                        }
+                    }
+                } else {
+                    // Fallback: no availability data, use default file-priority order
+                    for piece in queued {
+                        if (req.peer_has_piece)(piece) {
+                            return self.reserve_piece(piece, req.peer);
+                        }
+                    }
+                }
             }
         }
 
@@ -396,6 +534,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true, // Peer has all pieces
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         // Should reserve piece 0 (first in queue)
@@ -429,6 +569,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |p| p.get() >= 2,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         match result {
@@ -457,6 +599,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         let piece = match result {
@@ -490,6 +634,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         let piece = match result {
@@ -518,6 +664,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |p| p == piece, // Only has the failed piece
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         match result2 {
@@ -547,6 +695,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => p,
             _ => panic!("Expected Reserved"),
@@ -559,6 +709,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => p,
             _ => panic!("Expected Reserved"),
@@ -573,6 +725,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => p,
             _ => panic!("Expected Reserved"),
@@ -612,6 +766,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
         tracker.acquire_piece(AcquireRequest {
             peer: peer(1),
@@ -621,6 +777,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         assert_eq!(tracker.inflight_count(), 2);
@@ -638,6 +796,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         // Should get piece 0 again (was requeued)
@@ -676,6 +836,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         // Should get piece 3 (first priority piece)
@@ -702,6 +864,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| false, // Peer has nothing
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         match result {
@@ -746,6 +910,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => p,
             _ => panic!("Expected Reserved"),
@@ -763,6 +929,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => p,
             _ => panic!("Expected Reserved"),
@@ -781,6 +949,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         match result {
@@ -813,6 +983,8 @@ mod tests {
                 file_infos: &file_infos,
                 peer_has_piece: |_| true,
                 can_steal: |_| true,
+                strategy: PieceSelectionStrategy::default(),
+                availability: None,
             });
 
             match result {
@@ -850,6 +1022,8 @@ mod tests {
                 file_infos: &file_infos,
                 peer_has_piece: |_| true,
                 can_steal: |_| true,
+                strategy: PieceSelectionStrategy::default(),
+                availability: None,
             });
             match result {
                 AcquireResult::Reserved(p) => pieces.push(p),
@@ -879,6 +1053,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
         match result {
             AcquireResult::NoneAvailable => {}
@@ -911,6 +1087,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => {
                 assert_eq!(p.get(), 0);
@@ -927,6 +1105,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |_| true,
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         }) {
             AcquireResult::Reserved(p) => {
                 assert_eq!(p.get(), 4);
@@ -949,6 +1129,8 @@ mod tests {
             file_infos: &file_infos,
             peer_has_piece: |p| p.get() == 4, // Peer B only has piece 4
             can_steal: |_| true,
+            strategy: PieceSelectionStrategy::default(),
+            availability: None,
         });
 
         // Should steal piece 4 (which peer B has), NOT piece 0 (which peer B doesn't have)

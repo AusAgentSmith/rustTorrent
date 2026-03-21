@@ -27,6 +27,8 @@ pub struct TorrentAddQueryParams {
     /// Will force interpreting the content as a URL.
     pub is_url: Option<bool>,
     pub list_only: Option<bool>,
+    /// Download pieces in sequential order (for media preview/playback).
+    pub sequential: Option<bool>,
 }
 
 impl Serialize for OnlyFiles {
@@ -111,6 +113,7 @@ impl TorrentAddQueryParams {
                 read_write_timeout: self.peer_read_write_timeout.map(Duration::from_secs),
                 ..Default::default()
             }),
+            sequential: self.sequential.unwrap_or(false),
             ..Default::default()
         }
     }

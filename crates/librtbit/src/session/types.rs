@@ -145,6 +145,10 @@ pub struct AddTorrentOptions {
     /// If not set, defaults to 120 seconds. Set to 0 to disable the timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub magnet_resolution_timeout_secs: Option<u64>,
+
+    /// Download pieces in sequential order (for media preview/playback).
+    #[serde(default)]
+    pub sequential: bool,
 }
 
 pub struct ListOnlyResponse {

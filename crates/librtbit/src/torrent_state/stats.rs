@@ -12,6 +12,12 @@ pub struct LiveStats {
     pub download_speed: Speed,
     pub upload_speed: Speed,
     pub time_remaining: Option<DurationWithHumanReadable>,
+    /// Whether sequential download mode is enabled.
+    pub sequential: bool,
+    /// Minimum piece availability across all pieces.
+    pub min_piece_availability: u32,
+    /// Average piece availability across all pieces.
+    pub avg_piece_availability: f64,
 }
 
 impl std::fmt::Display for LiveStats {
@@ -30,6 +36,8 @@ impl From<&TorrentStateLive> for LiveStats {
         let snapshot = live.stats_snapshot();
         let down_estimator = live.down_speed_estimator();
         let up_estimator = live.up_speed_estimator();
+        let sequential = live.get_sequential();
+        let (min_avail, avg_avail) = live.get_availability_stats();
 
         Self {
             average_piece_download_time: snapshot.average_piece_download_time(),
@@ -39,6 +47,9 @@ impl From<&TorrentStateLive> for LiveStats {
             time_remaining: down_estimator
                 .time_remaining()
                 .map(DurationWithHumanReadable),
+            sequential,
+            min_piece_availability: min_avail,
+            avg_piece_availability: avg_avail,
         }
     }
 }

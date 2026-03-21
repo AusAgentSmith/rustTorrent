@@ -875,6 +875,7 @@ impl Session {
                     ratelimits: opts.ratelimits,
                     initial_peers: opts.initial_peers.clone().unwrap_or_default(),
                     peer_limit: opts.peer_limit.or(self.peer_limit),
+                    sequential: opts.sequential,
                     #[cfg(feature = "disable-upload")]
                     _disable_upload: self._disable_upload,
                 },

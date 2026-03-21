@@ -625,3 +625,29 @@ pub async fn h_set_torrent_category(
         .await
         .map(axum::Json)
 }
+
+#[derive(Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
+pub struct SetSequentialRequest {
+    pub enabled: bool,
+}
+
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/sequential",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    request_body(content = SetSequentialRequest, description = "Enable or disable sequential download mode"),
+    responses(
+        (status = 200, description = "Sequential mode updated", body = EmptyJsonResponse)
+    )
+))]
+pub async fn h_torrent_set_sequential(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+    axum::Json(req): axum::Json<SetSequentialRequest>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_torrent_set_sequential(idx, req.enabled)
+        .map(axum::Json)
+}
