@@ -268,6 +268,30 @@ struct Opts {
     #[arg(long = "ratelimit-upload", env = "RTBIT_RATELIMIT_UPLOAD")]
     ratelimit_upload_bps: Option<NonZeroU32>,
 
+    /// Alternative (turtle mode) download speed limit in bytes-per-second.
+    #[arg(long = "alt-speed-down", env = "RTBIT_ALT_SPEED_DOWN")]
+    alt_speed_down: Option<NonZeroU32>,
+
+    /// Alternative (turtle mode) upload speed limit in bytes-per-second.
+    #[arg(long = "alt-speed-up", env = "RTBIT_ALT_SPEED_UP")]
+    alt_speed_up: Option<NonZeroU32>,
+
+    /// Enable the alternative speed schedule.
+    #[arg(long = "alt-speed-schedule-enabled", env = "RTBIT_ALT_SPEED_SCHEDULE_ENABLED")]
+    alt_speed_schedule_enabled: bool,
+
+    /// Alternative speed schedule start time in minutes from midnight (e.g. 480 = 8:00 AM).
+    #[arg(long = "alt-speed-schedule-start", env = "RTBIT_ALT_SPEED_SCHEDULE_START")]
+    alt_speed_schedule_start: Option<u32>,
+
+    /// Alternative speed schedule end time in minutes from midnight (e.g. 1020 = 5:00 PM).
+    #[arg(long = "alt-speed-schedule-end", env = "RTBIT_ALT_SPEED_SCHEDULE_END")]
+    alt_speed_schedule_end: Option<u32>,
+
+    /// Alternative speed schedule days bitmask: 1=Mon 2=Tue 4=Wed 8=Thu 16=Fri 32=Sat 64=Sun 127=all.
+    #[arg(long = "alt-speed-schedule-days", env = "RTBIT_ALT_SPEED_SCHEDULE_DAYS")]
+    alt_speed_schedule_days: Option<u8>,
+
     /// Downloads a p2p blocklist from this url and blocks connections from/to those peers.
     /// Supports file:/// and http(s):// URLs. Format is newline-delimited "name:start_ip-end_ip"
     /// E.g. https://github.com/Naunter/BT_BlockLists/raw/refs/heads/master/bt_blocklists.gz
@@ -687,6 +711,28 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             download_bps: opts.ratelimit_download_bps,
             peer_limit: None,
             concurrent_init_limit: None,
+        },
+        alt_speed_config: if opts.alt_speed_down.is_some() || opts.alt_speed_up.is_some() {
+            Some(librtbit::limits::AltSpeedConfig {
+                alt_speed_down: opts.alt_speed_down,
+                alt_speed_up: opts.alt_speed_up,
+            })
+        } else {
+            None
+        },
+        alt_speed_schedule: if opts.alt_speed_schedule_enabled
+            || opts.alt_speed_schedule_start.is_some()
+            || opts.alt_speed_schedule_end.is_some()
+            || opts.alt_speed_schedule_days.is_some()
+        {
+            Some(librtbit::limits::AltSpeedSchedule {
+                enabled: opts.alt_speed_schedule_enabled,
+                start_minutes: opts.alt_speed_schedule_start.unwrap_or(480),
+                end_minutes: opts.alt_speed_schedule_end.unwrap_or(1020),
+                days: opts.alt_speed_schedule_days.unwrap_or(127),
+            })
+        } else {
+            None
         },
         blocklist_url: opts.blocklist_url.take(),
         allowlist_url: opts.allowlist_url.take(),

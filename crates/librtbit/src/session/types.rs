@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use tracing::trace;
 
 use crate::{
-    limits::LimitsConfig,
+    limits::{AltSpeedConfig, AltSpeedSchedule, LimitsConfig},
     listen::ListenerOptions,
     peer_connection::PeerConnectionOptions,
     read_buf::ReadBuf,
@@ -300,6 +300,11 @@ pub struct SessionOptions {
     pub root_span: Option<tracing::Span>,
 
     pub ratelimits: LimitsConfig,
+
+    /// Alternative speed limits configuration.
+    pub alt_speed_config: Option<AltSpeedConfig>,
+    /// Alternative speed schedule configuration.
+    pub alt_speed_schedule: Option<AltSpeedSchedule>,
 
     pub blocklist_url: Option<String>,
     pub allowlist_url: Option<String>,

@@ -67,6 +67,13 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "POST /torrents/{id_or_infohash}/delete": "Forget about the torrent, remove the files",
             "POST /torrents/{id_or_infohash}/add_peers": "Add peers (newline-delimited)",
             "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}",
+            "GET /torrents/{id_or_infohash}/limits": "Get per-torrent rate limits",
+            "POST /torrents/{id_or_infohash}/limits": "Set per-torrent rate limits {\"download_rate\": bps, \"upload_rate\": bps}",
+            "GET /speed/alt": "Get alternative speed mode status",
+            "POST /speed/alt": "Toggle alternative speed mode {\"enabled\": true/false}",
+            "POST /speed/alt/config": "Set alternative speed limits {\"alt_speed_down\": bps, \"alt_speed_up\": bps}",
+            "GET /speed/schedule": "Get alternative speed schedule",
+            "POST /speed/schedule": "Set alternative speed schedule",
             "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
         },
         "server": "rtbit",
@@ -107,6 +114,12 @@ pub fn make_api_router(state: ApiState) -> Router {
             get(streaming::h_torrent_stream_file),
         )
         .route("/torrents/limits", get(configure::h_get_session_ratelimits))
+        .route(
+            "/torrents/{id}/limits",
+            get(configure::h_get_torrent_limits),
+        )
+        .route("/speed/alt", get(configure::h_get_alt_speed))
+        .route("/speed/schedule", get(configure::h_get_alt_speed_schedule))
         .route("/torrents/categories", get(torrents::h_list_categories));
 
     if !state.opts.read_only {
@@ -115,6 +128,19 @@ pub fn make_api_router(state: ApiState) -> Router {
             .route(
                 "/torrents/limits",
                 post(configure::h_update_session_ratelimits),
+            )
+            .route(
+                "/torrents/{id}/limits",
+                post(configure::h_set_torrent_limits),
+            )
+            .route("/speed/alt", post(configure::h_set_alt_speed))
+            .route(
+                "/speed/alt/config",
+                post(configure::h_set_alt_speed_config),
+            )
+            .route(
+                "/speed/schedule",
+                post(configure::h_set_alt_speed_schedule),
             )
             .route(
                 "/torrents/{id}/pause",

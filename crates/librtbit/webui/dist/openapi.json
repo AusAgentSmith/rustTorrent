@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "rqbit API",
-    "description": "REST API for rqbit BitTorrent client",
+    "title": "rtbit API",
+    "description": "REST API for rtbit BitTorrent client",
     "version": "7.0.0"
   },
   "paths": {

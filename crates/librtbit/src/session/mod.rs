@@ -31,7 +31,7 @@ use crate::{
     bitv_factory::{BitVFactory, NonPersistentBitVFactory},
     category::CategoryManager,
     ip_ranges::IpRanges,
-    limits::Limits,
+    limits::{AltSpeedState, Limits},
     merge_streams::merge_streams,
     peer_connection::PeerConnectionOptions,
     session_persistence::{SessionPersistenceStore, json::JsonSessionPersistenceStore},
@@ -107,6 +107,7 @@ pub struct Session {
     // Limits and throttling
     pub(crate) concurrent_initialize_semaphore: Arc<tokio::sync::Semaphore>,
     pub ratelimits: Limits,
+    pub alt_speed: AltSpeedState,
     pub(crate) peer_limit_atomic: AtomicUsize,
     pub(crate) concurrent_init_limit_atomic: AtomicUsize,
 
@@ -419,6 +420,10 @@ impl Session {
                 )),
                 udp_tracker_client,
                 ratelimits: Limits::new(opts.ratelimits),
+                alt_speed: AltSpeedState::new(
+                    opts.alt_speed_config.unwrap_or_default(),
+                    opts.alt_speed_schedule.unwrap_or_default(),
+                ),
                 peer_limit_atomic: AtomicUsize::new(resolved_peer_limit),
                 concurrent_init_limit_atomic: AtomicUsize::new(resolved_concurrent_init_limit),
                 ipv4_only: opts.ipv4_only,
@@ -468,6 +473,31 @@ impl Session {
                         Self::task_upnp_port_forwarder(announce_port, bind_device),
                     );
                 }
+            }
+
+            // Spawn alt speed schedule checker task.
+            {
+                let session_weak = Arc::downgrade(&session);
+                session.spawn(
+                    debug_span!(parent: session.rs(), "alt_speed_schedule"),
+                    "alt_speed_schedule",
+                    async move {
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                            let session = match session_weak.upgrade() {
+                                Some(s) => s,
+                                None => return Ok(()),
+                            };
+                            if session.alt_speed.check_schedule(&session.ratelimits) {
+                                let enabled = session.alt_speed.is_enabled();
+                                info!(
+                                    alt_speed_enabled = enabled,
+                                    "alt speed schedule toggled"
+                                );
+                            }
+                        }
+                    },
+                );
             }
 
             if let Some(persistence) = session.persistence.as_ref() {
