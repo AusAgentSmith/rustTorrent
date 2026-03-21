@@ -117,6 +117,9 @@ memmap2 = "0.9"
 metrics-exporter-prometheus = { version = "0.17", default-features = false }
 mime_guess = { version = "2", default-features = false }
 network-interface = "2"
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"
 nix = "0.30"
 notify = "8"
 openssl = "0.10"

@@ -113,6 +113,8 @@ axum-extra = { workspace = true, features = ["query"] }
 librqbit-dualstack-sockets = { workspace = true, features = ["axum"] }
 socket2.workspace = true
 nix = { workspace = true, features = ["uio"] }
+num-bigint.workspace = true
+num-traits.workspace = true
 thiserror.workspace = true
 utoipa = { workspace = true, optional = true }
 utoipa-axum = { workspace = true, optional = true }

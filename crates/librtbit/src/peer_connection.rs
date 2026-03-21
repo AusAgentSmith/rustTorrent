@@ -24,13 +24,15 @@ use peer_binary_protocol::{
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use tokio::time::timeout;
-use tracing::{Instrument, debug, trace, trace_span};
+use tracing::{Instrument, debug, trace, trace_span, warn};
 
 use crate::{
+    mse::{self, EncryptionMode},
     read_buf::ReadBuf,
     spawn_utils::BlockingSpawner,
     stream_connect::StreamConnector,
     type_aliases::{BoxAsyncReadVectored, BoxAsyncWrite},
+    vectored_traits::AsyncReadVectoredIntoCompat,
 };
 
 pub trait PeerConnectionHandler {
@@ -215,7 +217,7 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
             .unwrap_or_else(|| Duration::from_secs(10));
 
         let now = Instant::now();
-        let (ckind, mut read, mut write) = with_timeout(
+        let (ckind, read, write) = with_timeout(
             "connecting",
             connect_timeout,
             self.connector.connect(self.addr),
@@ -224,6 +226,35 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
 
         async move {
             self.handler.on_connected(now.elapsed());
+
+            let encryption_mode = self.connector.encryption;
+
+            // Perform MSE handshake if encryption is not disabled.
+            let (mut read, mut write): (BoxAsyncReadVectored, BoxAsyncWrite) =
+                if encryption_mode != EncryptionMode::Disabled {
+                    match mse::mse_handshake_initiator(read, write, self.info_hash, encryption_mode)
+                        .await
+                    {
+                        Ok(result) => {
+                            debug!(encryption = %result.encryption_status, "MSE handshake complete");
+                            (
+                                Box::new(result.reader.into_vectored_compat()),
+                                Box::new(result.writer),
+                            )
+                        }
+                        Err(e) => {
+                            if encryption_mode == EncryptionMode::Forced {
+                                return Err(Error::Anyhow(e.context("MSE handshake failed (encryption forced)")));
+                            }
+                            // In "enabled" mode, MSE failure means the stream is consumed,
+                            // so we must reconnect without MSE.
+                            warn!("MSE handshake failed, cannot fall back on same connection: {e:#}");
+                            return Err(Error::Anyhow(e.context("MSE handshake failed")));
+                        }
+                    }
+                } else {
+                    (read, write)
+                };
 
             let mut write_buf = Box::new([0u8; MAX_MSG_LEN]);
             let handshake = Handshake::new(self.info_hash, self.peer_id);

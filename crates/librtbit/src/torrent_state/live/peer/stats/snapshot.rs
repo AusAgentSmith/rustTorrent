@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    mse::EncryptionStatus,
     stream_connect::ConnectionKind,
     torrent_state::live::peer::{Peer, PeerState},
 };
@@ -28,6 +29,7 @@ pub struct PeerStats {
     pub counters: PeerCounters,
     pub state: &'static str,
     pub conn_kind: Option<ConnectionKind>,
+    pub encryption: Option<EncryptionStatus>,
 }
 
 impl From<&super::atomic::PeerCountersAtomic> for PeerCounters {
@@ -61,6 +63,10 @@ impl From<&Peer> for PeerStats {
             state: state.name(),
             conn_kind: match state {
                 PeerState::Live(l) => Some(l.connection_kind),
+                _ => None,
+            },
+            encryption: match state {
+                PeerState::Live(l) => Some(l.encryption_status),
                 _ => None,
             },
         }

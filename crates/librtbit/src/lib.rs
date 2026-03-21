@@ -62,6 +62,7 @@ mod ip_ranges;
 pub mod limits;
 mod listen;
 mod merge_streams;
+pub mod mse;
 mod peer_connection;
 mod peer_info_reader;
 mod piece_tracker;
@@ -96,6 +97,7 @@ pub use session::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ListOnlyResponse, SUPPORTED_SCHEMES,
     Session, SessionOptions, SessionPersistenceConfig,
 };
+pub use mse::{EncryptionMode, EncryptionStatus};
 pub use stream_connect::ConnectionOptions;
 pub use torrent_state::{
     ManagedTorrent, ManagedTorrentShared, ManagedTorrentState, TorrentMetadata, TorrentStats,

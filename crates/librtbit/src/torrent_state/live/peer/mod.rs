@@ -11,6 +11,7 @@ use librtbit_core::lengths::ChunkInfo;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::debug;
 
+use crate::mse::EncryptionStatus;
 use crate::peer_connection::WriterRequest;
 use crate::stream_connect::ConnectionKind;
 use crate::type_aliases::BF;
@@ -268,6 +269,7 @@ pub(crate) struct LivePeerState {
     pub tx: PeerTx,
 
     pub connection_kind: ConnectionKind,
+    pub encryption_status: EncryptionStatus,
 }
 
 impl LivePeerState {
@@ -284,6 +286,7 @@ impl LivePeerState {
             inflight_requests: Default::default(),
             tx,
             connection_kind,
+            encryption_status: EncryptionStatus::Plaintext,
         }
     }
 

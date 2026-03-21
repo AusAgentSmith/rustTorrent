@@ -291,6 +291,14 @@ struct Opts {
     /// Disable trackers (for debugging DHT, LSD and --initial-peers)
     #[arg(long = "disable-trackers", env = "RTBIT_TRACKERS_DISABLE")]
     disable_trackers: bool,
+
+    /// MSE/PE (Message Stream Encryption / Protocol Encryption) mode.
+    ///
+    /// - "disabled": no encryption attempted or accepted
+    /// - "enabled": prefer encrypted, allow plaintext fallback (default)
+    /// - "forced": require encryption, reject plaintext
+    #[arg(long = "encryption", default_value = "enabled", env = "RTBIT_ENCRYPTION")]
+    encryption: librtbit::EncryptionMode,
 }
 
 #[derive(Parser)]
@@ -654,6 +662,7 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                 read_write_timeout: Some(opts.peer_read_write_timeout),
                 ..Default::default()
             }),
+            encryption: opts.encryption,
         }),
         bind_device_name: opts.bind_device_name.take(),
         default_storage_factory: Some({
