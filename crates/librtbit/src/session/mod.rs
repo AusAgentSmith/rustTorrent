@@ -121,6 +121,7 @@ pub struct Session {
     #[cfg(feature = "disable-upload")]
     _disable_upload: bool,
     pub ipv4_only: bool,
+    pub disable_webseeds: bool,
     pub peer_limit: Option<usize>,
 
     /// Configurable cap for probabilistic fastresume validation denominator.
@@ -140,6 +141,11 @@ impl Session {
 
     pub fn cancellation_token(&self) -> &CancellationToken {
         &self.cancellation_token
+    }
+
+    /// Get a reference to the session's reqwest HTTP client.
+    pub(crate) fn http_client(&self) -> &reqwest::Client {
+        &self.reqwest_client
     }
 
     pub fn get_peer_limit(&self) -> usize {
@@ -422,6 +428,7 @@ impl Session {
                 peer_limit_atomic: AtomicUsize::new(resolved_peer_limit),
                 concurrent_init_limit_atomic: AtomicUsize::new(resolved_concurrent_init_limit),
                 ipv4_only: opts.ipv4_only,
+                disable_webseeds: opts.disable_webseeds,
                 trackers: opts.trackers,
                 disable_trackers: opts.disable_trackers,
                 peer_limit: opts.peer_limit.or(Some(200)),
@@ -591,9 +598,42 @@ impl Session {
                 AddTorrent::Url(magnet) if magnet.starts_with("magnet:") || magnet.len() == 40 => {
                     let magnet = librtbit_core::magnet::Magnet::parse(&magnet)
                         .context("provided path is not a valid magnet URL")?;
-                    let info_hash = magnet
-                        .as_id20()
-                        .context("magnet link didn't contain a BTv1 infohash")?;
+
+                    // BEP 46: if the magnet has a public key but no info hash,
+                    // resolve the info hash via DHT mutable item lookup.
+                    let info_hash = match magnet.as_id20() {
+                        Some(id) => id,
+                        None => {
+                            if let Some(pk) = magnet.as_public_key() {
+                                let dht = self.dht.as_ref()
+                                    .context("BEP 46 magnet link requires DHT, but DHT is disabled")?;
+                                let salt = magnet.as_salt().map(|s| s.as_bytes());
+                                let result = dht.get_mutable_item(pk, salt).await
+                                    .map_err(|e| anyhow::anyhow!("BEP 46 DHT mutable item lookup failed: {e}"))?;
+
+                                // The value should be a 20-byte info hash encoded as a bencode string.
+                                // Per BEP 46, v = <20-byte infohash> bencoded as "20:<bytes>".
+                                let v = &result.v;
+                                let ih_bytes: &[u8] = if v.len() == 20 {
+                                    // Raw 20-byte info hash (already decoded from bencode by the DHT layer).
+                                    v
+                                } else if v.len() >= 23 && v.starts_with(b"20:") {
+                                    // Bencoded string "20:<20 bytes>".
+                                    &v[3..]
+                                } else {
+                                    anyhow::bail!(
+                                        "BEP 46: mutable item value is not a valid info hash (len={})",
+                                        v.len()
+                                    );
+                                };
+                                Id20::from_bytes(ih_bytes)
+                                    .context("BEP 46: could not parse info hash from mutable item value")?
+                            } else {
+                                anyhow::bail!("magnet link has neither a BTv1 info hash nor a BEP 46 public key");
+                            }
+                        }
+                    };
+
                     if let Some(so) = magnet.get_select_only() {
                         // Only overwrite opts.only_files if user didn't specify
                         if opts.only_files.is_none() {
@@ -647,14 +687,18 @@ impl Session {
                         trackers.extend(custom_trackers);
                     }
 
-                    let web_seed_urls: Vec<String> = torrent
-                        .meta
-                        .url_list
-                        .iter()
-                        .flat_map(|ul| ul.iter())
-                        .filter_map(|url| std::str::from_utf8(url.as_ref()).ok())
-                        .map(|s| s.to_owned())
-                        .collect();
+                    let web_seed_urls: Vec<String> = if self.disable_webseeds {
+                        Vec::new()
+                    } else {
+                        torrent
+                            .meta
+                            .url_list
+                            .iter()
+                            .flat_map(|ul| ul.iter())
+                            .filter_map(|url| std::str::from_utf8(url.as_ref()).ok())
+                            .map(|s| s.to_owned())
+                            .collect()
+                    };
 
                     InternalAddResult {
                         info_hash: torrent.meta.info_hash,

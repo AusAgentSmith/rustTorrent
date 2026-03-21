@@ -56,6 +56,21 @@ pub struct DhtStats {
     pub routing_table_size_v6: usize,
 }
 
+/// Result of a successful BEP 44 mutable item lookup.
+#[derive(Debug, Clone)]
+pub struct MutableItemResult {
+    /// The 32-byte Ed25519 public key.
+    pub public_key: [u8; 32],
+    /// The sequence number of this item version.
+    pub seq: i64,
+    /// The bencoded value (max 1000 bytes).
+    pub v: Vec<u8>,
+    /// The 64-byte Ed25519 signature.
+    pub signature: [u8; 64],
+    /// Optional salt used in target computation.
+    pub salt: Option<Vec<u8>>,
+}
+
 struct OutstandingRequest {
     done: tokio::sync::oneshot::Sender<crate::Result<ResponseOrError>>,
 }
@@ -590,6 +605,7 @@ pub struct DhtState {
     cancellation_token: CancellationToken,
 
     pub(crate) peer_store: PeerStore,
+    pub(crate) mutable_item_store: crate::mutable_item_store::MutableItemStore,
 }
 
 impl DhtState {
@@ -614,6 +630,7 @@ impl DhtState {
             listen_addr,
             rate_limiter: make_rate_limiter(),
             peer_store,
+            mutable_item_store: crate::mutable_item_store::MutableItemStore::new(1000),
             cancellation_token,
         }
     }
@@ -701,6 +718,16 @@ impl DhtState {
                     info_hash,
                     port,
                     token,
+                }),
+                transaction_id: ByteBufOwned::from(transaction_id_buf.as_ref()),
+                version: None,
+                ip: None,
+            },
+            Request::Bep44Get { target, seq } => Message {
+                kind: MessageKind::Bep44GetRequest(bprotocol::Bep44GetRequest {
+                    id: self.id,
+                    target,
+                    seq,
                 }),
                 transaction_id: ByteBufOwned::from(transaction_id_buf.as_ref()),
                 version: None,
@@ -927,13 +954,29 @@ impl DhtState {
             }
             MessageKind::Bep44GetRequest(req) => {
                 // BEP 44: respond to get requests for mutable/immutable items.
-                // Return closest nodes to target; actual item lookup from the store
-                // will be implemented when the full BEP 44 handler is wired up.
                 let (nodes, nodes6) =
                     self.generate_compact_nodes_both(req.target, Want::Both);
                 self.get_table_for_addr(addr)
                     .write()
                     .mark_last_query(&req.id, now());
+
+                // Look up stored item in our local store.
+                let stored = self.mutable_item_store.get(&req.target);
+                // If the requester provided a seq, only return the item if ours is newer.
+                let stored = stored.filter(|item| {
+                    req.seq.map_or(true, |req_seq| item.seq > req_seq)
+                });
+
+                let (v, k, sig, seq) = match stored {
+                    Some(item) => (
+                        Some(ByteBufOwned::from(item.v.as_ref())),
+                        Some(ByteBufOwned::from(item.k.as_ref())),
+                        Some(ByteBufOwned::from(item.sig.as_ref())),
+                        Some(item.seq),
+                    ),
+                    None => (None, None, None, None),
+                };
+
                 let message = Message {
                     transaction_id: msg.transaction_id,
                     version: None,
@@ -945,6 +988,10 @@ impl DhtState {
                         token: Some(ByteBufOwned::from(
                             &self.peer_store.gen_token_for(req.id, addr)[..],
                         )),
+                        v,
+                        k,
+                        sig,
+                        seq,
                         ..Default::default()
                     }),
                 };
@@ -959,12 +1006,52 @@ impl DhtState {
                 Ok(())
             }
             MessageKind::Bep44PutRequest(req) => {
-                // BEP 44: respond to put requests for mutable items.
-                // Signature verification and item storage will be implemented
-                // when the full BEP 44 handler is wired up.
+                // BEP 44: verify signature and store the mutable item.
                 self.get_table_for_addr(addr)
                     .write()
                     .mark_last_query(&req.id, now());
+
+                let k_bytes = req.k.as_ref();
+                let sig_bytes = req.sig.as_ref();
+                let v_bytes = req.v.as_ref();
+
+                // Validate field sizes.
+                if k_bytes.len() == 32 && sig_bytes.len() == 64 && v_bytes.len() <= 1000 {
+                    let mut pk = [0u8; 32];
+                    pk.copy_from_slice(k_bytes);
+                    let mut sig = [0u8; 64];
+                    sig.copy_from_slice(sig_bytes);
+                    let salt_opt = req.salt.as_ref().map(|s| s.as_ref());
+
+                    if crate::bep44_crypto::verify_mutable_item(
+                        &pk,
+                        &sig,
+                        salt_opt,
+                        req.seq,
+                        v_bytes,
+                    ) {
+                        let target = crate::bep44_crypto::mutable_item_target(
+                            &pk,
+                            salt_opt,
+                        );
+                        self.mutable_item_store.store(
+                            target,
+                            crate::mutable_item_store::StoredMutableItem {
+                                k: pk,
+                                sig,
+                                seq: req.seq,
+                                v: v_bytes.to_vec(),
+                                salt: salt_opt.map(|s| s.to_vec()),
+                                last_updated: std::time::Instant::now(),
+                            },
+                        );
+                    } else {
+                        debug!("BEP44 put: signature verification failed, rejecting");
+                    }
+                } else {
+                    debug!("BEP44 put: invalid field sizes, rejecting");
+                }
+
                 let message = Message {
                     transaction_id: msg.transaction_id,
                     version: None,
@@ -1008,6 +1095,12 @@ enum Request {
         port: u16,
     },
     Ping,
+    /// BEP 44: get a mutable/immutable item by target.
+    Bep44Get {
+        target: Id20,
+        /// If set, only return items with seq > this value.
+        seq: Option<i64>,
+    },
 }
 
 enum ResponseOrError {
@@ -1441,6 +1534,120 @@ impl DhtState {
         announce_port: Option<u16>,
     ) -> RequestPeersStream {
         RequestPeersStream::new(self.clone(), info_hash, announce_port)
+    }
+
+    /// BEP 44 / BEP 46: look up a mutable item in the DHT.
+    ///
+    /// Performs a recursive lookup toward `target = SHA-1(public_key [+ salt])`,
+    /// collects responses from the closest nodes, verifies the Ed25519
+    /// signature, and returns the best (highest-seq) valid result.
+    pub async fn get_mutable_item(
+        self: &Arc<Self>,
+        public_key: &[u8; 32],
+        salt: Option<&[u8]>,
+    ) -> crate::Result<MutableItemResult> {
+        use crate::bep44_crypto::{mutable_item_target, verify_mutable_item};
+
+        let target = mutable_item_target(public_key, salt);
+
+        // Query closest nodes to target using the existing routing tables.
+        let closest_v4: Vec<SocketAddr> = self
+            .routing_table_v4
+            .read()
+            .sorted_by_distance_from(target, now())
+            .into_iter()
+            .map(|n| n.addr())
+            .take(8)
+            .collect();
+        let closest_v6: Vec<SocketAddr> = self
+            .routing_table_v6
+            .read()
+            .sorted_by_distance_from(target, now())
+            .into_iter()
+            .map(|n| n.addr())
+            .take(8)
+            .collect();
+
+        let all_addrs: Vec<SocketAddr> =
+            closest_v4.into_iter().chain(closest_v6).collect();
+
+        if all_addrs.is_empty() {
+            return Err(Error::NoSuccessfulLookups { errors: 0 });
+        }
+
+        let mut best: Option<MutableItemResult> = None;
+
+        // Fire off requests in parallel.
+        let mut futs = FuturesUnordered::new();
+        for addr in &all_addrs {
+            futs.push(self.request(
+                Request::Bep44Get {
+                    target,
+                    seq: None,
+                },
+                *addr,
+            ));
+        }
+
+        while let Some(resp) = futs.next().await {
+            let resp = match resp {
+                Ok(ResponseOrError::Response(r)) => r,
+                _ => continue,
+            };
+
+            // Extract the BEP 44 mutable item fields from the response.
+            let v = match resp.v {
+                Some(ref v) => v.as_ref(),
+                None => continue,
+            };
+            let k = match resp.k {
+                Some(ref k) if k.as_ref().len() == 32 => k.as_ref(),
+                _ => continue,
+            };
+            let sig = match resp.sig {
+                Some(ref s) if s.as_ref().len() == 64 => s.as_ref(),
+                _ => continue,
+            };
+            let seq = match resp.seq {
+                Some(seq) => seq,
+                None => continue,
+            };
+
+            // Verify the public key matches what we expect.
+            if k != public_key.as_ref() {
+                trace!("BEP44 get: public key mismatch, ignoring");
+                continue;
+            }
+
+            let mut sig_arr = [0u8; 64];
+            sig_arr.copy_from_slice(sig);
+
+            let salt_bytes = salt.unwrap_or(b"");
+            let salt_opt = if salt_bytes.is_empty() {
+                None
+            } else {
+                Some(salt_bytes)
+            };
+
+            if !verify_mutable_item(public_key, &sig_arr, salt_opt, seq, v) {
+                debug!("BEP44 get: signature verification failed, ignoring");
+                continue;
+            }
+
+            // Keep the item with the highest sequence number.
+            let dominated = best.as_ref().is_some_and(|b| b.seq >= seq);
+            if !dominated {
+                best = Some(MutableItemResult {
+                    public_key: *public_key,
+                    seq,
+                    v: v.to_vec(),
+                    signature: sig_arr,
+                    salt: salt.map(|s| s.to_vec()),
+                });
+            }
+        }
+
+        best.ok_or(Error::MutableItemNotFound)
     }
 
     pub fn listen_addr(&self) -> SocketAddr {

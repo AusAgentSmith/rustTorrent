@@ -55,6 +55,9 @@ pub enum Error {
 
     #[error("bencode serialize error: {0:#}")]
     Serialize(#[source] Box<SerializeError>),
+
+    #[error("BEP 44 mutable item not found in DHT")]
+    MutableItemNotFound,
 }
 
 impl From<SerializeError> for Error {

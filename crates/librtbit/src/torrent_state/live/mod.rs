@@ -44,6 +44,7 @@ mod peer_handler;
 pub mod peers;
 pub mod stats;
 mod tasks;
+mod webseed;
 
 use std::{
     borrow::Cow,
@@ -379,6 +380,10 @@ impl TorrentStateLive {
 
         if !state.shared.web_seed_urls.is_empty() {
             info!(urls = ?state.shared.web_seed_urls, "torrent has webseed URLs");
+            // Start BEP 19 webseed download tasks.
+            if let Some(session) = state.shared.session.upgrade() {
+                state.start_webseed_tasks(session.http_client().clone());
+            }
         }
 
         Ok(state)

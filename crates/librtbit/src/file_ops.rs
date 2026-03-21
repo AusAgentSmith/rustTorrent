@@ -318,6 +318,48 @@ impl<'a> FileOps<'a> {
         Ok(())
     }
 
+    /// Write a complete piece from raw bytes to the appropriate file(s).
+    ///
+    /// Used by the WebSeed downloader which fetches whole pieces via HTTP
+    /// rather than individual protocol chunks.
+    pub fn write_piece_from_raw(
+        &self,
+        piece_index: ValidPieceIndex,
+        data: &[u8],
+    ) -> anyhow::Result<()> {
+        let mut absolute_offset = self.torrent.lengths().piece_offset(piece_index);
+        let mut remaining = data;
+
+        for (file_idx, file_info) in self.file_infos.iter().enumerate() {
+            let file_len = file_info.len;
+            if absolute_offset >= file_len {
+                absolute_offset -= file_len;
+                continue;
+            }
+
+            let file_remaining = file_len - absolute_offset;
+            let to_write = std::cmp::min(remaining.len() as u64, file_remaining) as usize;
+
+            if !file_info.attrs.padding {
+                self.files
+                    .pwrite_all(file_idx, absolute_offset, &remaining[..to_write])
+                    .with_context(|| {
+                        format!(
+                            "error writing to file {file_idx} (\"{:?}\")",
+                            file_info.relative_filename
+                        )
+                    })?;
+            }
+            remaining = &remaining[to_write..];
+            if remaining.is_empty() {
+                break;
+            }
+            absolute_offset = 0;
+        }
+
+        Ok(())
+    }
+
     pub fn write_chunk(
         &self,
         who_sent: PeerHandle,

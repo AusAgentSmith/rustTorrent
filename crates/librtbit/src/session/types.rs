@@ -319,6 +319,9 @@ pub struct SessionOptions {
     /// Force IPv4 only.
     pub ipv4_only: bool,
 
+    /// Disable BEP 19 web seed downloads.
+    pub disable_webseeds: bool,
+
     /// A folder to move completed torrents to. If set, when a torrent finishes
     /// downloading, its files will be moved from the output folder to this folder.
     pub completed_folder: Option<PathBuf>,

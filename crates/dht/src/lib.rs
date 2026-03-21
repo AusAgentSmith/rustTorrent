@@ -13,8 +13,7 @@ use std::time::Duration;
 
 pub use error::{Error, Result};
 
-pub use crate::dht::DhtStats;
-pub use crate::dht::{DhtConfig, DhtState, RequestPeersStream};
+pub use crate::dht::{DhtConfig, DhtState, DhtStats, MutableItemResult, RequestPeersStream};
 pub use librtbit_core::hash_id::Id20;
 pub use persistence::{PersistentDht, PersistentDhtConfig};
 
