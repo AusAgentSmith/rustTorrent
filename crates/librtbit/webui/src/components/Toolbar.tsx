@@ -1,6 +1,6 @@
 import { JSX, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { FaPause, FaPlay, FaTrash } from "react-icons/fa";
-import { BsCollection, BsGlobe2 } from "react-icons/bs";
+import { BsCollection, BsGlobe2, BsRss } from "react-icons/bs";
 import { GoSearch, GoX } from "react-icons/go";
 import {
   BsBodyText,
@@ -244,6 +244,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 Browse Index
               </button>
             )}
+            <button
+              onClick={() => setCurrentPage("rss")}
+              className={
+                currentPage === "rss" ? navTabActive : navTabInactive
+              }
+            >
+              <BsRss className="w-3.5 h-3.5" />
+              RSS
+            </button>
           </div>
         )}
 

@@ -14,6 +14,10 @@ import {
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
+  RssFeedConfig,
+  RssItem,
+  RssRule,
+  RssSettings,
   RtbitAPI,
   SeedLimitsConfig,
   SeedLimits,
@@ -546,5 +550,93 @@ export const IndexarrAPI = {
     sync_comments: boolean;
   }): Promise<IndexarrSyncPreferences> => {
     return makeRequest("POST", "/indexarr/sync/preferences", prefs, true);
+  },
+};
+
+// --- RSS API ---
+
+export const RssAPI = {
+  // Feed config management
+  getFeeds: (): Promise<RssFeedConfig[]> => {
+    return makeRequest("GET", "/rss/feeds");
+  },
+
+  addFeed: (feed: RssFeedConfig): Promise<void> => {
+    return makeRequest("POST", "/rss/feeds", feed, true);
+  },
+
+  updateFeed: (name: string, feed: RssFeedConfig): Promise<void> => {
+    return makeRequest(
+      "PUT",
+      `/rss/feeds/${encodeURIComponent(name)}`,
+      feed,
+      true,
+    );
+  },
+
+  deleteFeed: (name: string): Promise<void> => {
+    return makeRequest(
+      "DELETE",
+      `/rss/feeds/${encodeURIComponent(name)}`,
+    );
+  },
+
+  // Feed items
+  getItems: (
+    feed?: string,
+    limit = 500,
+  ): Promise<RssItem[]> => {
+    const params = new URLSearchParams();
+    if (feed) params.set("feed", feed);
+    params.set("limit", String(limit));
+    return makeRequest("GET", `/rss/items?${params.toString()}`);
+  },
+
+  downloadItem: (id: string): Promise<void> => {
+    return makeRequest("POST", `/rss/items/${encodeURIComponent(id)}/download`);
+  },
+
+  // Download rules
+  getRules: (): Promise<RssRule[]> => {
+    return makeRequest("GET", "/rss/rules");
+  },
+
+  addRule: (rule: {
+    name: string;
+    feed_names: string[];
+    category?: string | null;
+    priority?: number;
+    match_regex: string;
+    enabled?: boolean;
+  }): Promise<void> => {
+    return makeRequest("POST", "/rss/rules", rule, true);
+  },
+
+  updateRule: (
+    id: string,
+    rule: {
+      name: string;
+      feed_names: string[];
+      category?: string | null;
+      priority?: number;
+      match_regex: string;
+      enabled?: boolean;
+    },
+  ): Promise<void> => {
+    return makeRequest(
+      "PUT",
+      `/rss/rules/${encodeURIComponent(id)}`,
+      rule,
+      true,
+    );
+  },
+
+  deleteRule: (id: string): Promise<void> => {
+    return makeRequest("DELETE", `/rss/rules/${encodeURIComponent(id)}`);
+  },
+
+  // Settings
+  getSettings: (): Promise<RssSettings> => {
+    return makeRequest("GET", "/rss/settings");
   },
 };

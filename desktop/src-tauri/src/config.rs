@@ -186,6 +186,14 @@ pub struct RtbitDesktopConfig {
 
     #[serde(default)]
     pub ratelimits: LimitsConfig,
+
+    /// RSS feed history limit: how many feed items to keep (None = keep all, default 500).
+    #[serde(default = "default_rss_history_limit")]
+    pub rss_history_limit: Option<usize>,
+}
+
+fn default_rss_history_limit() -> Option<usize> {
+    Some(500)
 }
 
 impl Default for RtbitDesktopConfig {

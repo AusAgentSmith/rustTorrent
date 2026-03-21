@@ -22,6 +22,7 @@ use librtbit::{
     },
     dht::PersistentDhtConfig,
     http_api_types::{PeerStatsFilter, PeerStatsSnapshot},
+    rss::db::RssDatabase,
     session_stats::snapshot::SessionStatsSnapshot,
     tracing_subscriber_config_utils::{InitLoggingOptions, InitLoggingResult, init_logging},
 };
@@ -132,6 +133,41 @@ async fn api_from_config(
         Some(init_logging.rust_log_reload_tx.clone()),
         Some(init_logging.line_broadcast.clone()),
     );
+
+    // Initialize RSS database alongside session persistence
+    let rss_db = {
+        let rss_dir = if config.persistence.folder == std::path::Path::new("") {
+            SessionPersistenceConfig::default_json_persistence_folder()?
+        } else {
+            config.persistence.folder.clone()
+        };
+        let rss_db_path = rss_dir.join("rss.db");
+        match RssDatabase::open(&rss_db_path) {
+            Ok(db) => {
+                let db = std::sync::Arc::new(parking_lot::Mutex::new(db));
+                info!("RSS database opened at {}", rss_db_path.display());
+
+                // Start RSS monitor
+                let monitor = librtbit::rss::monitor::RssMonitor::new(
+                    db.clone(),
+                    api.clone(),
+                    config.rss_history_limit,
+                );
+                tokio::spawn(async move { monitor.run().await });
+                info!("RSS monitor started");
+
+                Some(db)
+            }
+            Err(e) => {
+                warn!("Failed to open RSS database: {:#}", e);
+                None
+            }
+        }
+    };
+
+    // Set RSS options
+    http_api_opts.rss_db = rss_db;
+    http_api_opts.rss_history_limit = config.rss_history_limit;
 
     if !config.http_api.disable {
         let listen_addr = config.http_api.listen_addr;

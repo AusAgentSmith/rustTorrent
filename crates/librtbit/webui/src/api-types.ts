@@ -400,6 +400,45 @@ export interface IndexarrSyncPreferences {
   sync_comments: boolean;
 }
 
+// --- RSS types ---
+
+export interface RssFeedConfig {
+  name: string;
+  url: string;
+  poll_interval_secs: number;
+  category?: string | null;
+  filter_regex?: string | null;
+  enabled: boolean;
+  auto_download: boolean;
+}
+
+export interface RssItem {
+  id: string;
+  feed_name: string;
+  title: string;
+  url?: string | null;
+  published_at?: string | null;
+  first_seen_at: string;
+  downloaded: boolean;
+  downloaded_at?: string | null;
+  category?: string | null;
+  size_bytes: number;
+}
+
+export interface RssRule {
+  id: string;
+  name: string;
+  feed_names: string[];
+  category?: string | null;
+  priority: number;
+  match_regex: string;
+  enabled: boolean;
+}
+
+export interface RssSettings {
+  rss_history_limit: number;
+}
+
 export interface RtbitAPI {
   getPlaylistUrl: (index: number) => string | null;
   getStreamLogsUrl: () => string | null;

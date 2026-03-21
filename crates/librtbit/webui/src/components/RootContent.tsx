@@ -6,6 +6,7 @@ import { useUIStore } from "../stores/uiStore";
 import { useIsLargeScreen } from "../hooks/useIsLargeScreen";
 import { CompactLayout } from "./compact/CompactLayout";
 import { IndexarrBrowse } from "./IndexarrBrowse";
+import { RSSPage } from "./RSSPage";
 
 export const RootContent = () => {
   const closeableError = useErrorStore((state) => state.closeableError);
@@ -32,6 +33,21 @@ export const RootContent = () => {
         <ErrorComponent error={otherError} />
         <div className="flex-1 min-h-0">
           <IndexarrBrowse />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === "rss") {
+    return (
+      <div className="h-full flex flex-col">
+        <ErrorComponent
+          error={closeableError}
+          remove={() => setCloseableError(null)}
+        />
+        <ErrorComponent error={otherError} />
+        <div className="flex-1 min-h-0">
+          <RSSPage />
         </div>
       </div>
     );

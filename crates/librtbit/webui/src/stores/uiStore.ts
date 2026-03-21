@@ -12,7 +12,7 @@ function getDefaultViewMode(): "full" | "compact" {
   return window.innerWidth >= LARGE_SCREEN_BREAKPOINT ? "compact" : "full";
 }
 
-export type CurrentPage = "torrents" | "indexarr";
+export type CurrentPage = "torrents" | "indexarr" | "rss";
 
 export interface UIStore {
   currentPage: CurrentPage;

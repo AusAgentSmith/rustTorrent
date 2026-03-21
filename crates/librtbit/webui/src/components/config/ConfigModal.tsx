@@ -8,6 +8,7 @@ import { HttpApiTab } from "./HttpApiTab";
 import { SecurityTab } from "./SecurityTab";
 import { SeedingTab } from "./SeedingTab";
 import { QueueTab } from "./QueueTab";
+import { RSSTab } from "./RSSTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
 import { ErrorWithLabel } from "../../rtbit-web";
@@ -35,6 +36,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
     max_active_uploads: null,
     max_active_total: null,
   });
+  const [rssHistoryLimit, setRssHistoryLimit] = useState<number | null>(500);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ErrorWithLabel | null>(null);
@@ -160,6 +162,16 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           id: "http-api",
           label: "HTTP API",
           content: <HttpApiTab />,
+        },
+        {
+          id: "rss",
+          label: "RSS",
+          content: (
+            <RSSTab
+              rssHistoryLimit={rssHistoryLimit}
+              onRssHistoryLimitChange={setRssHistoryLimit}
+            />
+          ),
         },
       ]}
       onSave={handleSave}

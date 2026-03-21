@@ -5,6 +5,7 @@ pub(crate) mod logging;
 pub(crate) mod other;
 pub(crate) mod playlist;
 pub(crate) mod qbit_compat;
+pub(crate) mod rss;
 pub(crate) mod streaming;
 pub(crate) mod torrents;
 
@@ -16,7 +17,7 @@ use axum::response::Redirect;
 use axum::{
     Router,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use http::request::Parts;
 
@@ -179,6 +180,20 @@ pub fn make_api_router(state: ApiState) -> Router {
             "/indexarr/sync/preferences",
             post(indexarr::h_indexarr_sync_preferences_set),
         );
+
+    // RSS endpoints
+    api_router = api_router
+        .route("/rss/feeds", get(rss::h_rss_feeds_list))
+        .route("/rss/feeds", post(rss::h_rss_feed_add))
+        .route("/rss/feeds/{name}", put(rss::h_rss_feed_update))
+        .route("/rss/feeds/{name}", delete(rss::h_rss_feed_delete))
+        .route("/rss/items", get(rss::h_rss_items_list))
+        .route("/rss/items/{id}/download", post(rss::h_rss_item_download))
+        .route("/rss/rules", get(rss::h_rss_rules_list))
+        .route("/rss/rules", post(rss::h_rss_rule_add))
+        .route("/rss/rules/{id}", put(rss::h_rss_rule_update))
+        .route("/rss/rules/{id}", delete(rss::h_rss_rule_delete))
+        .route("/rss/settings", get(rss::h_rss_settings_get));
 
     // Auth endpoints — status is always available; login/refresh/logout need token store;
     // setup and change_credentials need credential store.

@@ -47,6 +47,10 @@ _disable_reconnect_test = []
 sqlx = { workspace = true, features = ["runtime-tokio", "macros", "postgres"], optional = true }
 home = { workspace = true, optional = true }
 
+chrono = { workspace = true, features = ["serde"] }
+feed-rs.workspace = true
+rusqlite.workspace = true
+
 bencode.workspace = true
 tracker_comms.workspace = true
 buffers.workspace = true

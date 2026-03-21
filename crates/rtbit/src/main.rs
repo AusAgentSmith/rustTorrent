@@ -1033,7 +1033,7 @@ async fn start_http_api(
     cancel: CancellationToken,
     session: Arc<Session>,
     listen_addr: SocketAddr,
-    http_api_opts: HttpApiOptions,
+    mut http_api_opts: HttpApiOptions,
     opts: &Opts,
     log_config: InitLoggingResult,
 ) -> anyhow::Result<impl Future<Output = anyhow::Result<()>> + use<> + 'static> {
@@ -1042,6 +1042,33 @@ async fn start_http_api(
         Some(log_config.rust_log_reload_tx),
         Some(log_config.line_broadcast),
     );
+
+    // Initialize RSS database and monitor
+    {
+        let rss_dir = SessionPersistenceConfig::default_json_persistence_folder()
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let rss_db_path = rss_dir.join("rss.db");
+        match librtbit::rss::db::RssDatabase::open(&rss_db_path) {
+            Ok(db) => {
+                let db = Arc::new(parking_lot::Mutex::new(db));
+                info!("RSS database opened at {}", rss_db_path.display());
+
+                let monitor = librtbit::rss::monitor::RssMonitor::new(
+                    db.clone(),
+                    api.clone(),
+                    Some(500),
+                );
+                tokio::spawn(async move { monitor.run().await });
+                info!("RSS monitor started");
+
+                http_api_opts.rss_db = Some(db);
+                http_api_opts.rss_history_limit = Some(500);
+            }
+            Err(e) => {
+                warn!("Failed to open RSS database: {:#}", e);
+            }
+        }
+    }
 
     #[cfg(target_os = "linux")]
     let systemd_listener = api_socket_from_systemd().unwrap_or_else(|e| {

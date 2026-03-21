@@ -16,6 +16,7 @@ use tracing::{Span, debug, debug_span, info};
 use axum::Router;
 
 use crate::api::Api;
+use crate::rss::db::RssDatabase;
 
 use crate::ApiError;
 
@@ -89,6 +90,10 @@ pub struct HttpApiOptions {
     pub indexarr_url: Option<String>,
     /// Indexarr API key for authenticated requests.
     pub indexarr_api_key: Option<String>,
+    /// RSS database for feed management. None = RSS disabled.
+    pub rss_db: Option<Arc<parking_lot::Mutex<RssDatabase>>>,
+    /// RSS feed history limit (max items to keep). None = unlimited, default 500.
+    pub rss_history_limit: Option<usize>,
 }
 
 /// Constant-time byte comparison to prevent timing attacks on auth credentials.
