@@ -388,9 +388,10 @@ export interface IndexarrRecentResponse {
 
 export interface IndexarrIdentityStatus {
   initialized: boolean;
+  needs_onboarding: boolean;
   contributor_id?: string;
-  recovery_key?: string;
-  acknowledged?: boolean;
+  recovery_key?: string | null;
+  public_key?: string;
 }
 
 export interface IndexarrSyncPreferences {

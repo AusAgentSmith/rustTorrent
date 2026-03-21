@@ -273,7 +273,7 @@ export const IndexarrBrowse = () => {
   }
 
   // Setup needed
-  if (identity && !identity.acknowledged) {
+  if (identity && identity.needs_onboarding) {
     return <IndexarrSetup />;
   }
 

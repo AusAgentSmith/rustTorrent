@@ -35,7 +35,7 @@ export const IndexarrSetup = () => {
         setSyncComments(prefs.sync_comments);
 
         // Skip identity step if already acknowledged
-        if (id.acknowledged) {
+        if (!id.needs_onboarding) {
           setStep("categories");
         }
       } catch (e: any) {
@@ -116,7 +116,7 @@ export const IndexarrSetup = () => {
       <div className="bg-surface-raised rounded-lg shadow-lg max-w-lg w-full">
         {/* Header */}
         <div className="flex items-center gap-2 p-4 border-b border-divider">
-          {identity?.acknowledged && (
+          {identity && !identity.needs_onboarding && (
             <button
               onClick={() => setShowSetup(false)}
               className="p-1 text-secondary hover:text-text cursor-pointer"
