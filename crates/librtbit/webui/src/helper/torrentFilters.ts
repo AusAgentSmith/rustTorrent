@@ -21,6 +21,7 @@ export type StatusFilter =
   | "downloading"
   | "seeding"
   | "paused"
+  | "queued"
   | "error";
 
 // Sort column display labels
@@ -41,6 +42,7 @@ export const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   downloading: "Downloading",
   seeding: "Seeding",
   paused: "Paused",
+  queued: "Queued",
   error: "Error",
 };
 
@@ -126,6 +128,8 @@ export function matchesStatus(
       return state === "live" && !!finished;
     case "paused":
       return state === "paused";
+    case "queued":
+      return t.stats?.queue_state === "Queued";
     case "error":
       return state === "error";
   }

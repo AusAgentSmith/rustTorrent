@@ -71,9 +71,40 @@ export const ConnectionTab: React.FC = () => {
           <ProtocolRows protocol="SOCKS" stats={conns.socks} />
         </tbody>
       </table>
+      <div className="mt-6 mb-3">
+        <label className="font-medium mb-3 block pb-1 border-b border-divider">
+          Encryption
+        </label>
+        <div className="mt-2">
+          <select
+            className="block border border-divider rounded bg-transparent py-1.5 px-2 focus:ring-0 focus:border-primary sm:leading-6 text-primary"
+            disabled
+            value="enabled"
+          >
+            <option value="disabled">Disabled</option>
+            <option value="enabled">Enabled (prefer encrypted)</option>
+            <option value="forced">Forced (require encrypted)</option>
+          </select>
+          <div className="text-sm text-secondary mt-2 space-y-1">
+            <p>
+              <strong>Disabled:</strong> No encryption, all connections are
+              plaintext.
+            </p>
+            <p>
+              <strong>Enabled:</strong> Prefer encrypted connections but allow
+              plaintext fallback.
+            </p>
+            <p>
+              <strong>Forced:</strong> Only allow encrypted connections; reject
+              unencrypted peers.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-4 text-secondary text-xs">
-        Connection settings (listen port, TCP/uTP, UPnP, SOCKS proxy) are
-        configured via CLI arguments at startup.
+        Connection settings (listen port, TCP/uTP, UPnP, SOCKS proxy, encryption
+        mode) are configured via CLI arguments at startup.
       </div>
     </div>
   );

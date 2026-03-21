@@ -6,6 +6,7 @@ import {
   FaExclamationTriangle,
 } from "react-icons/fa";
 import { BsChevronLeft, BsChevronRight, BsCollection } from "react-icons/bs";
+import { MdQueue } from "react-icons/md";
 import { useUIStore } from "../stores/uiStore";
 import { useTorrentStore } from "../stores/torrentStore";
 import { StatusFilter } from "../helper/torrentFilters";
@@ -32,6 +33,7 @@ export const Sidebar: React.FC = () => {
         downloading: 0,
         seeding: 0,
         paused: 0,
+        queued: 0,
         initializing: 0,
         error: 0,
       };
@@ -44,6 +46,7 @@ export const Sidebar: React.FC = () => {
         (t) => t.stats?.state === "live" && t.stats?.finished,
       ).length,
       paused: torrents.filter((t) => t.stats?.state === "paused").length,
+      queued: torrents.filter((t) => t.stats?.queue_state === "Queued").length,
       initializing: torrents.filter((t) => t.stats?.state === "initializing")
         .length,
       error: torrents.filter((t) => t.stats?.state === "error").length,
@@ -76,6 +79,12 @@ export const Sidebar: React.FC = () => {
       label: "Paused",
       icon: <FaPause className={iconClass} />,
       count: statusCounts.paused,
+    },
+    {
+      key: "queued",
+      label: "Queued",
+      icon: <MdQueue className={iconClass} />,
+      count: statusCounts.queued,
     },
     {
       key: "error",

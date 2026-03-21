@@ -6,6 +6,8 @@ import { ConnectionTab } from "./ConnectionTab";
 import { DHTTab } from "./DHTTab";
 import { HttpApiTab } from "./HttpApiTab";
 import { SecurityTab } from "./SecurityTab";
+import { SeedingTab } from "./SeedingTab";
+import { QueueTab } from "./QueueTab";
 import { APIContext } from "../../context";
 import { LimitsConfig, ErrorDetails } from "../../api-types";
 import { ErrorWithLabel } from "../../rtbit-web";
@@ -29,6 +31,9 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
     download_bps: null,
     peer_limit: null,
     concurrent_init_limit: null,
+    max_active_downloads: null,
+    max_active_uploads: null,
+    max_active_total: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,6 +120,31 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           id: "connections",
           label: "Connections",
           content: <ConnectionTab />,
+        },
+        {
+          id: "queue",
+          label: "Queue",
+          content: (
+            <QueueTab
+              maxActiveDownloads={limits.max_active_downloads}
+              maxActiveUploads={limits.max_active_uploads}
+              maxActiveTotal={limits.max_active_total}
+              onMaxActiveDownloadsChange={(v) =>
+                setLimits((l) => ({ ...l, max_active_downloads: v }))
+              }
+              onMaxActiveUploadsChange={(v) =>
+                setLimits((l) => ({ ...l, max_active_uploads: v }))
+              }
+              onMaxActiveTotalChange={(v) =>
+                setLimits((l) => ({ ...l, max_active_total: v }))
+              }
+            />
+          ),
+        },
+        {
+          id: "seeding",
+          label: "Seeding",
+          content: <SeedingTab />,
         },
         {
           id: "dht",

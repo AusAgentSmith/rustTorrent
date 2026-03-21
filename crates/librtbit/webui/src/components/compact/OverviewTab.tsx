@@ -12,6 +12,16 @@ import { APIContext } from "../../context";
 import { useUIStore } from "../../stores/uiStore";
 import { useTorrentStore } from "../../stores/torrentStore";
 
+const formatDuration = (secs: number): string => {
+  if (secs < 60) return `${secs}s`;
+  const minutes = Math.floor(secs / 60);
+  if (minutes < 60) return `${minutes}m ${secs % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+};
+
 interface OverviewTabProps {
   torrent: TorrentListItem | null;
 }
@@ -137,6 +147,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ torrent }) => {
         <span>
           <LV label="ETA" value={finished ? "Complete" : eta} />
         </span>
+        <span>
+          <LV label="Ratio" value={statsResponse.ratio?.toFixed(2) ?? "N/A"} />
+        </span>
       </div>
 
       {/* Pieces + Peers line */}
@@ -218,6 +231,51 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ torrent }) => {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Extended stats */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {statsResponse.seeding_time_secs != null && (
+          <span>
+            <LV
+              label="Seeding Time"
+              value={formatDuration(statsResponse.seeding_time_secs)}
+            />
+          </span>
+        )}
+        {statsResponse.queue_state != null && (
+          <span>
+            <LV label="Queue State" value={statsResponse.queue_state} />
+          </span>
+        )}
+        {statsResponse.queue_position != null && (
+          <span>
+            <LV label="Queue Position" value={statsResponse.queue_position} />
+          </span>
+        )}
+        <span>
+          <LV
+            label="Sequential"
+            value={statsResponse.sequential ? "Yes" : "No"}
+          />
+        </span>
+        {finished && (
+          <span>
+            <LV
+              label="Super-seeding"
+              value={statsResponse.super_seeding ? "Yes" : "No"}
+            />
+          </span>
+        )}
+        {(statsResponse.min_piece_availability != null ||
+          statsResponse.avg_piece_availability != null) && (
+          <span>
+            <LV
+              label="Availability"
+              value={`${statsResponse.min_piece_availability?.toFixed(2) ?? "?"} min / ${statsResponse.avg_piece_availability?.toFixed(2) ?? "?"} avg`}
+            />
+          </span>
+        )}
       </div>
 
       {/* Error */}

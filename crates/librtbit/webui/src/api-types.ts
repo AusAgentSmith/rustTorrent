@@ -130,6 +130,41 @@ export interface LimitsConfig {
   download_bps?: number | null;
   peer_limit?: number | null;
   concurrent_init_limit?: number | null;
+  max_active_downloads?: number | null;
+  max_active_uploads?: number | null;
+  max_active_total?: number | null;
+}
+
+// Alt speed config
+export interface AltSpeedConfig {
+  download_rate: number | null;
+  upload_rate: number | null;
+}
+
+export interface AltSpeedSchedule {
+  enabled: boolean;
+  start_minutes: number; // minutes from midnight
+  end_minutes: number;
+  days: number; // bitmask: 1=Mon,2=Tue,4=Wed,8=Thu,16=Fri,32=Sat,64=Sun
+}
+
+export interface AltSpeedStatus {
+  enabled: boolean;
+  config: AltSpeedConfig;
+  schedule: AltSpeedSchedule | null;
+}
+
+// Seed limits
+export interface SeedLimitsConfig {
+  ratio_limit: number | null;
+  time_limit_secs: number | null;
+}
+
+// Queue limits
+export interface QueueLimitsConfig {
+  max_active_downloads: number;
+  max_active_uploads: number;
+  max_active_total: number;
 }
 
 export interface DhtStats {
@@ -187,6 +222,26 @@ export interface TorrentStats {
   finished: boolean;
   total_bytes: number;
   live: LiveTorrentStats | null;
+  ratio?: number;
+  seeding_time_secs?: number;
+  seed_ratio_limit?: number | null;
+  seed_time_limit_secs?: number | null;
+  super_seeding?: boolean;
+  sequential?: boolean;
+  min_piece_availability?: number;
+  avg_piece_availability?: number;
+  queue_state?: "Active" | "Queued" | "ManuallyPaused";
+  queue_position?: number;
+}
+
+export interface TorrentLimits {
+  download_rate?: number;
+  upload_rate?: number;
+}
+
+export interface SeedLimits {
+  ratio_limit?: number | null;
+  time_limit_secs?: number | null;
 }
 
 export interface ErrorDetails {
@@ -308,4 +363,26 @@ export interface RtbitAPI {
     torrentId: number,
     category: string | null,
   ) => Promise<void>;
+
+  // Alt speed
+  getAltSpeed: () => Promise<AltSpeedStatus>;
+  toggleAltSpeed: (enabled: boolean) => Promise<void>;
+  setAltSpeedConfig: (config: AltSpeedConfig) => Promise<void>;
+  getSpeedSchedule: () => Promise<AltSpeedSchedule>;
+  setSpeedSchedule: (schedule: AltSpeedSchedule) => Promise<void>;
+
+  // Seed limits
+  getSeedLimits: () => Promise<SeedLimitsConfig>;
+  setSeedLimits: (limits: SeedLimitsConfig) => Promise<void>;
+
+  // Per-torrent controls
+  setTorrentSeedLimits: (id: number, limits: SeedLimits) => Promise<void>;
+  getTorrentLimits: (id: number) => Promise<TorrentLimits>;
+  setTorrentLimits: (id: number, limits: TorrentLimits) => Promise<void>;
+  setSequential: (id: number, enabled: boolean) => Promise<void>;
+  setSuperSeed: (id: number, enabled: boolean) => Promise<void>;
+  queueMoveTop: (id: number) => Promise<void>;
+  queueMoveBottom: (id: number) => Promise<void>;
+  queueMoveUp: (id: number) => Promise<void>;
+  queueMoveDown: (id: number) => Promise<void>;
 }

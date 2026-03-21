@@ -1,5 +1,8 @@
 import {
   AddTorrentResponse,
+  AltSpeedConfig,
+  AltSpeedSchedule,
+  AltSpeedStatus,
   CategoryInfo,
   DhtStats,
   ErrorDetails,
@@ -7,8 +10,11 @@ import {
   ListTorrentsResponse,
   PeerStatsSnapshot,
   RtbitAPI,
+  SeedLimitsConfig,
+  SeedLimits,
   SessionStats,
   TorrentDetails,
+  TorrentLimits,
   TorrentStats,
 } from "./api-types";
 import { useAuthStore } from "./stores/authStore";
@@ -428,5 +434,59 @@ export const API: RtbitAPI & { getVersion: () => Promise<string> } = {
       { category },
       true,
     );
+  },
+
+  // Alt speed
+  getAltSpeed: (): Promise<AltSpeedStatus> => {
+    return makeRequest("GET", "/speed/alt");
+  },
+  toggleAltSpeed: (enabled: boolean): Promise<void> => {
+    return makeRequest("POST", "/speed/alt", { enabled }, true);
+  },
+  setAltSpeedConfig: (config: AltSpeedConfig): Promise<void> => {
+    return makeRequest("POST", "/speed/alt/config", config, true);
+  },
+  getSpeedSchedule: (): Promise<AltSpeedSchedule> => {
+    return makeRequest("GET", "/speed/schedule");
+  },
+  setSpeedSchedule: (schedule: AltSpeedSchedule): Promise<void> => {
+    return makeRequest("POST", "/speed/schedule", schedule, true);
+  },
+
+  // Seed limits
+  getSeedLimits: (): Promise<SeedLimitsConfig> => {
+    return makeRequest("GET", "/torrents/seed_limits");
+  },
+  setSeedLimits: (limits: SeedLimitsConfig): Promise<void> => {
+    return makeRequest("POST", "/torrents/seed_limits", limits, true);
+  },
+
+  // Per-torrent controls
+  setTorrentSeedLimits: (id: number, limits: SeedLimits): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/seed_limits`, limits, true);
+  },
+  getTorrentLimits: (id: number): Promise<TorrentLimits> => {
+    return makeRequest("GET", `/torrents/${id}/limits`);
+  },
+  setTorrentLimits: (id: number, limits: TorrentLimits): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/limits`, limits, true);
+  },
+  setSequential: (id: number, enabled: boolean): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/sequential`, { enabled }, true);
+  },
+  setSuperSeed: (id: number, enabled: boolean): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/super_seed`, { enabled }, true);
+  },
+  queueMoveTop: (id: number): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/queue/top`);
+  },
+  queueMoveBottom: (id: number): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/queue/bottom`);
+  },
+  queueMoveUp: (id: number): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/queue/up`);
+  },
+  queueMoveDown: (id: number): Promise<void> => {
+    return makeRequest("POST", `/torrents/${id}/queue/down`);
   },
 };

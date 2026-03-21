@@ -16,7 +16,11 @@ export type ColumnId =
   | "state"
   | "info_hash"
   | "ratio"
-  | "category";
+  | "category"
+  | "seeding_time"
+  | "queue_position"
+  | "sequential"
+  | "availability";
 
 // IDs of configurable columns in their default order
 const DEFAULT_CONFIGURABLE_ORDER: ColumnId[] = [
@@ -34,6 +38,10 @@ const DEFAULT_CONFIGURABLE_ORDER: ColumnId[] = [
   "info_hash",
   "ratio",
   "category",
+  "seeding_time",
+  "queue_position",
+  "sequential",
+  "availability",
 ];
 
 export interface ColumnDef {
@@ -191,10 +199,10 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     id: "ratio",
     label: "Ratio",
-    defaultWidth: 64,
+    defaultWidth: 80,
     minWidth: 50,
     align: "right",
-    defaultVisible: false,
+    defaultVisible: true,
     configurable: true,
     sortable: true,
   },
@@ -204,6 +212,46 @@ export const COLUMN_DEFS: ColumnDef[] = [
     defaultWidth: 120,
     minWidth: 60,
     align: "left",
+    defaultVisible: false,
+    configurable: true,
+    sortable: true,
+  },
+  {
+    id: "seeding_time",
+    label: "Seed Time",
+    defaultWidth: 100,
+    minWidth: 60,
+    align: "right",
+    defaultVisible: false,
+    configurable: true,
+    sortable: true,
+  },
+  {
+    id: "queue_position",
+    label: "Queue",
+    defaultWidth: 60,
+    minWidth: 40,
+    align: "center",
+    defaultVisible: false,
+    configurable: true,
+    sortable: true,
+  },
+  {
+    id: "sequential",
+    label: "Seq",
+    defaultWidth: 50,
+    minWidth: 36,
+    align: "center",
+    defaultVisible: false,
+    configurable: true,
+    sortable: false,
+  },
+  {
+    id: "availability",
+    label: "Avail",
+    defaultWidth: 70,
+    minWidth: 50,
+    align: "right",
     defaultVisible: false,
     configurable: true,
     sortable: true,

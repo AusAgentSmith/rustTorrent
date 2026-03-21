@@ -24,7 +24,10 @@ export type TableSortColumn =
   | "peers"
   | "state"
   | "ratio"
-  | "category";
+  | "category"
+  | "seeding_time"
+  | "queue_position"
+  | "availability";
 
 const DEFAULT_SORT_COLUMN: TableSortColumn = "id";
 const DEFAULT_SORT_DIRECTION: SortDirection = "desc";
@@ -65,12 +68,19 @@ function getTableSortValue(
     case "state":
       return t.stats?.state ?? "";
     case "ratio": {
+      if (t.stats?.ratio != null) return t.stats.ratio;
       const uploaded = t.stats?.live?.snapshot.uploaded_bytes ?? 0;
       const total = t.stats?.total_bytes ?? 1;
       return total > 0 ? uploaded / total : 0;
     }
     case "category":
       return (t.category ?? "").toLowerCase();
+    case "seeding_time":
+      return t.stats?.seeding_time_secs ?? 0;
+    case "queue_position":
+      return t.stats?.queue_position ?? Infinity;
+    case "availability":
+      return t.stats?.min_piece_availability ?? 0;
   }
 }
 

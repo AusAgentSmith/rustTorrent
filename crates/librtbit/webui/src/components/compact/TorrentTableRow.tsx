@@ -1,6 +1,7 @@
 import { TorrentListItem, STATE_INITIALIZING } from "../../api-types";
 import { StatusIcon } from "../StatusIcon";
 import { formatBytes } from "../../helper/formatBytes";
+import { formatSecondsToTime } from "../../helper/formatSecondsToTime";
 import { getCompletionETA } from "../../helper/getCompletionETA";
 import { memo } from "react";
 import { ColumnDef, ColumnId, useColumnStore } from "../../stores/columnStore";
@@ -112,6 +113,7 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
               error={!!error}
               live={live}
               finished={finished}
+              queued={stats?.queue_state === "Queued"}
             />
           </td>
         );
@@ -239,11 +241,16 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
           </td>
         );
       case "ratio": {
-        const ratio =
-          totalBytes > 0 ? (uploadedBytes / totalBytes).toFixed(2) : "0.00";
+        const ratio = stats?.ratio;
+        const ratioDisplay =
+          ratio != null
+            ? ratio.toFixed(2)
+            : totalBytes > 0
+              ? (uploadedBytes / totalBytes).toFixed(2)
+              : "0.00";
         return (
           <td key="ratio" className={`${baseCls} ${alignClass} text-secondary`}>
-            {ratio}
+            {ratioDisplay}
           </td>
         );
       }
@@ -256,6 +263,57 @@ const TorrentTableRowUnmemoized: React.FC<TorrentTableRowProps> = ({
             <span className="truncate">{torrent.category || "\u2014"}</span>
           </td>
         );
+      case "seeding_time": {
+        const seedTime = stats?.seeding_time_secs;
+        return (
+          <td
+            key="seeding_time"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {seedTime != null ? formatSecondsToTime(seedTime) : "\u2014"}
+          </td>
+        );
+      }
+      case "queue_position": {
+        const queueState = stats?.queue_state;
+        const queuePos = stats?.queue_position;
+        let queueDisplay: string;
+        if (queueState === "Queued" && queuePos != null) {
+          queueDisplay = `#${queuePos}`;
+        } else if (queueState === "Active") {
+          queueDisplay = "Active";
+        } else {
+          queueDisplay = "\u2014";
+        }
+        return (
+          <td
+            key="queue_position"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {queueDisplay}
+          </td>
+        );
+      }
+      case "sequential":
+        return (
+          <td
+            key="sequential"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {stats?.sequential ? "\u2713" : "\u2014"}
+          </td>
+        );
+      case "availability": {
+        const avail = stats?.min_piece_availability;
+        return (
+          <td
+            key="availability"
+            className={`${baseCls} ${alignClass} text-secondary`}
+          >
+            {avail != null ? avail.toFixed(1) : "\u2014"}
+          </td>
+        );
+      }
       default:
         return <td key={col.id} className={baseCls} />;
     }

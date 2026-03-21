@@ -1,101 +1,99 @@
-- [x] when we have the whole torrent, there's no point talking to peers that also have the whole torrent and keep reconnecting to them.
-- [ ] per-file stats
-- [x (partial)] per-peer stats
-- [x] use some concurrent hashmap e.g. flurry or dashmap
-- [x] tracing instead of logging. Debugging peers: RUST_LOG=[{peer=.*}]=debug
-      test-log for tests
-- [x] (reopen) read only is bugged
-- [x] initializing/checking
-  - [x] blocks the whole process. Need to break it up. On slower devices (rpi) just hangs for a good while
-  - [x] checking torrents should be visible right away
-- [x] server persistence
-  - [x] it would be nice to restart the server and keep the state
-- [x] torrent actions
-  - [x] pause/unpause
-  - [x] remove including from disk
-- [ ] DHT
-  - [x] bootstrapping is lame
-  - [x] many nodes in "Unknown" status, do smth about it
-  - [x] for torrents with a few seeds might be cool to re-query DHT once in a while.
-  - [x] don't leak memory when deleting torrents (i.e. remove torrent information (seen peers etc) once the torrent is deleted)
-  - [x] Routing table - is it balanced properly?
-  - [x] Don't query Bad nodes
-  - [-] Buckets that have not been changed in 15 minutes should be "refreshed." (per RFC)
-    - [x] Did it, but it's flawed: starts repeating the same queries again as neighboring refreshes
-          don't know about the other ones, and DHT returns the same nodes again and again.
-  - [x] it's sending many requests now way too fast, locks up Mac OS UI annoyingly
-  - [x] store peers sent to us with "announce_peer"
-  - [x] announced peers should be persisted (partial)
-  - [ ] clean up announced peer cache
-    - [ ] only send a token to torrents really close to us
-  - [x] After the search is exhausted, the client then inserts the peer contact information for itself onto the responding nodes with IDs closest to the infohash of the torrent.
-  - [x] Ensure that if we query the "returned" nodes, they are even closer to our request than the responding node id was.
+# rustTorrent TODO — Feature Gap Analysis
 
-incoming peers:
+Feature gap analysis based on qBittorrent, Deluge, and Transmission.
+Items marked with the client initial(s) indicate which competitor(s) have the feature: **Q**=qBittorrent, **D**=Deluge, **T**=Transmission.
 
-- [x] error managing peer: expected extended handshake, but got Bitfield(<94 bytes>)
-- [x] do not announce when merely listing the torrent
+---
 
-someday:
+## Protocol & Encryption
 
-- [x] cancellation from the client-side for the lib (i.e. stop the torrent manager)
-- [x] favicons for Web UI
+- [ ] **#1 — BEP 52 Phase 2–5: Full BitTorrent v2 support** — v2 info hash (SHA-256), file tree parsing, merkle tree piece verification, v2-only torrent download. Hybrid v1+v2 works today; v2-only is rejected. [Q, D, T]
+- [ ] **#2 — MSE/PE Stream Encryption (BEP 50/68)** — Message Stream Encryption / Protocol Encryption with configurable modes: allowed, preferred, required. [Q, D, T]
+- [ ] **#3 — BEP 19 Phase 2: WebSeed HTTP downloads** — URL-list parsing is done; actual HTTP range-based piece fetching from web seeds is not. [Q, D, T]
+- [ ] **#4 — BEP 46 Phase 2: DHT mutable item lookup** — Ed25519 foundation exists; actual mutable item resolution for updateable magnet links is not wired up.
+- [ ] **#5 — Embedded tracker** — Run a lightweight tracker inside rtbit for private swarms. [Q]
 
-desktop:
+## Transfer Management
 
-- [x] on first run show options
-- [x] allow to change options later (even with a session restart)
-- [ ] look at logs - allow writing them to files? Set RUST_LOG through API
+- [ ] **#6 — Per-torrent rate limiting** — Currently only global rate limits exist. Allow setting upload/download speed caps per torrent. [Q, D, T]
+- [ ] **#7 — Bandwidth scheduling / alternative speed limits** — Time-of-day speed profiles (e.g., "turtle mode" during work hours). [Q, D, T]
+- [ ] **#8 — Super-seeding (BEP 16)** — Initial-seeder mode that serves each piece only once to maximize swarm distribution. [Q, D]
+- [ ] **#9 — Seed ratio limits** — Auto-pause/remove torrents after reaching a configurable upload:download ratio (global and per-torrent). [Q, D, T]
+- [ ] **#10 — Seed time limits** — Auto-pause/remove torrents after seeding for a configurable duration. [Q, D, T]
+- [ ] **#11 — Queue management** — Configurable limits on concurrent active downloads/uploads with automatic queuing of excess torrents. [Q, D, T]
+- [ ] **#12 — Rarest-first piece selection** — Explicit rarest-first algorithm for optimal swarm health. Current selection is file-priority-based, not rarity-based. [Q, D, T]
+- [ ] **#13 — Sequential download mode** — Download pieces in order for preview/playback during download (streaming already works via priority pieces, but no explicit sequential toggle). [Q, D, T]
 
-persistence:
+## File Management
 
-- [ ] store total uploaded bytes, so that on restart it comes back up
+- [ ] **#14 — File priorities (high / normal / low / skip)** — Per-file priority levels within a torrent beyond binary include/exclude. [Q, D, T]
+- [ ] **#15 — File preallocation** — `fallocate` / sparse / full preallocation modes to reduce fragmentation. [Q, D, T]
+- [ ] **#16 — Move completed downloads** — Automatically move finished torrents from an incomplete directory to a final location. [Q, D, T]
+- [ ] **#17 — Rename files and folders** — Rename individual files or the torrent folder via UI/API. [Q, D, T]
+- [ ] **#18 — Move torrent data to new location** — Relocate torrent data to a different directory without re-downloading. [Q, D, T]
+- [ ] **#19 — Torrent creation** — Create .torrent files (v1, v2, hybrid) from local data, with piece size selection and private flag. [Q, D, T]
 
-efficiency:
+## Network
 
-- [ ] once the torrent is completed, we don't need to remember old peers
+- [ ] **#20 — NAT-PMP port mapping** — Complement existing UPnP with NAT-PMP/PCP for Apple routers and others. [Q, D, T]
+- [ ] **#21 — SOCKS4 proxy support** — Currently only SOCKS5; add SOCKS4 for legacy proxy setups. [Q, D, T]
+- [ ] **#22 — HTTP/HTTPS proxy support** — HTTP CONNECT proxy for tracker and peer connections. [Q, D, T]
+- [ ] **#23 — Per-torrent connection limits** — Limit peers on a per-torrent basis (currently only global `--peer-limit`). [Q, D, T]
+- [ ] **#24 — Global connection limit** — Hard cap on total connections across all torrents. [Q, D, T]
 
-refactor:
+## RSS & Automation
 
-- [x] session persistence: should add torrents even if we haven't resolved it yet
-- [x] where are peers stored
-- [x] http api pause/unpause etc
-- [x] when a live torrent fails writing to disk, it should transition to error state
-- [x] something is wrong when unpausing - can't finish. Recalculate needed/have from chunk tracker.
-- [x] silence this: WARN torrent{id=0}:external_peer_adder: librtbit::spawn_utils: finished with error: no longer live
+- [ ] **#25 — Built-in RSS reader** — Subscribe to RSS/Atom feeds for torrent sites. [Q]
+- [ ] **#26 — RSS auto-download rules** — Regex-based filtering rules to automatically download matching torrents from RSS feeds, with per-rule category assignment. [Q, D via YaRSS2]
+- [ ] **#27 — Script on torrent completion** — Execute an external program/script when a torrent finishes downloading, with torrent metadata as environment variables. [Q, D, T]
+- [ ] **#28 — Script on torrent added** — Execute a script when a new torrent is added. [D]
 
-- [x] start from error state should be possible from UI
-- [x] checking is very slow on raspberry
-      checked. nothing much can be done here. Even if raspberry's own libssl.so is used it's still super slow (sha1)
-- [ ] .rtbit-session.json file has 0 bytes when disk full. I guess fs::rename does this when disk is full? at least on linux. Couldn't repro on MacOS
+## Search
 
-- reopen:
+- [ ] **#29 — Built-in search engine** — Integrated torrent search across multiple sites with installable Python plugins. [Q]
 
-  - [x] in general, the only time the file should be write-only, is when it's live and not yet fully downloaded
-  - [x] initializing: open read-only if file has all pieces
-  - [x] on piece validated open read-only all files that were copleted
-  - [x] would be nice to have some abstraction that walks files and their pieces
-  - [ ] nit: optimize open write/read/write right away on first start
-  - [x] peers: if finished they are all paused forever, but if we change the list of files, we need to restart them
+## Labeling & Organization
 
-- [x] opened_files: track HAVE progress
+- [ ] **#30 — Tags (multiple per torrent)** — Flat labels/tags that can be applied multiple per torrent for flexible organization. [Q, D]
+- [ ] **#31 — Hierarchical categories** — Nested category trees with associated save paths. Currently categories are flat (qBittorrent API compat). [Q]
+- [ ] **#32 — Filter sidebar** — UI filter panel by status, category, tag, tracker. [Q, D, T]
 
-  - [x] actually track
-  - [x] show in API and UI
-  - [x] refresh when downloading (it doesn't somehow)
-  - [x] on restart, this is not computed, compute
+## Security
 
-- [x] send cancellation to peers who we stole chunks from
-- [x] don't account for stolen pieces in mesuring speed
-- [ ] file priority
-- [ ] start/end priority pieces per selected file, not per torrent
+- [ ] **#33 — Blocklist format support** — Support PeerGuardian (P2B), DAT, eMule, SafePeer formats in addition to current newline-delimited format. [Q, D, T]
+- [ ] **#34 — Automatic blocklist updates** — Periodic refresh of blocklist from URL on a configurable schedule. [Q, D, T]
+- [ ] **#35 — RPC IP whitelist** — Restrict API/WebUI access to specific IP ranges beyond auth. [T]
+- [ ] **#36 — HTTPS for Web UI** — TLS termination for the built-in HTTP API/Web UI. [Q, D, T]
+- [ ] **#37 — Multi-user support** — Multiple user accounts with separate permissions and torrent lists. [D]
 
-Streaming:
+## Web UI & UX
 
-- [x] I want to stream files even if they are not checkboxed.
+- [ ] **#38 — Desktop notifications** — System notifications on torrent complete, errors, etc. (desktop app via Tauri could support this). [Q, D, T]
+- [ ] **#39 — System tray icon** — Minimize to system tray on desktop platforms. [Q, D, T]
+- [ ] **#40 — Torrent detail view** — Detailed view showing peers, trackers, files, pieces, and transfer graph per torrent. [Q, D, T]
+- [ ] **#41 — Tracker management in UI** — Add, edit, remove trackers for active torrents through the UI. [Q, D, T]
+- [ ] **#42 — Peer list in UI** — Show connected peers with flags, client, speed, progress per torrent. [Q, D, T]
+- [ ] **#43 — Speed graph** — Real-time upload/download speed chart. [Q, D, T]
+- [ ] **#44 — Transfer statistics persistence** — Track cumulative upload/download totals across sessions. [Q, D, T]
+- [ ] **#45 — Localization / i18n** — Multi-language UI support. [Q, D, T]
 
-Other:
+## OS Integration
 
-- [ ] keepalive is useless, the tieout is 120s, and read timeout is 10s. Need to send keepalive only if nothing was done recently.
-- [x] url should have the filename
-- [ ] reopening files: get rid of it!!! Even on Windows it should be alright - no need to reopen them.
+- [ ] **#46 — Daemon mode** — Detach and run as a background daemon (systemd service file exists but no built-in daemonization). [Q, D, T]
+- [ ] **#47 — Email notifications** — Send email on torrent events (complete, error). [D]
+
+## Import & Migration
+
+- [ ] **#48 — Import from other clients** — Import torrent list, resume data, and settings from qBittorrent, Deluge, or Transmission.
+- [ ] **#49 — Backup and restore** — Export/import full session state for migration between machines.
+
+## Performance & Storage
+
+- [ ] **#50 — Process-level memory ceiling** — Hard cap on memory usage beyond peer limits; graceful degradation under memory pressure.
+- [ ] **#51 — DHT cache disk I/O reduction** — Reduce frequency/size of DHT state dumps.
+- [ ] **#52 — Settings hot-reload** — Apply configuration changes without restart.
+
+## Platform
+
+- [ ] **#53 — Windows file locking** — Handle locked .exe files during download on Windows (#369).
+- [ ] **#54 — Read-only file support** — Skip writing to files marked read-only (#136).

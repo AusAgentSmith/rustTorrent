@@ -1,4 +1,5 @@
-import { GoClock, GoFile, GoPeople } from "react-icons/go";
+import { GoClock, GoFile, GoPeople, GoArrowSwitch } from "react-icons/go";
+import { BsArrowRepeat } from "react-icons/bs";
 import { TorrentListItem, STATE_INITIALIZING } from "../api-types";
 import { TorrentActions } from "./buttons/TorrentActions";
 import { ProgressBar } from "./ProgressBar";
@@ -30,6 +31,11 @@ export const TorrentCardContent: React.FC<{
     }
     return `${peer_stats.live} / ${peer_stats.seen}`;
   };
+
+  const totalUploadedBytes = statsResponse?.live?.snapshot.uploaded_bytes ?? 0;
+  const ratio = statsResponse?.ratio;
+  const queuePosition = statsResponse?.queue_position;
+  const isSequential = statsResponse?.sequential;
 
   const statusIcon = (className: string) => {
     return (
@@ -96,6 +102,33 @@ export const TorrentCardContent: React.FC<{
                     <div className="flex gap-1 sm:gap-2 items-center">
                       <Speed statsResponse={statsResponse} />
                     </div>
+                    {(totalUploadedBytes > 0 || ratio != null) && (
+                      <div className="flex gap-1 sm:gap-2 items-center">
+                        <GoArrowSwitch className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span>
+                          {formatBytes(totalUploadedBytes)}
+                          {ratio != null && (
+                            <span className="text-tertiary">
+                              {" "}
+                              (ratio: {ratio.toFixed(2)})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {queuePosition != null && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-surface border border-divider rounded">
+                        Q: {queuePosition}
+                      </span>
+                    )}
+                    {isSequential && (
+                      <span
+                        className="inline-flex items-center"
+                        title="Sequential download"
+                      >
+                        <BsArrowRepeat className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
+                      </span>
+                    )}
                   </>
                 )}
               </div>

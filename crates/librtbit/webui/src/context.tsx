@@ -1,10 +1,16 @@
 import { createContext } from "react";
 import {
+  AltSpeedConfig,
+  AltSpeedSchedule,
+  AltSpeedStatus,
   CategoryInfo,
   DhtStats,
   LimitsConfig,
   RtbitAPI,
+  SeedLimits,
+  SeedLimitsConfig,
   SessionStats,
+  TorrentLimits,
 } from "./api-types";
 
 export const APIContext = createContext<RtbitAPI>({
@@ -81,6 +87,60 @@ export const APIContext = createContext<RtbitAPI>({
     torrentId: number,
     category: string | null,
   ): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  getAltSpeed: function (): Promise<AltSpeedStatus> {
+    throw new Error("Function not implemented.");
+  },
+  toggleAltSpeed: function (_enabled: boolean): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  setAltSpeedConfig: function (_config: AltSpeedConfig): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  getSpeedSchedule: function (): Promise<AltSpeedSchedule> {
+    throw new Error("Function not implemented.");
+  },
+  setSpeedSchedule: function (_schedule: AltSpeedSchedule): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  getSeedLimits: function (): Promise<SeedLimitsConfig> {
+    throw new Error("Function not implemented.");
+  },
+  setSeedLimits: function (_limits: SeedLimitsConfig): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  setTorrentSeedLimits: function (
+    _id: number,
+    _limits: SeedLimits,
+  ): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  getTorrentLimits: function (_id: number): Promise<TorrentLimits> {
+    throw new Error("Function not implemented.");
+  },
+  setTorrentLimits: function (
+    _id: number,
+    _limits: TorrentLimits,
+  ): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  setSequential: function (_id: number, _enabled: boolean): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  setSuperSeed: function (_id: number, _enabled: boolean): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  queueMoveTop: function (_id: number): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  queueMoveBottom: function (_id: number): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  queueMoveUp: function (_id: number): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
+  queueMoveDown: function (_id: number): Promise<void> {
     throw new Error("Function not implemented.");
   },
 });

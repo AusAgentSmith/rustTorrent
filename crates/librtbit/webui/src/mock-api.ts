@@ -3,14 +3,20 @@
 
 import {
   AddTorrentResponse,
+  AltSpeedConfig,
+  AltSpeedSchedule,
+  AltSpeedStatus,
   CategoryInfo,
   DhtStats,
   LimitsConfig,
   ListTorrentsResponse,
   PeerStatsSnapshot,
   RtbitAPI,
+  SeedLimits,
+  SeedLimitsConfig,
   SessionStats,
   TorrentDetails,
+  TorrentLimits,
   TorrentStats,
   TorrentListItem,
   LiveTorrentStats,
@@ -679,4 +685,44 @@ export const MockAPI: RtbitAPI & { getVersion: () => Promise<string> } = {
       torrentCategories.delete(torrentId);
     }
   },
+
+  // Alt speed
+  getAltSpeed: async (): Promise<AltSpeedStatus> => {
+    return {
+      enabled: false,
+      config: { download_rate: null, upload_rate: null },
+      schedule: { enabled: false, start_minutes: 0, end_minutes: 0, days: 0 },
+    };
+  },
+  toggleAltSpeed: async (): Promise<void> => {},
+  setAltSpeedConfig: async (_config: AltSpeedConfig): Promise<void> => {},
+  getSpeedSchedule: async (): Promise<AltSpeedSchedule> => {
+    return { enabled: false, start_minutes: 0, end_minutes: 0, days: 0 };
+  },
+  setSpeedSchedule: async (_schedule: AltSpeedSchedule): Promise<void> => {},
+
+  // Seed limits
+  getSeedLimits: async (): Promise<SeedLimitsConfig> => {
+    return { ratio_limit: null, time_limit_secs: null };
+  },
+  setSeedLimits: async (_limits: SeedLimitsConfig): Promise<void> => {},
+
+  // Per-torrent controls
+  setTorrentSeedLimits: async (
+    _id: number,
+    _limits: SeedLimits,
+  ): Promise<void> => {},
+  getTorrentLimits: async (_id: number): Promise<TorrentLimits> => {
+    return {};
+  },
+  setTorrentLimits: async (
+    _id: number,
+    _limits: TorrentLimits,
+  ): Promise<void> => {},
+  setSequential: async (_id: number, _enabled: boolean): Promise<void> => {},
+  setSuperSeed: async (_id: number, _enabled: boolean): Promise<void> => {},
+  queueMoveTop: async (_id: number): Promise<void> => {},
+  queueMoveBottom: async (_id: number): Promise<void> => {},
+  queueMoveUp: async (_id: number): Promise<void> => {},
+  queueMoveDown: async (_id: number): Promise<void> => {},
 };

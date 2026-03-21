@@ -13,7 +13,14 @@ import {
   FaCopy,
   FaTag,
   FaPlus,
+  FaArrowUp,
+  FaArrowDown,
+  FaAngleDoubleUp,
+  FaAngleDoubleDown,
+  FaTachometerAlt,
+  FaSeedling,
 } from "react-icons/fa";
+import { BsCheckSquareFill, BsSquare } from "react-icons/bs";
 
 export interface ContextMenuState {
   x: number;
@@ -38,6 +45,12 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [actionInProgress, setActionInProgress] = useState(false);
+  const [showSpeedLimits, setShowSpeedLimits] = useState(false);
+  const [showSeedLimits, setShowSeedLimits] = useState(false);
+  const [dlRate, setDlRate] = useState("");
+  const [ulRate, setUlRate] = useState("");
+  const [ratioLimit, setRatioLimit] = useState("");
+  const [timeLimit, setTimeLimit] = useState("");
   const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
   const API = useContext(APIContext);
@@ -61,6 +74,13 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
     (singleTarget.stats?.state === "paused" ||
       singleTarget.stats?.state === "live");
 
+  const hasFinished = targets.some((t) => t.stats?.finished);
+  const hasQueueState = targets.some((t) => t.stats?.queue_state != null);
+
+  // For single target toggles
+  const isSequential = singleTarget?.stats?.sequential ?? false;
+  const isSuperSeeding = singleTarget?.stats?.super_seeding ?? false;
+
   // Fetch categories once when menu opens
   const categoriesFetched = useRef(false);
   useEffect(() => {
@@ -70,6 +90,34 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
       .then((cats) => setCategories(cats))
       .catch(() => {});
   }, [API, setCategories]);
+
+  // Fetch current limits when speed/seed limit forms open
+  useEffect(() => {
+    if (showSpeedLimits && singleTarget) {
+      API.getTorrentLimits(singleTarget.id)
+        .then((limits) => {
+          setDlRate(limits.download_rate?.toString() ?? "");
+          setUlRate(limits.upload_rate?.toString() ?? "");
+        })
+        .catch(() => {});
+    }
+  }, [showSpeedLimits, singleTarget, API]);
+
+  useEffect(() => {
+    if (showSeedLimits && singleTarget) {
+      const stats = singleTarget.stats;
+      setRatioLimit(
+        stats?.seed_ratio_limit != null
+          ? stats.seed_ratio_limit.toString()
+          : "",
+      );
+      setTimeLimit(
+        stats?.seed_time_limit_secs != null
+          ? stats.seed_time_limit_secs.toString()
+          : "",
+      );
+    }
+  }, [showSeedLimits, singleTarget]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
@@ -96,7 +144,7 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
 
   // Clamp to viewport
   const menuWidth = 220;
-  const menuMaxHeight = 400;
+  const menuMaxHeight = 500;
   const left = Math.min(x, window.innerWidth - menuWidth - 8);
   const top = Math.min(y, window.innerHeight - menuMaxHeight - 8);
 
@@ -215,20 +263,118 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
     onClose();
   };
 
+  const handleToggleSequential = async () => {
+    setActionInProgress(true);
+    for (const t of targets) {
+      try {
+        const current = t.stats?.sequential ?? false;
+        await API.setSequential(t.id, !current);
+      } catch (e: any) {
+        setCloseableError({
+          text: `Error toggling sequential for "${t.name ?? t.id}"`,
+          details: e,
+        });
+      }
+    }
+    refreshTorrents();
+    onClose();
+  };
+
+  const handleToggleSuperSeed = async () => {
+    setActionInProgress(true);
+    for (const t of targets) {
+      try {
+        const current = t.stats?.super_seeding ?? false;
+        await API.setSuperSeed(t.id, !current);
+      } catch (e: any) {
+        setCloseableError({
+          text: `Error toggling super-seed for "${t.name ?? t.id}"`,
+          details: e,
+        });
+      }
+    }
+    refreshTorrents();
+    onClose();
+  };
+
+  const handleQueueAction = async (
+    action: (id: number) => Promise<void>,
+    label: string,
+  ) => {
+    setActionInProgress(true);
+    for (const t of targets) {
+      try {
+        await action(t.id);
+      } catch (e: any) {
+        setCloseableError({
+          text: `Error ${label} for "${t.name ?? t.id}"`,
+          details: e,
+        });
+      }
+    }
+    refreshTorrents();
+    onClose();
+  };
+
+  const handleSetSpeedLimits = async () => {
+    if (!singleTarget) return;
+    setActionInProgress(true);
+    try {
+      await API.setTorrentLimits(singleTarget.id, {
+        download_rate: dlRate ? Number(dlRate) : undefined,
+        upload_rate: ulRate ? Number(ulRate) : undefined,
+      });
+    } catch (e: any) {
+      setCloseableError({
+        text: `Error setting speed limits`,
+        details: e,
+      });
+    }
+    refreshTorrents();
+    onClose();
+  };
+
+  const handleSetSeedLimits = async () => {
+    if (!singleTarget) return;
+    setActionInProgress(true);
+    try {
+      await API.setTorrentSeedLimits(singleTarget.id, {
+        ratio_limit: ratioLimit ? Number(ratioLimit) : null,
+        time_limit_secs: timeLimit ? Number(timeLimit) : null,
+      });
+    } catch (e: any) {
+      setCloseableError({
+        text: `Error setting seed limits`,
+        details: e,
+      });
+    }
+    refreshTorrents();
+    onClose();
+  };
+
   const itemCls =
     "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-surface cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
   const iconCls = "w-3.5 h-3.5 shrink-0";
   const separator = <div className="border-t border-divider my-1" />;
+  const inputCls =
+    "w-full px-2 py-1 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary placeholder:text-tertiary";
 
   const categoryNames = Object.keys(categories).sort((a, b) =>
     a.localeCompare(b),
   );
 
+  const CheckIcon: React.FC<{ checked: boolean }> = ({ checked }) =>
+    checked ? (
+      <BsCheckSquareFill className={`${iconCls} text-primary`} />
+    ) : (
+      <BsSquare className={`${iconCls} text-secondary`} />
+    );
+
   return (
     <>
       <div
         ref={menuRef}
-        className="fixed z-50 bg-surface-raised border border-divider rounded-lg shadow-lg py-1"
+        className="fixed z-50 bg-surface-raised border border-divider rounded-lg shadow-lg py-1 overflow-y-auto"
         style={{ left, top, width: menuWidth, maxHeight: menuMaxHeight }}
       >
         {hasResumable && (
@@ -264,6 +410,154 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
           </>
         )}
 
+        {/* Transfer toggles */}
+        <button
+          className={itemCls}
+          onClick={handleToggleSequential}
+          disabled={actionInProgress}
+        >
+          <CheckIcon checked={isBulk ? false : isSequential} />
+          Sequential Download
+        </button>
+        {hasFinished && (
+          <button
+            className={itemCls}
+            onClick={handleToggleSuperSeed}
+            disabled={actionInProgress}
+          >
+            <CheckIcon checked={isBulk ? false : isSuperSeeding} />
+            Super-Seed
+          </button>
+        )}
+
+        {separator}
+
+        {/* Queue controls */}
+        {hasQueueState && (
+          <>
+            <button
+              className={itemCls}
+              onClick={() =>
+                handleQueueAction((id) => API.queueMoveTop(id), "moving to top")
+              }
+              disabled={actionInProgress}
+            >
+              <FaAngleDoubleUp className={`${iconCls} text-secondary`} />
+              Move to Top
+            </button>
+            <button
+              className={itemCls}
+              onClick={() =>
+                handleQueueAction((id) => API.queueMoveUp(id), "moving up")
+              }
+              disabled={actionInProgress}
+            >
+              <FaArrowUp className={`${iconCls} text-secondary`} />
+              Move Up
+            </button>
+            <button
+              className={itemCls}
+              onClick={() =>
+                handleQueueAction((id) => API.queueMoveDown(id), "moving down")
+              }
+              disabled={actionInProgress}
+            >
+              <FaArrowDown className={`${iconCls} text-secondary`} />
+              Move Down
+            </button>
+            <button
+              className={itemCls}
+              onClick={() =>
+                handleQueueAction(
+                  (id) => API.queueMoveBottom(id),
+                  "moving to bottom",
+                )
+              }
+              disabled={actionInProgress}
+            >
+              <FaAngleDoubleDown className={`${iconCls} text-secondary`} />
+              Move to Bottom
+            </button>
+            {separator}
+          </>
+        )}
+
+        {/* Per-torrent limits */}
+        {singleTarget && (
+          <>
+            <button
+              className={itemCls}
+              onClick={() => setShowSpeedLimits((v) => !v)}
+              disabled={actionInProgress}
+            >
+              <FaTachometerAlt className={`${iconCls} text-secondary`} />
+              Set Speed Limits...
+            </button>
+            {showSpeedLimits && (
+              <div className="px-3 py-1.5 flex flex-col gap-1.5">
+                <input
+                  type="number"
+                  value={dlRate}
+                  onChange={(e) => setDlRate(e.target.value)}
+                  placeholder="Download (bytes/s)"
+                  className={inputCls}
+                  min="0"
+                />
+                <input
+                  type="number"
+                  value={ulRate}
+                  onChange={(e) => setUlRate(e.target.value)}
+                  placeholder="Upload (bytes/s)"
+                  className={inputCls}
+                  min="0"
+                />
+                <button
+                  className="px-2 py-1 text-sm bg-primary-bg text-white rounded hover:bg-primary-bg-hover cursor-pointer"
+                  onClick={handleSetSpeedLimits}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+            <button
+              className={itemCls}
+              onClick={() => setShowSeedLimits((v) => !v)}
+              disabled={actionInProgress}
+            >
+              <FaSeedling className={`${iconCls} text-secondary`} />
+              Set Seed Limits...
+            </button>
+            {showSeedLimits && (
+              <div className="px-3 py-1.5 flex flex-col gap-1.5">
+                <input
+                  type="number"
+                  value={ratioLimit}
+                  onChange={(e) => setRatioLimit(e.target.value)}
+                  placeholder="Ratio limit (e.g. 2.0)"
+                  className={inputCls}
+                  min="0"
+                  step="0.1"
+                />
+                <input
+                  type="number"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.value)}
+                  placeholder="Time limit (seconds)"
+                  className={inputCls}
+                  min="0"
+                />
+                <button
+                  className="px-2 py-1 text-sm bg-primary-bg text-white rounded hover:bg-primary-bg-hover cursor-pointer"
+                  onClick={handleSetSeedLimits}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+            {separator}
+          </>
+        )}
+
         {/* Category submenu */}
         <div className="relative">
           <button
@@ -272,7 +566,7 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
             disabled={actionInProgress}
           >
             <FaTag className={`${iconCls} text-secondary`} />
-            {isBulk ? "Set Category..." : "Set Category..."}
+            Set Category...
           </button>
           {showCategoryMenu && (
             <div className="border-t border-divider bg-surface-raised">
@@ -308,7 +602,7 @@ export const TorrentContextMenu: React.FC<TorrentContextMenuProps> = ({
                     onBlur={handleCreateAndAssignCategory}
                     placeholder="Category name..."
                     autoFocus
-                    className="w-full px-2 py-1 text-sm bg-surface border border-divider rounded focus:outline-none focus:border-primary placeholder:text-tertiary"
+                    className={inputCls}
                   />
                 </div>
               ) : (

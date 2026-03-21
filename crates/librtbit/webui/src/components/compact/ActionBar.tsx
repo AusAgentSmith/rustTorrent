@@ -1,5 +1,11 @@
 import { useContext, useState, useCallback, useMemo } from "react";
-import { FaPause, FaPlay, FaTrash } from "react-icons/fa";
+import {
+  FaArrowDown,
+  FaArrowUp,
+  FaPause,
+  FaPlay,
+  FaTrash,
+} from "react-icons/fa";
 import { GoSearch, GoX } from "react-icons/go";
 import debounce from "lodash.debounce";
 import { APIContext } from "../../context";
@@ -117,6 +123,44 @@ export const ActionBar: React.FC<ActionBarProps> = ({ hideFilters }) => {
   const resumeSelected = () =>
     runBulkAction((id) => API.start(id), STATE_LIVE, "starting");
 
+  const queueMoveUp = async () => {
+    setDisabled(true);
+    try {
+      for (const id of selectedTorrentIds) {
+        try {
+          await API.queueMoveUp(id);
+        } catch (e) {
+          setCloseableError({
+            text: `Error moving torrent id=${id} up in queue`,
+            details: e as ErrorDetails,
+          });
+        }
+      }
+      refreshTorrents();
+    } finally {
+      setDisabled(false);
+    }
+  };
+
+  const queueMoveDown = async () => {
+    setDisabled(true);
+    try {
+      for (const id of selectedTorrentIds) {
+        try {
+          await API.queueMoveDown(id);
+        } catch (e) {
+          setCloseableError({
+            text: `Error moving torrent id=${id} down in queue`,
+            details: e as ErrorDetails,
+          });
+        }
+      }
+      refreshTorrents();
+    } finally {
+      setDisabled(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-raised border-b border-divider">
       <Button
@@ -142,6 +186,20 @@ export const ActionBar: React.FC<ActionBarProps> = ({ hideFilters }) => {
       >
         <FaTrash className="w-2.5 h-2.5" />
         Delete
+      </Button>
+      <Button
+        onClick={queueMoveUp}
+        disabled={disabled || !hasSelection}
+        variant="secondary"
+      >
+        <FaArrowUp className="w-2.5 h-2.5" />
+      </Button>
+      <Button
+        onClick={queueMoveDown}
+        disabled={disabled || !hasSelection}
+        variant="secondary"
+      >
+        <FaArrowDown className="w-2.5 h-2.5" />
       </Button>
 
       {!hideFilters && (
