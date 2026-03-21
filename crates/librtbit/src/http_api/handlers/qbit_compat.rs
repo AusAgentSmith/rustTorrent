@@ -528,8 +528,8 @@ async fn h_torrents_info(
                 infohash_v2: String::new(),
                 last_activity: now,
                 magnet_uri: String::new(),
-                max_ratio: -1,
-                max_seeding_time: -1,
+                max_ratio: stats.seed_ratio_limit.map(|r| (r * 100.0) as i32).unwrap_or(-1),
+                max_seeding_time: stats.seed_time_limit_secs.map(|s| (s / 60) as i32).unwrap_or(-1),
                 name,
                 num_complete: 0,
                 num_incomplete: 0,
@@ -537,11 +537,11 @@ async fn h_torrents_info(
                 num_seeds,
                 priority: 0,
                 progress,
-                ratio: 0.0,
-                ratio_limit: -1,
+                ratio: stats.ratio.unwrap_or(0.0),
+                ratio_limit: stats.seed_ratio_limit.map(|r| (r * 100.0) as i32).unwrap_or(-1),
                 save_path: output_folder,
-                seeding_time: 0,
-                seeding_time_limit: -1,
+                seeding_time: stats.seeding_time_secs.unwrap_or(0),
+                seeding_time_limit: stats.seed_time_limit_secs.map(|s| (s / 60) as i32).unwrap_or(-1),
                 seen_complete: if stats.finished {
                     i64::try_from(now).unwrap_or(i64::MAX)
                 } else {
@@ -674,10 +674,10 @@ async fn h_torrents_properties(
         up_limit: -1,
         dl_limit: -1,
         time_elapsed: 0,
-        seeding_time: 0,
+        seeding_time: stats.seeding_time_secs.unwrap_or(0),
         nb_connections: 0,
         nb_connections_limit: -1,
-        share_ratio: 0.0,
+        share_ratio: stats.ratio.unwrap_or(0.0),
         addition_date: now,
         completion_date: if stats.finished {
             i64::try_from(now).unwrap_or(i64::MAX)

@@ -145,6 +145,14 @@ pub struct AddTorrentOptions {
     /// If not set, defaults to 120 seconds. Set to 0 to disable the timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub magnet_resolution_timeout_secs: Option<u64>,
+
+    /// Per-torrent seed ratio limit override. None = use global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_ratio_limit: Option<f64>,
+
+    /// Per-torrent seed time limit override (seconds). None = use global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_time_limit_secs: Option<u64>,
 }
 
 pub struct ListOnlyResponse {
@@ -322,6 +330,15 @@ pub struct SessionOptions {
     /// A folder to move completed torrents to. If set, when a torrent finishes
     /// downloading, its files will be moved from the output folder to this folder.
     pub completed_folder: Option<PathBuf>,
+
+    /// Global default seed ratio limit. When a seeding torrent's
+    /// uploaded/total ratio reaches this value, it will be auto-paused.
+    /// None = unlimited.
+    pub seed_ratio_limit: Option<f64>,
+
+    /// Global default seed time limit in seconds. When a torrent has been
+    /// seeding for this long, it will be auto-paused. None = unlimited.
+    pub seed_time_limit_secs: Option<u64>,
 }
 
 pub(crate) fn torrent_file_from_info_bytes(

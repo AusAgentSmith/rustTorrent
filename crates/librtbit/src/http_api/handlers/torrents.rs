@@ -625,3 +625,60 @@ pub async fn h_set_torrent_category(
         .await
         .map(axum::Json)
 }
+
+#[derive(Deserialize)]
+pub struct SetTorrentSeedLimitsRequest {
+    /// Per-torrent seed ratio limit. Pass `null` to clear (use global default).
+    /// Omit the field entirely to leave unchanged.
+    #[serde(default, deserialize_with = "deserialize_optional_option")]
+    pub seed_ratio_limit: Option<Option<f64>>,
+    /// Per-torrent seed time limit in seconds. Pass `null` to clear.
+    /// Omit the field entirely to leave unchanged.
+    #[serde(default, deserialize_with = "deserialize_optional_option")]
+    pub seed_time_limit_secs: Option<Option<u64>>,
+}
+
+/// Deserialize a field that can be: absent (None), explicitly null (Some(None)),
+/// or a value (Some(Some(T))).
+fn deserialize_optional_option<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
+}
+
+pub async fn h_set_torrent_seed_limits(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+    axum::Json(req): axum::Json<SetTorrentSeedLimitsRequest>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_set_torrent_seed_limits(idx, req.seed_ratio_limit, req.seed_time_limit_secs)
+        .await
+        .map(axum::Json)
+}
+
+#[derive(Deserialize)]
+pub struct SetGlobalSeedLimitsRequest {
+    #[serde(default, deserialize_with = "deserialize_optional_option")]
+    pub seed_ratio_limit: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "deserialize_optional_option")]
+    pub seed_time_limit_secs: Option<Option<u64>>,
+}
+
+pub async fn h_get_global_seed_limits(State(state): State<ApiState>) -> impl IntoResponse {
+    axum::Json(state.api.api_get_seed_limits())
+}
+
+pub async fn h_set_global_seed_limits(
+    State(state): State<ApiState>,
+    axum::Json(req): axum::Json<SetGlobalSeedLimitsRequest>,
+) -> Result<impl IntoResponse> {
+    Ok(axum::Json(
+        state
+            .api
+            .api_set_global_seed_limits(req.seed_ratio_limit, req.seed_time_limit_secs),
+    ))
+}

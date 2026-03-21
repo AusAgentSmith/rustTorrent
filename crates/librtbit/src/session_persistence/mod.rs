@@ -33,6 +33,10 @@ pub struct SerializedTorrent {
     is_paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    seed_ratio_limit: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    seed_time_limit_secs: Option<u64>,
 }
 
 impl SerializedTorrent {
@@ -52,6 +56,8 @@ impl SerializedTorrent {
 
     pub fn into_add_torrent(self) -> anyhow::Result<(AddTorrent<'static>, AddTorrentOptions)> {
         let category = self.category.clone();
+        let seed_ratio_limit = self.seed_ratio_limit;
+        let seed_time_limit_secs = self.seed_time_limit_secs;
         let add_torrent = if !self.torrent_bytes.is_empty() {
             AddTorrent::TorrentFileBytes(self.torrent_bytes)
         } else {
@@ -75,6 +81,8 @@ impl SerializedTorrent {
             only_files: self.only_files,
             overwrite: true,
             category,
+            seed_ratio_limit,
+            seed_time_limit_secs,
             ..Default::default()
         };
 

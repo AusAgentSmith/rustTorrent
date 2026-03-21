@@ -600,6 +600,52 @@ impl Api {
             .await;
         Ok(Default::default())
     }
+
+    pub async fn api_set_torrent_seed_limits(
+        &self,
+        idx: TorrentIdOrHash,
+        seed_ratio_limit: Option<Option<f64>>,
+        seed_time_limit_secs: Option<Option<u64>>,
+    ) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        if let Some(ratio) = seed_ratio_limit {
+            *handle.shared.seed_ratio_limit.write() = ratio;
+        }
+        if let Some(time) = seed_time_limit_secs {
+            *handle.shared.seed_time_limit_secs.write() = time;
+        }
+        self.session
+            .try_update_persistence_metadata(&handle)
+            .await;
+        Ok(Default::default())
+    }
+
+    pub fn api_get_seed_limits(&self) -> SeedLimitsResponse {
+        SeedLimitsResponse {
+            seed_ratio_limit: self.session.get_seed_ratio_limit(),
+            seed_time_limit_secs: self.session.get_seed_time_limit_secs(),
+        }
+    }
+
+    pub fn api_set_global_seed_limits(
+        &self,
+        seed_ratio_limit: Option<Option<f64>>,
+        seed_time_limit_secs: Option<Option<u64>>,
+    ) -> EmptyJsonResponse {
+        if let Some(ratio) = seed_ratio_limit {
+            self.session.set_seed_ratio_limit(ratio);
+        }
+        if let Some(time) = seed_time_limit_secs {
+            self.session.set_seed_time_limit_secs(time);
+        }
+        Default::default()
+    }
+}
+
+#[derive(Serialize)]
+pub struct SeedLimitsResponse {
+    pub seed_ratio_limit: Option<f64>,
+    pub seed_time_limit_secs: Option<u64>,
 }
 
 #[derive(Serialize)]

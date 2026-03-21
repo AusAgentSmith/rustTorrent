@@ -42,6 +42,8 @@ impl TorrentsTableRecord {
                     .map(|v| v.into_iter().map(|v| v as usize).collect()),
                 is_paused: self.is_paused,
                 category: None,
+                seed_ratio_limit: None,
+                seed_time_limit_secs: None,
             },
         ))
     }

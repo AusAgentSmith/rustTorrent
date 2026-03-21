@@ -377,6 +377,15 @@ impl TorrentStateLive {
             state.clone().task_peer_health_monitor(),
         );
 
+        // If the torrent is already finished (e.g. restoring from session),
+        // record seeding start time now if not already set.
+        if state.is_finished() {
+            let mut seeding_since = state.shared.seeding_since.write();
+            if seeding_since.is_none() {
+                *seeding_since = Some(std::time::Instant::now());
+            }
+        }
+
         if !state.shared.web_seed_urls.is_empty() {
             info!(urls = ?state.shared.web_seed_urls, "torrent has webseed URLs");
         }
@@ -683,6 +692,13 @@ impl TorrentStateLive {
             if chunks.get_selected_pieces()[id.get_usize()] {
                 locked.try_flush_bitv(&self.shared, false);
                 info!(id=self.shared.id, info_hash=?self.shared.info_hash, "torrent finished downloading");
+            }
+            // Record when seeding started (only set once)
+            {
+                let mut seeding_since = self.shared.seeding_since.write();
+                if seeding_since.is_none() {
+                    *seeding_since = Some(std::time::Instant::now());
+                }
             }
             self.finished_notify.notify_waiters();
 

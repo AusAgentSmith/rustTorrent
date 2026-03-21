@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::Instant;
 
 use anyhow::Context;
 use anyhow::bail;
@@ -198,6 +199,16 @@ pub struct ManagedTorrentShared {
 
     /// Category assigned to this torrent.
     pub category: RwLock<Option<String>>,
+
+    /// Per-torrent seed ratio limit override. None = use global default.
+    pub seed_ratio_limit: RwLock<Option<f64>>,
+
+    /// Per-torrent seed time limit override (seconds). None = use global default.
+    pub seed_time_limit_secs: RwLock<Option<u64>>,
+
+    /// When the torrent started seeding (all selected pieces downloaded).
+    /// Set when the torrent transitions to finished state.
+    pub seeding_since: RwLock<Option<Instant>>,
 
     /// Per-torrent cancellation token, child of session token.
     /// Used to cancel init tasks, checking, etc. when the torrent is deleted/forgotten.
@@ -538,6 +549,10 @@ impl ManagedTorrent {
             finished: false,
             live: None,
             queued_for_init: None,
+            ratio: None,
+            seeding_time_secs: None,
+            seed_ratio_limit: *self.shared.seed_ratio_limit.read(),
+            seed_time_limit_secs: *self.shared.seed_time_limit_secs.read(),
         };
 
         self.with_state(|s| {
@@ -580,6 +595,17 @@ impl ManagedTorrent {
                     resp.error = Some("bug: torrent in broken \"None\" state".to_string());
                 }
             }
+
+            // Compute ratio
+            if resp.total_bytes > 0 {
+                resp.ratio = Some(resp.uploaded_bytes as f64 / resp.total_bytes as f64);
+            }
+
+            // Compute seeding time
+            if let Some(since) = *self.shared.seeding_since.read() {
+                resp.seeding_time_secs = Some(since.elapsed().as_secs());
+            }
+
             resp
         })
     }

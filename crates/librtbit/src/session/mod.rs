@@ -127,6 +127,11 @@ pub struct Session {
     pub(crate) fastresume_validation_denom: Option<u32>,
     // Move-on-complete: destination folder for finished torrents
     completed_folder: Option<PathBuf>,
+
+    /// Global default seed ratio limit. None = unlimited.
+    pub(crate) seed_ratio_limit: parking_lot::RwLock<Option<f64>>,
+    /// Global default seed time limit in seconds. None = unlimited.
+    pub(crate) seed_time_limit_secs: parking_lot::RwLock<Option<u64>>,
 }
 
 impl Session {
@@ -434,6 +439,8 @@ impl Session {
                 fastresume_validation_denom: opts.fastresume_validation_denom,
                 category_manager,
                 completed_folder: opts.completed_folder,
+                seed_ratio_limit: parking_lot::RwLock::new(opts.seed_ratio_limit),
+                seed_time_limit_secs: parking_lot::RwLock::new(opts.seed_time_limit_secs),
             });
 
             if let Some(mut listen) = listen_result {
@@ -507,6 +514,7 @@ impl Session {
             }
 
             session.start_speed_estimator_updater();
+            session.start_seed_limit_checker();
 
             Ok(session)
         }
@@ -883,6 +891,9 @@ impl Session {
                 magnet_name: name,
                 web_seed_urls,
                 category: RwLock::new(opts.category.clone()),
+                seed_ratio_limit: RwLock::new(opts.seed_ratio_limit),
+                seed_time_limit_secs: RwLock::new(opts.seed_time_limit_secs),
+                seeding_since: RwLock::new(None),
                 cancellation_token: parking_lot::Mutex::new(
                     self.cancellation_token.child_token(),
                 ),
@@ -1246,6 +1257,140 @@ impl Session {
             p.store_categories(&snapshot).await?;
         }
         Ok(())
+    }
+
+    /// Get the global seed ratio limit.
+    pub fn get_seed_ratio_limit(&self) -> Option<f64> {
+        *self.seed_ratio_limit.read()
+    }
+
+    /// Set the global seed ratio limit.
+    pub fn set_seed_ratio_limit(&self, limit: Option<f64>) {
+        *self.seed_ratio_limit.write() = limit;
+    }
+
+    /// Get the global seed time limit in seconds.
+    pub fn get_seed_time_limit_secs(&self) -> Option<u64> {
+        *self.seed_time_limit_secs.read()
+    }
+
+    /// Set the global seed time limit in seconds.
+    pub fn set_seed_time_limit_secs(&self, limit: Option<u64>) {
+        *self.seed_time_limit_secs.write() = limit;
+    }
+
+    /// Spawn the periodic seed limit checker task.
+    fn start_seed_limit_checker(self: &Arc<Self>) {
+        self.spawn(
+            debug_span!(parent: self.rs(), "seed_limit_checker"),
+            "seed_limit_checker",
+            {
+                let session = Arc::downgrade(self);
+                async move {
+                    let mut interval = tokio::time::interval(Duration::from_secs(30));
+                    loop {
+                        interval.tick().await;
+                        let session = match session.upgrade() {
+                            Some(s) => s,
+                            None => return Ok(()),
+                        };
+                        session.check_seed_limits().await;
+                    }
+                }
+            },
+        );
+    }
+
+    /// Check all seeding torrents against their seed ratio/time limits
+    /// and auto-pause any that exceed them.
+    async fn check_seed_limits(self: &Arc<Self>) {
+        let global_ratio_limit = self.get_seed_ratio_limit();
+        let global_time_limit = self.get_seed_time_limit_secs();
+
+        // If no global limits and no per-torrent limits possible, skip early.
+        // (Per-torrent limits can still exist, so we must always check.)
+
+        // Collect torrents to check (avoid holding the lock while pausing).
+        let torrents: Vec<_> = self.with_torrents(|iter| {
+            iter.map(|(id, handle)| (id, handle.clone())).collect()
+        });
+
+        for (_id, handle) in torrents {
+            let stats = handle.stats();
+
+            // Only check live, finished torrents (i.e., seeding).
+            if !stats.finished {
+                continue;
+            }
+            if !matches!(
+                stats.state,
+                crate::torrent_state::stats::TorrentStatsState::Live
+            ) {
+                continue;
+            }
+
+            // Determine effective ratio limit: per-torrent overrides global.
+            let effective_ratio_limit = {
+                let per_torrent = *handle.shared.seed_ratio_limit.read();
+                per_torrent.or(global_ratio_limit)
+            };
+
+            // Determine effective time limit: per-torrent overrides global.
+            let effective_time_limit = {
+                let per_torrent = *handle.shared.seed_time_limit_secs.read();
+                per_torrent.or(global_time_limit)
+            };
+
+            // Check ratio limit
+            if let Some(ratio_limit) = effective_ratio_limit {
+                if stats.total_bytes > 0 {
+                    let current_ratio =
+                        stats.uploaded_bytes as f64 / stats.total_bytes as f64;
+                    if current_ratio >= ratio_limit {
+                        info!(
+                            id = handle.id(),
+                            info_hash = ?handle.info_hash(),
+                            current_ratio,
+                            ratio_limit,
+                            "auto-pausing torrent: seed ratio limit reached"
+                        );
+                        if let Err(e) = self.pause(&handle).await {
+                            warn!(
+                                id = handle.id(),
+                                "error auto-pausing torrent for ratio limit: {e:#}"
+                            );
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // Check time limit
+            if let Some(time_limit_secs) = effective_time_limit {
+                let elapsed_opt = handle
+                    .shared
+                    .seeding_since
+                    .read()
+                    .map(|since| since.elapsed().as_secs());
+                if let Some(elapsed) = elapsed_opt {
+                    if elapsed >= time_limit_secs {
+                        info!(
+                            id = handle.id(),
+                            info_hash = ?handle.info_hash(),
+                            seeding_secs = elapsed,
+                            time_limit_secs,
+                            "auto-pausing torrent: seed time limit reached"
+                        );
+                        if let Err(e) = self.pause(&handle).await {
+                            warn!(
+                                id = handle.id(),
+                                "error auto-pausing torrent for time limit: {e:#}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

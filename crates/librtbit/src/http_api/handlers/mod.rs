@@ -67,6 +67,9 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "POST /torrents/{id_or_infohash}/delete": "Forget about the torrent, remove the files",
             "POST /torrents/{id_or_infohash}/add_peers": "Add peers (newline-delimited)",
             "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}",
+            "POST /torrents/{id_or_infohash}/seed_limits": "Set per-torrent seed ratio/time limits",
+            "GET /torrents/seed_limits": "Get global seed ratio/time limits",
+            "POST /torrents/seed_limits": "Set global seed ratio/time limits",
             "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
         },
         "server": "rtbit",
@@ -107,7 +110,11 @@ pub fn make_api_router(state: ApiState) -> Router {
             get(streaming::h_torrent_stream_file),
         )
         .route("/torrents/limits", get(configure::h_get_session_ratelimits))
-        .route("/torrents/categories", get(torrents::h_list_categories));
+        .route("/torrents/categories", get(torrents::h_list_categories))
+        .route(
+            "/torrents/seed_limits",
+            get(torrents::h_get_global_seed_limits),
+        );
 
     if !state.opts.read_only {
         api_router = api_router
@@ -149,6 +156,14 @@ pub fn make_api_router(state: ApiState) -> Router {
             .route(
                 "/torrents/{id}/set_category",
                 post(torrents::h_set_torrent_category),
+            )
+            .route(
+                "/torrents/{id}/seed_limits",
+                post(torrents::h_set_torrent_seed_limits),
+            )
+            .route(
+                "/torrents/seed_limits",
+                post(torrents::h_set_global_seed_limits),
             );
     }
 

@@ -291,6 +291,16 @@ struct Opts {
     /// Disable trackers (for debugging DHT, LSD and --initial-peers)
     #[arg(long = "disable-trackers", env = "RTBIT_TRACKERS_DISABLE")]
     disable_trackers: bool,
+
+    /// Global default seed ratio limit. Auto-pause torrents after reaching
+    /// this upload:download ratio (e.g. 2.0 means uploaded 2x the torrent size).
+    #[arg(long = "seed-ratio-limit", env = "RTBIT_SEED_RATIO_LIMIT")]
+    seed_ratio_limit: Option<f64>,
+
+    /// Global default seed time limit in seconds. Auto-pause torrents after
+    /// seeding for this many seconds.
+    #[arg(long = "seed-time-limit", env = "RTBIT_SEED_TIME_LIMIT")]
+    seed_time_limit: Option<u64>,
 }
 
 #[derive(Parser)]
@@ -697,6 +707,8 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         runtime_worker_threads: Some(opts.max_blocking_threads as usize),
         ipv4_only: opts.ipv4_only,
         completed_folder: None,
+        seed_ratio_limit: opts.seed_ratio_limit,
+        seed_time_limit_secs: opts.seed_time_limit,
     };
 
     // Credential store for persistent auth — uses the rtbit config directory

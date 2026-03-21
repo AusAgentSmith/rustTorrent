@@ -80,6 +80,18 @@ pub struct TorrentStats {
     /// concurrent init slot rather than actively checking files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queued_for_init: Option<bool>,
+    /// Current upload:download ratio (uploaded / total_bytes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ratio: Option<f64>,
+    /// How long this torrent has been seeding, in seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seeding_time_secs: Option<u64>,
+    /// Per-torrent seed ratio limit. None = use global default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed_ratio_limit: Option<f64>,
+    /// Per-torrent seed time limit in seconds. None = use global default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed_time_limit_secs: Option<u64>,
 }
 
 impl std::fmt::Display for TorrentStats {
