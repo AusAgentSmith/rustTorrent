@@ -61,6 +61,7 @@ pub mod http_api_types;
 mod ip_ranges;
 pub mod limits;
 mod listen;
+pub mod queue_manager;
 mod merge_streams;
 mod peer_connection;
 mod peer_info_reader;

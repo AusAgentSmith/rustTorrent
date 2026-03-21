@@ -34,6 +34,15 @@ pub async fn h_update_session_ratelimits(
     if let Some(init_limit) = limits.concurrent_init_limit {
         state.api.session().set_concurrent_init_limit(init_limit);
     }
+    if let Some(max) = limits.max_active_downloads {
+        state.api.session().queue_manager.set_max_active_downloads(max);
+    }
+    if let Some(max) = limits.max_active_uploads {
+        state.api.session().queue_manager.set_max_active_uploads(max);
+    }
+    if let Some(max) = limits.max_active_total {
+        state.api.session().queue_manager.set_max_active_total(max);
+    }
     Ok(Json(EmptyJsonResponse {}))
 }
 
@@ -48,5 +57,9 @@ pub async fn h_get_session_ratelimits(State(state): State<ApiState>) -> Result<i
     let mut config = state.api.session().ratelimits.get_config();
     config.peer_limit = Some(state.api.session().get_peer_limit());
     config.concurrent_init_limit = Some(state.api.session().get_concurrent_init_limit());
+    let qm = &state.api.session().queue_manager;
+    config.max_active_downloads = Some(qm.get_max_active_downloads());
+    config.max_active_uploads = Some(qm.get_max_active_uploads());
+    config.max_active_total = Some(qm.get_max_active_total());
     Ok(Json(config))
 }

@@ -256,7 +256,9 @@ impl Api {
                         category: mgr.shared().category.read().clone(),
                     };
                     if opts.with_stats {
-                        r.stats = Some(mgr.stats());
+                        let mut stats = mgr.stats();
+                        self.enrich_stats_with_queue_info(id, &mut stats);
+                        r.stats = Some(stats);
                     }
                     r
                 })
@@ -532,7 +534,17 @@ impl Api {
 
     pub fn api_stats_v1(&self, idx: TorrentIdOrHash) -> Result<TorrentStats> {
         let mgr = self.mgr_handle(idx)?;
-        Ok(mgr.stats())
+        let mut stats = mgr.stats();
+        self.enrich_stats_with_queue_info(mgr.id(), &mut stats);
+        Ok(stats)
+    }
+
+    /// Enrich torrent stats with queue manager state.
+    fn enrich_stats_with_queue_info(&self, id: TorrentId, stats: &mut TorrentStats) {
+        if let Some((queue_state, queue_position)) = self.session.queue_manager.get_queue_state(id) {
+            stats.queue_state = Some(queue_state);
+            stats.queue_position = queue_position;
+        }
     }
 
     pub fn api_dump_haves(&self, idx: TorrentIdOrHash) -> Result<(BF, u32)> {
@@ -598,6 +610,30 @@ impl Api {
         self.session
             .try_update_persistence_metadata(&handle)
             .await;
+        Ok(Default::default())
+    }
+
+    pub fn api_queue_move_top(&self, idx: TorrentIdOrHash) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        self.session.queue_manager.move_to_top(handle.id());
+        Ok(Default::default())
+    }
+
+    pub fn api_queue_move_bottom(&self, idx: TorrentIdOrHash) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        self.session.queue_manager.move_to_bottom(handle.id());
+        Ok(Default::default())
+    }
+
+    pub fn api_queue_move_up(&self, idx: TorrentIdOrHash) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        self.session.queue_manager.move_up(handle.id());
+        Ok(Default::default())
+    }
+
+    pub fn api_queue_move_down(&self, idx: TorrentIdOrHash) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        self.session.queue_manager.move_down(handle.id());
         Ok(Default::default())
     }
 }

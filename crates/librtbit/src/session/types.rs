@@ -322,6 +322,9 @@ pub struct SessionOptions {
     /// A folder to move completed torrents to. If set, when a torrent finishes
     /// downloading, its files will be moved from the output folder to this folder.
     pub completed_folder: Option<PathBuf>,
+
+    /// Queue management limits for concurrent active downloads/uploads.
+    pub queue_limits: crate::queue_manager::QueueLimitsConfig,
 }
 
 pub(crate) fn torrent_file_from_info_bytes(

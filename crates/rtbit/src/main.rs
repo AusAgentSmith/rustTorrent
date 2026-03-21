@@ -241,6 +241,18 @@ struct Opts {
     #[arg(long, default_value = "5", env = "RTBIT_CONCURRENT_INIT_LIMIT")]
     concurrent_init_limit: usize,
 
+    /// Maximum number of concurrent downloading torrents. 0 means unlimited.
+    #[arg(long, default_value = "0", env = "RTBIT_MAX_ACTIVE_DOWNLOADS")]
+    max_active_downloads: u32,
+
+    /// Maximum number of concurrent seeding torrents. 0 means unlimited.
+    #[arg(long, default_value = "0", env = "RTBIT_MAX_ACTIVE_UPLOADS")]
+    max_active_uploads: u32,
+
+    /// Maximum total number of active torrents (downloading + seeding). 0 means unlimited.
+    #[arg(long, default_value = "0", env = "RTBIT_MAX_ACTIVE_TOTAL")]
+    max_active_total: u32,
+
     /// Set the process umask to this value.
     ///
     /// Default is inherited from your environment (usually 022).
@@ -687,6 +699,9 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             download_bps: opts.ratelimit_download_bps,
             peer_limit: None,
             concurrent_init_limit: None,
+            max_active_downloads: None,
+            max_active_uploads: None,
+            max_active_total: None,
         },
         blocklist_url: opts.blocklist_url.take(),
         allowlist_url: opts.allowlist_url.take(),
@@ -697,6 +712,11 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
         runtime_worker_threads: Some(opts.max_blocking_threads as usize),
         ipv4_only: opts.ipv4_only,
         completed_folder: None,
+        queue_limits: librtbit::queue_manager::QueueLimitsConfig {
+            max_active_downloads: opts.max_active_downloads,
+            max_active_uploads: opts.max_active_uploads,
+            max_active_total: opts.max_active_total,
+        },
     };
 
     // Credential store for persistent auth — uses the rtbit config directory

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::queue_manager::QueueState;
 use super::{TorrentStateLive, live::stats::snapshot::StatsSnapshot};
 use size_format::SizeFormatterBinary as SF;
 
@@ -80,6 +81,12 @@ pub struct TorrentStats {
     /// concurrent init slot rather than actively checking files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queued_for_init: Option<bool>,
+    /// Queue state from the queue manager (active, queued, or manually_paused).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_state: Option<QueueState>,
+    /// Position in the queue (1-based). Only present when queue_state is "queued".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_position: Option<u32>,
 }
 
 impl std::fmt::Display for TorrentStats {

@@ -538,6 +538,8 @@ impl ManagedTorrent {
             finished: false,
             live: None,
             queued_for_init: None,
+            queue_state: None,
+            queue_position: None,
         };
 
         self.with_state(|s| {

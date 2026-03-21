@@ -625,3 +625,31 @@ pub async fn h_set_torrent_category(
         .await
         .map(axum::Json)
 }
+
+pub async fn h_queue_move_top(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+) -> Result<impl IntoResponse> {
+    state.api.api_queue_move_top(idx).map(axum::Json)
+}
+
+pub async fn h_queue_move_bottom(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+) -> Result<impl IntoResponse> {
+    state.api.api_queue_move_bottom(idx).map(axum::Json)
+}
+
+pub async fn h_queue_move_up(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+) -> Result<impl IntoResponse> {
+    state.api.api_queue_move_up(idx).map(axum::Json)
+}
+
+pub async fn h_queue_move_down(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+) -> Result<impl IntoResponse> {
+    state.api.api_queue_move_down(idx).map(axum::Json)
+}

@@ -15,6 +15,15 @@ pub struct LimitsConfig {
     pub download_bps: Option<NonZeroU32>,
     pub peer_limit: Option<usize>,
     pub concurrent_init_limit: Option<usize>,
+    /// Max concurrent downloading torrents. 0 or None means unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_active_downloads: Option<u32>,
+    /// Max concurrent seeding torrents. 0 or None means unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_active_uploads: Option<u32>,
+    /// Max total active torrents. 0 or None means unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_active_total: Option<u32>,
 }
 
 struct Limit {
@@ -101,6 +110,9 @@ impl Limits {
             download_bps: self.get_download_bps(),
             peer_limit: None,
             concurrent_init_limit: None,
+            max_active_downloads: None,
+            max_active_uploads: None,
+            max_active_total: None,
         }
     }
 }

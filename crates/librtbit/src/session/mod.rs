@@ -34,6 +34,7 @@ use crate::{
     limits::Limits,
     merge_streams::merge_streams,
     peer_connection::PeerConnectionOptions,
+    queue_manager::{QueueManager, QueueState},
     session_persistence::{SessionPersistenceStore, json::JsonSessionPersistenceStore},
     session_stats::SessionStats,
     spawn_utils::BlockingSpawner,
@@ -127,6 +128,9 @@ pub struct Session {
     pub(crate) fastresume_validation_denom: Option<u32>,
     // Move-on-complete: destination folder for finished torrents
     completed_folder: Option<PathBuf>,
+
+    // Queue management for concurrent active downloads/uploads
+    pub(crate) queue_manager: QueueManager,
 }
 
 impl Session {
@@ -434,6 +438,7 @@ impl Session {
                 fastresume_validation_denom: opts.fastresume_validation_denom,
                 category_manager,
                 completed_folder: opts.completed_folder,
+                queue_manager: QueueManager::new(opts.queue_limits),
             });
 
             if let Some(mut listen) = listen_result {
@@ -920,8 +925,21 @@ impl Session {
 
         let _e = managed_torrent.shared.span.clone().entered();
 
+        // Check queue limits before starting
+        let queue_state = self.queue_manager.register_torrent(
+            id,
+            true, // new torrents are downloading
+            opts.paused,
+        );
+
+        let should_start_paused = match queue_state {
+            QueueState::Active => opts.paused,
+            QueueState::Queued => true,  // force paused; queue will unpause when slot opens
+            QueueState::ManuallyPaused => true,
+        };
+
         managed_torrent
-            .start(peer_rx, opts.paused)
+            .start(peer_rx, should_start_paused)
             .context("error starting torrent")?;
 
         if let Some(name) = metadata.info.name() {
@@ -932,6 +950,9 @@ impl Session {
         if self.completed_folder.is_some() {
             self.spawn_completion_watcher(id, managed_torrent.clone());
         }
+
+        // Spawn a queue completion notifier to promote queued torrents when this one finishes
+        self.spawn_queue_completion_notifier(id, managed_torrent.clone());
 
         Ok(AddTorrentResponse::Added(id, managed_torrent))
     }
@@ -1029,6 +1050,9 @@ impl Session {
             }
         };
 
+        let to_promote = self.queue_manager.remove_torrent(id);
+        self.promote_queued_torrents(&to_promote).await;
+
         info!(id, "deleted torrent");
         Ok(())
     }
@@ -1043,15 +1067,57 @@ impl Session {
 
     pub async fn pause(&self, handle: &ManagedTorrentHandle) -> anyhow::Result<()> {
         handle.pause()?;
+        let to_promote = self.queue_manager.pause_torrent(handle.id());
         self.try_update_persistence_metadata(handle).await;
+        self.promote_queued_torrents(&to_promote).await;
         Ok(())
     }
 
     pub async fn unpause(self: &Arc<Self>, handle: &ManagedTorrentHandle) -> anyhow::Result<()> {
-        let peer_rx = self.make_peer_rx_managed_torrent(handle, true);
-        handle.start(peer_rx, false)?;
+        let is_downloading = !handle.stats().finished;
+        let queue_state = self.queue_manager.unpause_torrent(handle.id(), is_downloading);
+        match queue_state {
+            QueueState::Active => {
+                let peer_rx = self.make_peer_rx_managed_torrent(handle, true);
+                handle.start(peer_rx, false)?;
+            }
+            QueueState::Queued => {
+                // Don't actually start — leave paused, queue will promote when slot opens
+                info!(id = handle.id(), "torrent queued, waiting for active slot");
+            }
+            QueueState::ManuallyPaused => {
+                // Shouldn't happen on unpause, but handle gracefully
+                let peer_rx = self.make_peer_rx_managed_torrent(handle, true);
+                handle.start(peer_rx, false)?;
+            }
+        }
         self.try_update_persistence_metadata(handle).await;
         Ok(())
+    }
+
+    /// Promote queued torrents to active state by unpausing them.
+    async fn promote_queued_torrents(&self, to_promote: &[TorrentId]) {
+        for &id in to_promote {
+            let handle = {
+                let db = self.db.read();
+                db.torrents.get(&id).cloned()
+            };
+            if let Some(handle) = handle {
+                info!(id, "promoting queued torrent to active");
+                // Start without initial peer_rx; the torrent will discover peers
+                // via DHT/trackers through the rediscovery mechanism.
+                if let Err(e) = handle.start(None, false) {
+                    warn!(id, "error promoting queued torrent: {e:#}");
+                }
+            }
+        }
+    }
+
+    /// Notify the queue manager that a torrent has completed downloading.
+    /// This may free up a download slot and promote queued torrents.
+    pub async fn notify_torrent_completed(&self, id: TorrentId) {
+        let to_promote = self.queue_manager.torrent_completed(id);
+        self.promote_queued_torrents(&to_promote).await;
     }
 
     pub async fn update_only_files(
@@ -1067,6 +1133,26 @@ impl Session {
     /// Get the configured completed folder.
     pub fn completed_folder(&self) -> Option<&Path> {
         self.completed_folder.as_deref()
+    }
+
+    /// Spawn a task that notifies the queue manager when a torrent completes downloading,
+    /// potentially promoting queued torrents.
+    fn spawn_queue_completion_notifier(self: &Arc<Self>, id: TorrentId, handle: ManagedTorrentHandle) {
+        let session = Arc::downgrade(self);
+        let span = handle.shared.span.clone();
+        self.spawn(
+            debug_span!(parent: span, "queue_completion_notifier", id),
+            format!("[{id}]queue_completion_notifier"),
+            async move {
+                if let Err(_e) = handle.wait_until_completed().await {
+                    return Ok(());
+                }
+                if let Some(session) = session.upgrade() {
+                    session.notify_torrent_completed(id).await;
+                }
+                Ok(())
+            },
+        );
     }
 
     /// Spawn a task that watches for a torrent to complete and moves its files
