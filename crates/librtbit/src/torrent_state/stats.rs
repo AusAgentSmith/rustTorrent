@@ -80,6 +80,9 @@ pub struct TorrentStats {
     /// concurrent init slot rather than actively checking files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queued_for_init: Option<bool>,
+    /// Whether BEP 16 super-seeding is active.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub super_seeding: Option<bool>,
 }
 
 impl std::fmt::Display for TorrentStats {

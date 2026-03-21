@@ -625,3 +625,29 @@ pub async fn h_set_torrent_category(
         .await
         .map(axum::Json)
 }
+
+#[derive(Deserialize)]
+#[cfg_attr(feature = "swagger", derive(utoipa::ToSchema))]
+pub struct SuperSeedRequest {
+    enabled: bool,
+}
+
+#[cfg_attr(feature = "swagger", utoipa::path(
+    post,
+    path = "/torrents/{id}/super_seed",
+    params(("id" = String, Path, description = "Torrent ID or info hash")),
+    request_body(content = SuperSeedRequest, description = "Enable or disable super-seeding (BEP 16)"),
+    responses(
+        (status = 200, description = "Super-seeding toggled", body = EmptyJsonResponse)
+    )
+))]
+pub async fn h_torrent_action_super_seed(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+    axum::Json(req): axum::Json<SuperSeedRequest>,
+) -> Result<impl IntoResponse> {
+    state
+        .api
+        .api_torrent_action_super_seed(idx, req.enabled)
+        .map(axum::Json)
+}

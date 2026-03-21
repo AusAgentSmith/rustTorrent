@@ -375,6 +375,20 @@ impl Api {
         Ok(Default::default())
     }
 
+    pub fn api_torrent_action_super_seed(
+        &self,
+        idx: TorrentIdOrHash,
+        enabled: bool,
+    ) -> Result<EmptyJsonResponse> {
+        let handle = self.mgr_handle(idx)?;
+        let live = handle
+            .live()
+            .with_status_error(StatusCode::PRECONDITION_FAILED, "torrent is not live")?;
+        live.set_super_seeding(enabled)
+            .with_status(StatusCode::BAD_REQUEST)?;
+        Ok(Default::default())
+    }
+
     pub fn api_set_rust_log(&self, new_value: String) -> Result<EmptyJsonResponse> {
         let tx = self
             .rust_log_reload_tx

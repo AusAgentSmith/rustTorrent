@@ -538,6 +538,7 @@ impl ManagedTorrent {
             finished: false,
             live: None,
             queued_for_init: None,
+            super_seeding: None,
         };
 
         self.with_state(|s| {
@@ -570,6 +571,7 @@ impl ManagedTorrent {
                         .map(|c| c.per_file_have_bytes().to_owned())
                         .unwrap_or_default();
                     resp.live = Some(live_stats);
+                    resp.super_seeding = Some(l.is_super_seeding());
                 }
                 ManagedTorrentState::Error(e) => {
                     resp.state = S::Error;

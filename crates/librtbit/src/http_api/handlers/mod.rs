@@ -67,6 +67,7 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "POST /torrents/{id_or_infohash}/delete": "Forget about the torrent, remove the files",
             "POST /torrents/{id_or_infohash}/add_peers": "Add peers (newline-delimited)",
             "POST /torrents/{id_or_infohash}/update_only_files": "Change the selection of files to download. You need to POST json of the following form {\"only_files\": [0, 1, 2]}",
+            "POST /torrents/{id_or_infohash}/super_seed": "Enable/disable super-seeding (BEP 16). POST json {\"enabled\": true/false}",
             "POST /rust_log": "Set RUST_LOG to this post launch (for debugging)",
         },
         "server": "rtbit",
@@ -149,6 +150,10 @@ pub fn make_api_router(state: ApiState) -> Router {
             .route(
                 "/torrents/{id}/set_category",
                 post(torrents::h_set_torrent_category),
+            )
+            .route(
+                "/torrents/{id}/super_seed",
+                post(torrents::h_torrent_action_super_seed),
             );
     }
 

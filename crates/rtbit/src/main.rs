@@ -389,6 +389,13 @@ struct DownloadOpts {
     /// Disable HTTP API entirely.
     #[arg(long = "disable-http-api")]
     disable_http_api: bool,
+
+    /// Enable super-seeding mode (BEP 16).
+    /// Only applicable when the torrent is 100% complete (initial seeder).
+    /// In this mode, each piece is revealed to peers one at a time to maximize
+    /// swarm distribution.
+    #[arg(long = "super-seed")]
+    super_seed: bool,
 }
 
 #[derive(Clone)]
@@ -929,6 +936,20 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
             if download_opts.list {
                 Ok(())
             } else if added {
+                // If --super-seed is set and the torrent is already complete,
+                // enable super-seeding immediately; otherwise it will be enabled
+                // after all downloads complete.
+                let enable_super_seed = download_opts.super_seed;
+
+                if enable_super_seed {
+                    for handle in &handles {
+                        if let Some(live) = handle.live() {
+                            // Ignore errors — torrent may not be finished yet.
+                            let _ = live.set_super_seeding(true);
+                        }
+                    }
+                }
+
                 if download_opts.exit_on_finish {
                     let results =
                         futures::future::join_all(handles.iter().map(|h| h.wait_until_completed()));
@@ -941,6 +962,18 @@ async fn async_main(mut opts: Opts, cancel: CancellationToken) -> anyhow::Result
                     if results.iter().any(|r| r.is_err()) {
                         anyhow::bail!("some downloads failed")
                     }
+
+                    // Enable super-seeding after download completes if requested.
+                    if enable_super_seed {
+                        for handle in &handles {
+                            if let Some(live) = handle.live() {
+                                if let Err(e) = live.set_super_seeding(true) {
+                                    warn!("failed to enable super-seeding: {e:#}");
+                                }
+                            }
+                        }
+                    }
+
                     info!("All downloads completed, exiting");
                     Ok(())
                 } else {

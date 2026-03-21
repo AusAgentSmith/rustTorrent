@@ -43,6 +43,7 @@ pub mod peer;
 mod peer_handler;
 pub mod peers;
 pub mod stats;
+pub(crate) mod super_seed;
 mod tasks;
 
 use std::{
@@ -95,6 +96,7 @@ use self::{
     },
     peers::PeerStates,
     stats::{atomic::AtomicStats, snapshot::StatsSnapshot},
+    super_seed::SuperSeedState,
 };
 
 use super::{
@@ -224,6 +226,7 @@ pub struct TorrentStateLive {
         ChunkInfo,
     )>,
     pub(crate) ratelimits: Limits,
+    pub(crate) super_seed: SuperSeedState,
 }
 
 impl TorrentStateLive {
@@ -308,6 +311,7 @@ impl TorrentStateLive {
                 .collect(),
             ratelimit_upload_tx,
             ratelimits,
+            super_seed: SuperSeedState::new(lengths.total_pieces(), false),
         });
 
         state.spawn(
@@ -726,6 +730,27 @@ impl TorrentStateLive {
     pub(crate) fn get_active_peer_count(&self) -> u32 {
         let stats = self.peers.stats();
         stats.live + stats.connecting
+    }
+
+    /// Returns whether super-seeding is currently enabled.
+    pub fn is_super_seeding(&self) -> bool {
+        self.super_seed.is_enabled()
+    }
+
+    /// Enable or disable super-seeding (BEP 16).
+    /// Returns an error if enabling on a torrent that is not 100% complete.
+    pub fn set_super_seeding(&self, enabled: bool) -> anyhow::Result<()> {
+        if enabled && !self.is_finished() {
+            anyhow::bail!("cannot enable super-seeding: torrent is not 100% complete");
+        }
+        self.super_seed.set_enabled(enabled);
+        info!(
+            id = self.shared.id,
+            info_hash = ?self.shared.info_hash,
+            enabled,
+            "super-seeding toggled"
+        );
+        Ok(())
     }
 
     /// Reset backoff timers for all dead peers and re-queue them.

@@ -175,6 +175,13 @@ impl PeerConnectionHandler for &'_ PeerHandler {
 
     fn on_handshake(&self, handshake: Handshake, ckind: ConnectionKind) -> anyhow::Result<()> {
         self.state.set_peer_live(self.addr, handshake, ckind);
+
+        // Register with super-seed state and send initial HAVE if super-seeding.
+        if self.state.super_seed.is_enabled() {
+            self.state.super_seed.on_peer_connected(self.addr);
+            self.send_super_seed_have();
+        }
+
         Ok(())
     }
 
@@ -236,11 +243,22 @@ impl PeerConnectionHandler for &'_ PeerHandler {
             return false;
         }
 
+        // In super-seed mode, don't send a bitfield — we pretend to have nothing
+        // and selectively reveal pieces via HAVE.
+        if self.state.super_seed.is_enabled() {
+            return false;
+        }
+
         self.state.get_approx_have_bytes() > 0
     }
 
     fn should_transmit_have(&self, id: librtbit_core::lengths::ValidPieceIndex) -> bool {
         if self.state.shared.options.disable_upload() {
+            return false;
+        }
+        // In super-seed mode, suppress normal HAVE broadcasts — piece revelation
+        // is controlled by select_piece_for_peer instead.
+        if self.state.super_seed.is_enabled() {
             return false;
         }
         let have = self
@@ -269,7 +287,45 @@ impl PeerConnectionHandler for &'_ PeerHandler {
 }
 
 impl PeerHandler {
+    /// In super-seed mode, select and send a HAVE for one piece to this peer.
+    fn send_super_seed_have(&self) {
+        let peer_bf = self
+            .state
+            .peers
+            .with_live(self.addr, |live| live.bitfield.clone())
+            .unwrap_or_default();
+
+        let our_bf = match self
+            .state
+            .lock_read("super_seed_have")
+            .get_chunks()
+            .map(|c| {
+                BF::from_boxed_slice(c.get_have_pieces().as_bytes().to_vec().into_boxed_slice())
+            }) {
+            Ok(bf) => bf,
+            Err(_) => return,
+        };
+
+        if let Some(piece_idx) =
+            self.state
+                .super_seed
+                .select_piece_for_peer(self.addr, &peer_bf, &our_bf)
+        {
+            trace!(
+                addr = %self.addr,
+                piece = piece_idx,
+                "super-seed: revealing piece to peer"
+            );
+            let _ = self
+                .tx
+                .send(WriterRequest::Message(Message::Have(piece_idx)));
+        }
+    }
+
     pub(crate) fn on_peer_died(self, error: Option<crate::Error>) -> crate::Result<()> {
+        // Clean up super-seed tracking for this peer.
+        self.state.super_seed.on_peer_disconnected(self.addr);
+
         let peers = &self.state.peers;
         let handle = self.addr;
         let mut pe = match peers.states.get_mut(&handle) {
@@ -579,6 +635,53 @@ impl PeerHandler {
                     debug!("peer has full torrent");
                 }
             });
+
+        // Notify super-seed state that this peer reported having a piece.
+        // This confirms propagation when the piece was offered to a *different* peer.
+        {
+            let confirmed_peers = self.state.super_seed.on_have_received(self.addr, have);
+            // For each peer whose propagation was just confirmed, send them a new HAVE.
+            if !confirmed_peers.is_empty() {
+                let our_bf = self
+                    .state
+                    .lock_read("super_seed_confirmed")
+                    .get_chunks()
+                    .ok()
+                    .map(|c| {
+                        BF::from_boxed_slice(
+                            c.get_have_pieces().as_bytes().to_vec().into_boxed_slice(),
+                        )
+                    });
+
+                if let Some(our_bf) = our_bf {
+                    for peer_addr in confirmed_peers {
+                        let peer_bf = self
+                            .state
+                            .peers
+                            .with_live(peer_addr, |live| live.bitfield.clone())
+                            .unwrap_or_default();
+
+                        if let Some(piece_idx) = self.state.super_seed.select_piece_for_peer(
+                            peer_addr,
+                            &peer_bf,
+                            &our_bf,
+                        ) {
+                            trace!(
+                                addr = %peer_addr,
+                                piece = piece_idx,
+                                "super-seed: revealing next piece after propagation confirmed"
+                            );
+                            self.state.peers.with_live(peer_addr, |live| {
+                                let _ = live
+                                    .tx
+                                    .send(WriterRequest::Message(Message::Have(piece_idx)));
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         self.on_bitfield_notify.notify_waiters();
     }
 
