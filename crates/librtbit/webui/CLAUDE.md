@@ -19,13 +19,16 @@ src/
 ├── main.tsx            # Entry point
 ├── stores/             # Zustand stores
 │   ├── torrentStore.ts # Global torrent list, loading states
-│   ├── uiStore.ts      # View mode, selection state
+│   ├── uiStore.ts      # View mode, selection state, page navigation (torrents/indexarr)
+│   ├── indexarrStore.ts # Indexarr integration state (search, recent, identity, setup)
 │   ├── errorStore.ts   # Alerts and errors
 │   └── statsStore.ts   # Session-wide stats
 ├── hooks/              # Custom React hooks
 ├── helper/             # Utility functions (formatBytes, etc.)
 └── components/
-    ├── RootContent.tsx         # Main content area, layout switching
+    ├── RootContent.tsx         # Main content area, layout switching + Indexarr page routing
+    ├── IndexarrBrowse.tsx      # Indexarr search/recent page with download flow
+    ├── IndexarrSetup.tsx       # Indexarr first-boot setup (identity + categories)
     ├── CardLayout.tsx          # Card view layout (list of cards)
     ├── TorrentCard.tsx         # Card view data wrapper per torrent
     ├── TorrentCardContent.tsx  # Card view single torrent content
@@ -247,3 +250,30 @@ For more complex cases, consider a small component or use template literal compo
 const cellBase = "px-2 align-middle";
 const numericCell = `w-20 ${cellBase} text-right text-secondary whitespace-nowrap`;
 ```
+
+## Indexarr Integration
+
+Optional torrent index browsing powered by an external Indexarr instance. Controlled by `RTBIT_INDEXARR_ENABLED`, `RTBIT_INDEXARR_URL`, `RTBIT_INDEXARR_API_KEY` env vars. See `documentation/IndexarrRustTorrentIntegration.md` in the repo root for the full integration design.
+
+### Page Navigation
+- `uiStore.currentPage`: `"torrents" | "indexarr"` — controls which page is shown
+- Toolbar has tab-style nav (Torrents / Browse Index) in the top bar
+- Sidebar clicks automatically switch back to `"torrents"`
+- Sidebar is hidden on the Indexarr page
+
+### Key Components
+- `IndexarrBrowse.tsx` — Search tab (debounced, filtered) + Recent tab (60s polling) + download buttons
+- `IndexarrSetup.tsx` — First-boot: save recovery key, select sync categories
+- `RootContent.tsx` — Routes between torrent view and Indexarr view based on `currentPage`
+
+### API Client
+- `IndexarrAPI` object in `http-api.ts` — separate from the main `API` object
+- All calls go through rtbit's `/indexarr/*` proxy endpoints (not directly to Indexarr)
+- Types in `api-types.ts`: `IndexarrSearchResult`, `IndexarrRecentItem`, `IndexarrIdentityStatus`, etc.
+
+### Download Flow
+1. User clicks download button on a search/recent result
+2. `buildMagnet()` constructs magnet URI from info_hash + name + stored tracker URLs
+3. `API.uploadTorrent(magnet, { list_only: true })` resolves metadata via rtbit
+4. `FileSelectionModal` opens — user picks files
+5. Normal rtbit download flow proceeds
