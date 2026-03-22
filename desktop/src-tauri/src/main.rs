@@ -4,43 +4,46 @@
 mod config;
 
 use std::{
+    collections::HashMap,
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter},
+    net::SocketAddr,
     path::Path,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
 use anyhow::Context;
 use config::RtbitDesktopConfig;
-use http::StatusCode;
 use librtbit::{
-    AddTorrent, AddTorrentOptions, Api, ApiError, Session, SessionOptions,
-    SessionPersistenceConfig, WithStatusError,
-    api::{
-        ApiAddTorrentResponse, ApiTorrentListOpts, EmptyJsonResponse, TorrentDetailsResponse,
-        TorrentIdOrHash, TorrentListResponse, TorrentStats,
-    },
+    Api, Session, SessionOptions, SessionPersistenceConfig, TorrentStatsState,
+    api::{ApiTorrentListOpts, TorrentIdOrHash},
     dht::PersistentDhtConfig,
-    http_api_types::{PeerStatsFilter, PeerStatsSnapshot},
     rss::db::RssDatabase,
-    session_stats::snapshot::SessionStatsSnapshot,
     tracing_subscriber_config_utils::{InitLoggingOptions, InitLoggingResult, init_logging},
 };
 use librqbit_dualstack_sockets::TcpListener;
-use parking_lot::RwLock;
-use serde::Serialize;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tracing::{debug_span, error, info, warn};
 
-struct StateShared {
-    config: config::RtbitDesktopConfig,
-    api: Option<Api>,
+// ---------------------------------------------------------------------------
+// Engine state — shared via Tauri's managed state
+// ---------------------------------------------------------------------------
+
+struct EngineState {
+    api: Api,
+    listen_addr: SocketAddr,
+    paused: AtomicBool,
 }
 
-struct State {
-    config_filename: String,
-    shared: Arc<RwLock<Option<StateShared>>>,
-    init_logging: InitLoggingResult,
-}
+// ---------------------------------------------------------------------------
+// Config helpers (unchanged from previous implementation)
+// ---------------------------------------------------------------------------
 
 fn read_config(path: &str) -> anyhow::Result<RtbitDesktopConfig> {
     let rdr = BufReader::new(File::open(path)?);
@@ -65,13 +68,18 @@ fn write_config(path: &str, config: &RtbitDesktopConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Engine startup (Session + HTTP API + RSS)
+// ---------------------------------------------------------------------------
+
 async fn api_from_config(
     init_logging: &InitLoggingResult,
     config: &RtbitDesktopConfig,
-) -> anyhow::Result<Api> {
+) -> anyhow::Result<(Api, SocketAddr)> {
     config
         .validate()
         .context("error validating configuration")?;
+
     let persistence = if config.persistence.disable {
         None
     } else {
@@ -92,14 +100,14 @@ async fn api_from_config(
         ..Default::default()
     };
 
-    // We need to start prometheus recorder earlier than session.
+    // Install prometheus recorder before session creation.
     if !config.http_api.disable {
         match metrics_exporter_prometheus::PrometheusBuilder::new().install_recorder() {
             Ok(handle) => {
                 http_api_opts.prometheus_handle = Some(handle);
             }
             Err(e) => {
-                warn!("error installting prometheus recorder: {e:#}");
+                warn!("error installing prometheus recorder: {e:#}");
             }
         }
     }
@@ -134,7 +142,7 @@ async fn api_from_config(
         Some(init_logging.line_broadcast.clone()),
     );
 
-    // Initialize RSS database alongside session persistence
+    // Initialize RSS database alongside session persistence.
     let rss_db = {
         let rss_dir = if config.persistence.folder == std::path::Path::new("") {
             SessionPersistenceConfig::default_json_persistence_folder()?
@@ -147,7 +155,6 @@ async fn api_from_config(
                 let db = std::sync::Arc::new(parking_lot::Mutex::new(db));
                 info!("RSS database opened at {}", rss_db_path.display());
 
-                // Start RSS monitor
                 let monitor = librtbit::rss::monitor::RssMonitor::new(
                     db.clone(),
                     api.clone(),
@@ -165,12 +172,12 @@ async fn api_from_config(
         }
     };
 
-    // Set RSS options
     http_api_opts.rss_db = rss_db;
     http_api_opts.rss_history_limit = config.rss_history_limit;
 
+    let listen_addr = config.http_api.listen_addr;
+
     if !config.http_api.disable {
-        let listen_addr = config.http_api.listen_addr;
         let api = api.clone();
         let upnp_router = if config.upnp.enable_server {
             let friendly_name = config
@@ -188,7 +195,7 @@ async fn api_from_config(
                 });
 
             let mut upnp_adapter = session
-                .make_upnp_adapter(friendly_name, config.http_api.listen_addr.port())
+                .make_upnp_adapter(friendly_name, listen_addr.port())
                 .await
                 .context("error starting UPnP server")?;
             let router = upnp_adapter.take_router()?;
@@ -199,6 +206,7 @@ async fn api_from_config(
         } else {
             None
         };
+
         let http_api_task = async move {
             let listener = TcpListener::bind_tcp(listen_addr, Default::default())
                 .with_context(|| format!("error listening on {}", listen_addr))?;
@@ -209,240 +217,263 @@ async fn api_from_config(
 
         session.spawn(debug_span!("http_api"), "http_api", http_api_task);
     }
-    Ok(api)
+
+    Ok((api, listen_addr))
 }
 
-impl State {
-    async fn new(init_logging: InitLoggingResult) -> Self {
-        let config_filename = directories::ProjectDirs::from("com", "rtbit", "desktop")
-            .expect("directories::ProjectDirs::from")
-            .config_dir()
-            .join("config.json")
-            .to_str()
-            .expect("to_str()")
-            .to_owned();
+/// Start the engine, HTTP server, and wait for readiness.
+async fn start_engine(
+    init_logging: &InitLoggingResult,
+) -> anyhow::Result<(Api, SocketAddr, String)> {
+    let config_filename = directories::ProjectDirs::from("com", "rtbit", "desktop")
+        .expect("directories::ProjectDirs::from")
+        .config_dir()
+        .join("config.json")
+        .to_str()
+        .expect("to_str()")
+        .to_owned();
 
-        if let Ok(config) = read_config(&config_filename) {
-            let api = api_from_config(&init_logging, &config)
-                .await
-                .map_err(|e| {
-                    warn!(error=?e, "error reading configuration");
-                    e
-                })
-                .ok();
-            let shared = Arc::new(RwLock::new(Some(StateShared { config, api })));
-
-            return Self {
-                config_filename,
-                shared,
-                init_logging,
-            };
+    let config = match read_config(&config_filename) {
+        Ok(config) => {
+            info!("Loaded config from {}", config_filename);
+            config
         }
-
-        Self {
-            config_filename,
-            init_logging,
-            shared: Arc::new(RwLock::new(None)),
+        Err(e) => {
+            info!("No config found ({e:#}), creating default at {config_filename}");
+            let config = RtbitDesktopConfig::default();
+            if let Err(e) = write_config(&config_filename, &config) {
+                warn!("Failed to write default config: {e:#}");
+            }
+            config
         }
-    }
+    };
 
-    fn api(&self) -> Result<Api, ApiError> {
-        let g = self.shared.read();
-        g.as_ref()
-            .and_then(|a| a.api.clone())
-            .with_status_error(StatusCode::FAILED_DEPENDENCY, "not configured")
-    }
+    let (api, listen_addr) = api_from_config(init_logging, &config).await?;
 
-    async fn configure(&self, config: RtbitDesktopConfig) -> Result<(), ApiError> {
-        {
-            let g = self.shared.read();
-            if let Some(shared) = g.as_ref()
-                && shared.api.is_some()
-                && shared.config == config
-            {
-                // The config didn't change, and the API is running, nothing to do.
-                return Ok(());
+    // Wait for HTTP server readiness by polling /stats.
+    let health_url = format!("http://{listen_addr}/stats");
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if let Ok(resp) = reqwest::get(&health_url).await {
+            if resp.status().is_success() {
+                info!("HTTP server ready on {listen_addr}");
+                return Ok((api, listen_addr, config_filename));
             }
         }
+    }
 
-        let existing = self.shared.write().as_mut().and_then(|s| s.api.take());
+    // Server may still work even if polling didn't succeed.
+    warn!("Could not confirm HTTP server readiness, continuing anyway");
+    Ok((api, listen_addr, config_filename))
+}
 
-        if let Some(api) = existing {
-            api.session().stop().await;
-        }
+// ---------------------------------------------------------------------------
+// System tray
+// ---------------------------------------------------------------------------
 
-        let api = api_from_config(&self.init_logging, &config).await?;
-        if let Err(e) = write_config(&self.config_filename, &config) {
-            error!("error writing config: {:#}", e);
-        }
-
-        let mut g = self.shared.write();
-        *g = Some(StateShared {
-            config,
-            api: Some(api),
-        });
-        Ok(())
+fn format_speed(mbps: f64) -> String {
+    if mbps < 1.0 / 1024.0 {
+        "0 B/s".to_string()
+    } else if mbps < 1.0 {
+        format!("{:.0} KB/s", mbps * 1024.0)
+    } else {
+        format!("{:.1} MB/s", mbps)
     }
 }
 
-#[derive(Default, Serialize)]
-struct CurrentState {
-    config: Option<RtbitDesktopConfig>,
-    configured: bool,
+fn setup_tray(app: &AppHandle) -> anyhow::Result<()> {
+    let speed_item = MenuItemBuilder::with_id("speed", "Speed: idle")
+        .enabled(false)
+        .build(app)?;
+
+    let pause_item = MenuItemBuilder::with_id("pause", "Pause All").build(app)?;
+
+    let browser_item = MenuItemBuilder::with_id("browser", "Open in Browser").build(app)?;
+
+    let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&speed_item)
+        .separator()
+        .item(&pause_item)
+        .item(&browser_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+
+    let app_handle = app.clone();
+    TrayIconBuilder::with_id("main")
+        .menu(&menu)
+        .tooltip("rtbit")
+        .on_menu_event(move |tray, event| {
+            let app = tray.app_handle();
+            match event.id().as_ref() {
+                "pause" => {
+                    if let Some(state) = app.try_state::<EngineState>() {
+                        let api = state.api.clone();
+                        let was_paused = state.paused.load(Ordering::Relaxed);
+                        let paused_flag = Arc::new(AtomicBool::new(was_paused));
+                        let paused_ref = paused_flag.clone();
+
+                        tauri::async_runtime::spawn(async move {
+                            let list = api.api_torrent_list_ext(ApiTorrentListOpts {
+                                with_stats: true,
+                                ..Default::default()
+                            });
+                            for torrent in &list.torrents {
+                                if let Some(id) = torrent.id {
+                                    let idx = TorrentIdOrHash::Id(id);
+                                    if was_paused {
+                                        let _ = api.api_torrent_action_start(idx).await;
+                                    } else {
+                                        let _ = api.api_torrent_action_pause(idx).await;
+                                    }
+                                }
+                            }
+                            paused_ref.store(!was_paused, Ordering::Relaxed);
+                        });
+
+                        state.paused.store(!was_paused, Ordering::Relaxed);
+                    }
+                }
+                "browser" => {
+                    if let Some(state) = app.try_state::<EngineState>() {
+                        let url = format!("http://{}", state.listen_addr);
+                        let _ = open::that(&url);
+                    }
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(event, tauri::tray::TrayIconEvent::Click { .. }) {
+                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .build(&app_handle)?;
+
+    // Spawn background task to update tray tooltip with speed info.
+    let app_for_tray = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        loop {
+            interval.tick().await;
+            if let Some(state) = app_for_tray.try_state::<EngineState>() {
+                let stats = state.api.api_session_stats();
+                let dl = format_speed(stats.download_speed.mbps);
+                let ul = format_speed(stats.upload_speed.mbps);
+
+                let paused = state.paused.load(Ordering::Relaxed);
+                let speed_text = if paused {
+                    "paused".to_string()
+                } else if stats.download_speed.mbps < 1.0 / 1024.0
+                    && stats.upload_speed.mbps < 1.0 / 1024.0
+                {
+                    "idle".to_string()
+                } else {
+                    format!("D: {} | U: {}", dl, ul)
+                };
+
+                if let Some(tray) = app_for_tray.tray_by_id("main") {
+                    let _ = tray.set_tooltip(Some(&format!("rtbit - {}", speed_text)));
+                }
+            }
+        }
+    });
+
+    Ok(())
 }
 
-#[tauri::command]
-fn config_default() -> config::RtbitDesktopConfig {
-    config::RtbitDesktopConfig::default()
+// ---------------------------------------------------------------------------
+// Notification monitor — detect download complete / failed
+// ---------------------------------------------------------------------------
+
+fn spawn_notification_monitor(app: &AppHandle) {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Map of torrent id -> (finished, is_error)
+        let mut known_states: HashMap<usize, (bool, bool)> = HashMap::new();
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+        loop {
+            interval.tick().await;
+            let Some(state) = app_handle.try_state::<EngineState>() else {
+                continue;
+            };
+
+            let list = state.api.api_torrent_list_ext(ApiTorrentListOpts {
+                with_stats: true,
+                ..Default::default()
+            });
+
+            for torrent in &list.torrents {
+                let (Some(id), Some(stats)) = (torrent.id, &torrent.stats) else {
+                    continue;
+                };
+                let name = torrent
+                    .name
+                    .as_deref()
+                    .unwrap_or("Unknown torrent")
+                    .to_string();
+                let is_error = matches!(stats.state, TorrentStatsState::Error);
+
+                if let Some(&(was_finished, was_error)) = known_states.get(&id) {
+                    // Detect completion transition.
+                    if stats.finished && !was_finished {
+                        send_notification(&app_handle, "Download Complete", &name);
+                    }
+                    // Detect error transition.
+                    if is_error && !was_error {
+                        let msg = stats.error.as_deref().unwrap_or("Unknown error");
+                        send_notification(
+                            &app_handle,
+                            "Download Failed",
+                            &format!("{}: {}", name, msg),
+                        );
+                    }
+                }
+
+                known_states.insert(id, (stats.finished, is_error));
+            }
+
+            // Clean up removed torrents.
+            let current_ids: std::collections::HashSet<usize> =
+                list.torrents.iter().filter_map(|t| t.id).collect();
+            known_states.retain(|k, _| current_ids.contains(k));
+        }
+    });
 }
 
-#[tauri::command]
-fn config_current(state: tauri::State<'_, State>) -> CurrentState {
-    let g = state.shared.read();
-    match &*g {
-        Some(s) => CurrentState {
-            config: Some(s.config.clone()),
-            configured: s.api.is_some(),
-        },
-        None => Default::default(),
+fn send_notification(app: &AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        warn!("Failed to send notification: {e}");
     }
 }
 
-#[tauri::command]
-async fn config_change(
-    state: tauri::State<'_, State>,
-    config: RtbitDesktopConfig,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state.configure(config).await.map(|_| EmptyJsonResponse {})
-}
+// ---------------------------------------------------------------------------
+// Tauri commands (minimal — desktop-specific only)
+// ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn torrents_list(state: tauri::State<State>) -> Result<TorrentListResponse, ApiError> {
-    Ok(state
-        .api()?
-        .api_torrent_list_ext(ApiTorrentListOpts { with_stats: true }))
+fn cmd_open_in_browser(state: tauri::State<'_, EngineState>) {
+    let url = format!("http://{}", state.listen_addr);
+    let _ = open::that(&url);
 }
 
-#[tauri::command]
-fn torrent_haves(
-    state: tauri::State<State>,
-    id: TorrentIdOrHash,
-) -> Result<tauri::ipc::InvokeResponseBody, ApiError> {
-    let (haves, _len) = state.api()?.api_dump_haves(id)?;
-    Ok(tauri::ipc::InvokeResponseBody::Raw(
-        haves.into_boxed_slice().into(),
-    ))
-}
-
-#[tauri::command]
-fn torrent_peer_stats(
-    state: tauri::State<State>,
-    id: TorrentIdOrHash,
-    filter: PeerStatsFilter,
-) -> Result<PeerStatsSnapshot, ApiError> {
-    state.api()?.api_peer_stats(id, filter)
-}
-
-#[tauri::command]
-async fn torrent_create_from_url(
-    state: tauri::State<'_, State>,
-    url: String,
-    opts: Option<AddTorrentOptions>,
-) -> Result<ApiAddTorrentResponse, ApiError> {
-    state
-        .api()?
-        .api_add_torrent(AddTorrent::Url(url.into()), opts)
-        .await
-}
-
-#[tauri::command]
-async fn torrent_create_from_base64_file(
-    state: tauri::State<'_, State>,
-    contents: String,
-    opts: Option<AddTorrentOptions>,
-) -> Result<ApiAddTorrentResponse, ApiError> {
-    use base64::{Engine as _, engine::general_purpose};
-    let bytes = general_purpose::STANDARD
-        .decode(&contents)
-        .with_status_error(StatusCode::BAD_REQUEST, "invalid base64")?;
-    state
-        .api()?
-        .api_add_torrent(AddTorrent::TorrentFileBytes(bytes.into()), opts)
-        .await
-}
-
-#[tauri::command]
-async fn torrent_details(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<TorrentDetailsResponse, ApiError> {
-    state.api()?.api_torrent_details(id)
-}
-
-#[tauri::command]
-async fn torrent_stats(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<TorrentStats, ApiError> {
-    state.api()?.api_stats_v1(id)
-}
-
-#[tauri::command]
-async fn torrent_action_delete(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state.api()?.api_torrent_action_delete(id).await
-}
-
-#[tauri::command]
-async fn torrent_action_pause(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state.api()?.api_torrent_action_pause(id).await
-}
-
-#[tauri::command]
-async fn torrent_action_forget(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state.api()?.api_torrent_action_forget(id).await
-}
-
-#[tauri::command]
-async fn torrent_action_start(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state.api()?.api_torrent_action_start(id).await
-}
-
-#[tauri::command]
-async fn torrent_action_configure(
-    state: tauri::State<'_, State>,
-    id: TorrentIdOrHash,
-    only_files: Vec<usize>,
-) -> Result<EmptyJsonResponse, ApiError> {
-    state
-        .api()?
-        .api_torrent_action_update_only_files(id, &only_files.into_iter().collect())
-        .await
-}
-
-#[tauri::command]
-async fn stats(state: tauri::State<'_, State>) -> Result<SessionStatsSnapshot, ApiError> {
-    Ok(state.api()?.api_session_stats())
-}
-
-#[tauri::command]
-fn get_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
+// ---------------------------------------------------------------------------
+// App entry point
+// ---------------------------------------------------------------------------
 
 async fn start() {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
+
     let init_logging_result = init_logging(InitLoggingOptions {
         default_rust_log_value: Some("info"),
         log_file: None,
@@ -455,30 +486,44 @@ async fn start() {
         Err(e) => warn!("failed increasing open file limit: {:#}", e),
     };
 
-    let state = State::new(init_logging_result).await;
+    let (api, listen_addr, _config_filename) = match start_engine(&init_logging_result).await {
+        Ok(result) => result,
+        Err(e) => {
+            error!("Failed to start engine: {e:#}");
+            eprintln!("Fatal: Failed to start rtbit engine: {e:#}");
+            std::process::exit(1);
+        }
+    };
+
+    let server_url = format!("http://{}/web/", listen_addr);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(state)
-        .invoke_handler(tauri::generate_handler![
-            config_change,
-            config_current,
-            config_default,
-            get_version,
-            stats,
-            torrent_action_configure,
-            torrent_action_delete,
-            torrent_action_forget,
-            torrent_action_pause,
-            torrent_action_start,
-            torrent_create_from_base64_file,
-            torrent_create_from_url,
-            torrent_details,
-            torrent_haves,
-            torrent_peer_stats,
-            torrent_stats,
-            torrents_list,
-        ])
+        .plugin(tauri_plugin_notification::init())
+        .manage(EngineState {
+            api,
+            listen_addr,
+            paused: AtomicBool::new(false),
+        })
+        .setup(move |app| {
+            // Create main window pointing at the HTTP server's web UI.
+            let url = WebviewUrl::External(server_url.parse().unwrap());
+            let _window = WebviewWindowBuilder::new(app, "main", url)
+                .title("rtbit")
+                .inner_size(1280.0, 800.0)
+                .build()?;
+
+            // Set up system tray.
+            if let Err(e) = setup_tray(app.handle()) {
+                warn!("Failed to set up system tray: {e}");
+            }
+
+            // Start notification monitor for download complete/failed.
+            spawn_notification_monitor(app.handle());
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![cmd_open_in_browser])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -131,6 +131,7 @@ impl Default for RtbitDesktopConfigPersistence {
             disable: false,
             folder,
             fastresume: false,
+            fastresume_validation_denom: None,
             filename: PathBuf::new(),
         }
     }
@@ -213,6 +214,7 @@ impl Default for RtbitDesktopConfig {
             persistence: Default::default(),
             http_api: Default::default(),
             ratelimits: Default::default(),
+            rss_history_limit: default_rss_history_limit(),
             #[cfg(feature = "disable-upload")]
             disable_upload: false,
         }
