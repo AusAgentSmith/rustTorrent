@@ -19,7 +19,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo check
-        run: cargo check --workspace
+        run: cargo check
 
   test:
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test
 
   clippy:
     runs-on: ubuntu-latest
@@ -43,7 +43,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   docker:
     runs-on: ubuntu-latest
