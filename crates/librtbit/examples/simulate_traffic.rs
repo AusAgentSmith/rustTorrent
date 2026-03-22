@@ -305,11 +305,8 @@ impl TestHarness {
             api,
             Some(HttpApiOptions {
                 read_only: false,
-                basic_auth: None,
                 allow_create: true,
-                token_store: None,
-                credential_store: None,
-                prometheus_handle: None,
+                ..Default::default()
             }),
         );
         let sock = TcpListener::bind_tcp(

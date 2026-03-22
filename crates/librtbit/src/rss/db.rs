@@ -247,7 +247,7 @@ impl RssDatabase {
         let count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM rss_items", [], |row| row.get(0))?;
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(0))
     }
 
     /// Prune RSS items to keep only the N most recent.

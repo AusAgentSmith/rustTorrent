@@ -121,15 +121,15 @@ impl Magnet {
                 }
                 "xs" => {
                     // BEP 46: xs=urn:btpk:<64-hex-chars> -> 32-byte Ed25519 public key
-                    if let Some(pk_hex) = value.as_ref().strip_prefix("urn:btpk:") {
-                        if pk_hex.len() == 64 {
-                            let mut pk = [0u8; 32];
-                            if hex::decode_to_slice(pk_hex, &mut pk).is_ok() {
-                                public_key = Some(pk);
-                                // BEP 46 magnet links may not have xt (info hash is
-                                // resolved from the DHT mutable item), so mark as found.
-                                info_hash_found = true;
-                            }
+                    if let Some(pk_hex) = value.as_ref().strip_prefix("urn:btpk:")
+                        && pk_hex.len() == 64
+                    {
+                        let mut pk = [0u8; 32];
+                        if hex::decode_to_slice(pk_hex, &mut pk).is_ok() {
+                            public_key = Some(pk);
+                            // BEP 46 magnet links may not have xt (info hash is
+                            // resolved from the DHT mutable item), so mark as found.
+                            info_hash_found = true;
                         }
                     }
                 }

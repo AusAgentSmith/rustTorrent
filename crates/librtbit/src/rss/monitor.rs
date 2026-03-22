@@ -82,14 +82,12 @@ impl RssMonitor {
     fn prune_items(&self) {
         let limit = self.rss_history_limit.unwrap_or(500);
         let db = self.db.lock();
-        if let Ok(count) = db.rss_item_count() {
-            if count > limit {
-                if let Ok(pruned) = db.rss_items_prune(limit) {
-                    if pruned > 0 {
-                        info!(pruned, "Pruned old RSS items");
-                    }
-                }
-            }
+        if let Ok(count) = db.rss_item_count()
+            && count > limit
+            && let Ok(pruned) = db.rss_items_prune(limit)
+            && pruned > 0
+        {
+            info!(pruned, "Pruned old RSS items");
         }
     }
 
@@ -156,7 +154,7 @@ impl RssMonitor {
                 downloaded: false,
                 downloaded_at: None,
                 category: feed.category.clone(),
-                size_bytes: size_bytes as u64,
+                size_bytes,
             };
 
             // Check if already in DB (dedup)

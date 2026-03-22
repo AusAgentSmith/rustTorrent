@@ -793,7 +793,7 @@ impl DhtState {
 
                 let response_or_error = match msg.kind {
                     MessageKind::Error(e) => ResponseOrError::Error(e),
-                    MessageKind::Response(r) => ResponseOrError::Response(r),
+                    MessageKind::Response(r) => ResponseOrError::Response(Box::new(r)),
                     _ => unreachable!(),
                 };
                 match request.done.send(Ok(response_or_error)) {
@@ -1011,7 +1011,7 @@ enum Request {
 }
 
 enum ResponseOrError {
-    Response(Response<ByteBufOwned>),
+    Response(Box<Response<ByteBufOwned>>),
     Error(ErrorDescription<ByteBufOwned>),
 }
 

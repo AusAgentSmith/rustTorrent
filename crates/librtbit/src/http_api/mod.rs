@@ -237,17 +237,16 @@ impl HttpApi {
                         }
 
                         // Try Bearer token first
-                        if let Some(ts) = &token_store {
-                            if let Some(token) = headers
+                        if let Some(ts) = &token_store
+                            && let Some(token) = headers
                                 .get("Authorization")
                                 .and_then(|h| h.to_str().ok())
                                 .and_then(|h| h.strip_prefix("Bearer "))
-                            {
-                                if ts.validate_access_token(token) {
-                                    return Ok(next.run(request).await);
-                                }
-                                return Err(ApiError::unauthorized());
+                        {
+                            if ts.validate_access_token(token) {
+                                return Ok(next.run(request).await);
                             }
+                            return Err(ApiError::unauthorized());
                         }
 
                         // Try Basic auth — check credential store first, then env var
@@ -273,21 +272,19 @@ impl HttpApi {
 
                         if let Some((u, p)) = user_pass.split_once(':') {
                             // Check credential store
-                            if has_stored_creds {
-                                if let Some(cs) = &credential_store {
-                                    if cs.validate(u, p) {
-                                        return Ok(next.run(request).await);
-                                    }
-                                }
+                            if has_stored_creds
+                                && let Some(cs) = &credential_store
+                                && cs.validate(u, p)
+                            {
+                                return Ok(next.run(request).await);
                             }
 
                             // Check env var credentials
-                            if let Some((env_u, env_p)) = &basic_auth {
-                                if constant_time_eq(u.as_bytes(), env_u.as_bytes())
-                                    && constant_time_eq(p.as_bytes(), env_p.as_bytes())
-                                {
-                                    return Ok(next.run(request).await);
-                                }
+                            if let Some((env_u, env_p)) = &basic_auth
+                                && constant_time_eq(u.as_bytes(), env_u.as_bytes())
+                                && constant_time_eq(p.as_bytes(), env_p.as_bytes())
+                            {
+                                return Ok(next.run(request).await);
                             }
                         }
 

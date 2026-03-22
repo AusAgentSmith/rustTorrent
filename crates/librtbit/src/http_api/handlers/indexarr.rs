@@ -17,17 +17,17 @@ use super::ApiState;
 
 /// Extract Indexarr config from state, returning owned values.
 /// Returns Err(Response) if Indexarr is not enabled.
-fn indexarr_config(state: &ApiState) -> Result<(String, Option<String>), Response> {
+fn indexarr_config(state: &ApiState) -> Result<(String, Option<String>), Box<Response>> {
     match &state.opts.indexarr_url {
         Some(url) => Ok((
             url.trim_end_matches('/').to_string(),
             state.opts.indexarr_api_key.clone(),
         )),
-        None => Err((
+        None => Err(Box::new((
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Indexarr integration is not enabled"})),
         )
-            .into_response()),
+            .into_response())),
     }
 }
 
@@ -141,7 +141,7 @@ pub async fn h_indexarr_search(
 ) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(base_url, api_key, "/api/v1/search", &params).await
 }
@@ -153,7 +153,7 @@ pub async fn h_indexarr_recent(
 ) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(base_url, api_key, "/api/v1/recent", &params).await
 }
@@ -165,7 +165,7 @@ pub async fn h_indexarr_trending(
 ) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(base_url, api_key, "/api/v1/trending", &params).await
 }
@@ -177,7 +177,7 @@ pub async fn h_indexarr_torrent_detail(
 ) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(
         base_url,
@@ -192,7 +192,7 @@ pub async fn h_indexarr_torrent_detail(
 pub async fn h_indexarr_identity_status(State(state): State<ApiState>) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(base_url, api_key, "/api/v1/identity/status", &HashMap::new()).await
 }
@@ -201,7 +201,7 @@ pub async fn h_indexarr_identity_status(State(state): State<ApiState>) -> Respon
 pub async fn h_indexarr_identity_acknowledge(State(state): State<ApiState>) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_post_json(base_url, api_key, "/api/v1/identity/acknowledge", json!({})).await
 }
@@ -210,7 +210,7 @@ pub async fn h_indexarr_identity_acknowledge(State(state): State<ApiState>) -> R
 pub async fn h_indexarr_sync_preferences_get(State(state): State<ApiState>) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_get(
         base_url,
@@ -228,7 +228,7 @@ pub async fn h_indexarr_sync_preferences_set(
 ) -> Response {
     let (base_url, api_key) = match indexarr_config(&state) {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     proxy_post_json(base_url, api_key, "/api/v1/system/sync/preferences", body).await
 }

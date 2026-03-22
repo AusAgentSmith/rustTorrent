@@ -13,6 +13,7 @@ struct TokenEntry {
     expires_at: Instant,
 }
 
+#[derive(Default)]
 pub struct TokenStore {
     access_tokens: RwLock<HashMap<String, TokenEntry>>,
     refresh_tokens: RwLock<HashMap<String, TokenEntry>>,
@@ -161,7 +162,7 @@ impl CredentialStore {
 
     pub fn set_credentials(&self, creds: StoredCredentials) -> Result<(), std::io::Error> {
         let json = serde_json::to_string_pretty(&creds)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         // Create parent directory if needed
         if let Some(parent) = self.file_path.parent() {
             std::fs::create_dir_all(parent)?;

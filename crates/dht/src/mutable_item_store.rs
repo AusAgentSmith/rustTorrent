@@ -53,10 +53,10 @@ impl MutableItemStore {
     /// is performed first to evict the oldest item.
     pub fn store(&self, target: Id20, item: StoredMutableItem) -> bool {
         // Check if there is an existing item with a higher or equal seq.
-        if let Some(existing) = self.items.get(&target) {
-            if existing.seq >= item.seq {
-                return false;
-            }
+        if let Some(existing) = self.items.get(&target)
+            && existing.seq >= item.seq
+        {
+            return false;
         }
 
         // If at capacity and this is a new item, evict the oldest.

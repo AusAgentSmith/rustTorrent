@@ -429,6 +429,7 @@ mod tests {
             publisher: None,
             publisher_url: None,
             creation_date: None,
+            url_list: None,
             info_hash: Id20::default(),
         }
     }
